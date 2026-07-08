@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- src/installer/wix/ServiceMode.wxs -->
+<!-- T119 — Windows Service component fragment for WiX 4 installer. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <Fragment>
+        <!-- Property default: do NOT install as service unless explicitly requested. -->
+        <Property Id="INSTALL_AS_SERVICE" Value="0" />
+
+        <ComponentGroup Id="JyGlobalVSTServiceComponents" Directory="INSTALLFOLDER">
+            <Component Id="JyGlobalVSTServiceBinary"
+                       Guid="A3B2C1D0-E5F4-47A6-B8C9-D0E1F2A3B4D6">
+                <File Id="JyGlobalVSTServiceExe"
+                      Name="jyglobalvst_service.exe"
+                      Source="$(var.JYGLOBALVST_SERVICE_EXE)"
+                      KeyPath="yes" />
+
+                <!-- Register as a Windows Service. -->
+                <ServiceInstall Id="JyGlobalVSTEngineInstall"
+                                Name="JyGlobalVSTEngine"
+                                DisplayName="JyGlobalVST Audio Engine"
+                                Description="Hosts the JyGlobalVST audio engine for pre-login audio support."
+                                Start="auto"
+                                Type="ownProcess"
+                                ErrorControl="normal"
+                                Account="LocalSystem"
+                                Vital="yes" />
+
+                <!-- Start the service after install. -->
+                <ServiceControl Id="JyGlobalVSTEngineControl"
+                                Name="JyGlobalVSTEngine"
+                                Start="install"
+                                Stop="both"
+                                Remove="uninstall"
+                                Wait="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- Feature that is only installed when INSTALL_AS_SERVICE = 1. -->
+        <Feature Id="ServiceModeFeature"
+                 Title="Windows Service Mode"
+                 Level="0"
+                 AllowAdvertise="no">
+            <Level Condition="INSTALL_AS_SERVICE = 1" Value="1" />
+            <ComponentGroupRef Id="JyGlobalVSTServiceComponents" />
+        </Feature>
+    </Fragment>
+</Wix>

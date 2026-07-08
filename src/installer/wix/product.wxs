@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+    <!--
+        Global VST Host - WiX MSI Installer
+
+        Scope: per-user installation to %LocalAppData%
+        Features: Main application (tray app + audio engine + built-in effects)
+        Upgrade behavior: auto-upgrade if newer version detected
+    -->
+
+    <?define ProductVersion = "1.0.0" ?>
+    <?define ProductVersionNumerical = "1.0.0.0" ?>
+    <?define ManufacturerName = "JyGlobalVST" ?>
+    <?define ProductName = "Global VST Host" ?>
+    <?define UpgradeCode = "550e8400-e29b-41d4-a716-446655440000" ?>
+
+    <Product Id="*"
+             Name="$(var.ProductName)"
+             Language="1033"
+             Version="$(var.ProductVersionNumerical)"
+             Manufacturer="$(var.ManufacturerName)"
+             UpgradeCode="$(var.UpgradeCode)">
+
+        <Package Id="*"
+                 InstallerVersion="200"
+                 Compressed="yes"
+                 InstallScope="perUser"
+                 Description="$(var.ProductName) v$(var.ProductVersion)"
+                 Manufacturer="$(var.ManufacturerName)"
+                 Platform="x64" />
+
+        <!-- Allow upgrades: uninstall old version silently before installing new -->
+        <MajorUpgrade DowngradeErrorMessage="A newer version of $(var.ProductName) is already installed."
+                      AllowDowngrades="no" />
+
+        <!-- Restore installation location on repair/upgrade -->
+        <InstallExecuteSequence>
+            <RemoveExistingProducts After="InstallValidate" />
+        </InstallExecuteSequence>
+
+        <!-- Media: embed all files into single .cab inside MSI -->
+        <Media Id="1" Cabinet="product.cab" EmbedCab="yes" DiskPrompt="Disk 1" />
+
+        <!-- Installation directory: %LocalAppData%\JyGlobalVST -->
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="LocalAppDataFolder">
+                <Directory Id="JYGLOBALVSTFOLDER" Name="JyGlobalVST" />
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsMenuFolder" Name="JyGlobalVST" />
+            </Directory>
+        </Directory>
+
+        <!-- Features (shown in Add/Remove Programs) -->
+        <Feature Id="ProductFeature"
+                 Title="$(var.ProductName)"
+                 Level="1"
+                 Description="$(var.ProductName) - VST3 audio routing with built-in effects">
+
+            <!-- Main application: tray executable + audio engine DLL + built-in effects -->
+            <ComponentRef Id="MainExecutableComponent" />
+            <ComponentRef Id="AudioEngineComponent" />
+
+            <!-- Start menu shortcut -->
+            <ComponentRef Id="StartMenuShortcutComponent" />
+
+            <!-- Desktop shortcut (optional, can be removed by user) -->
+            <ComponentRef Id="DesktopShortcutComponent" />
+
+            <!-- Auto-launch on user login -->
+            <ComponentRef Id="AutoLaunchComponent" />
+
+        </Feature>
+
+        <!-- ===== COMPONENTS ===== -->
+
+        <!-- Main executable: jyglobalvst_tray.exe -->
+        <DirectoryRef Id="JYGLOBALVSTFOLDER">
+            <Component Id="MainExecutableComponent" Guid="660e8400-e29b-41d4-a716-446655440001">
+                <File Id="JyGlobalVSTExe"
+                      Name="JyGlobalVST.exe"
+                      Source="!(bind.FILE_JyGlobalVSTExe)"
+                      KeyPath="yes"
+                      Vital="yes" />
+                <!-- Register in Add/Remove Programs -->
+                <RegistryValue Root="HKCU"
+                               Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\JyGlobalVST"
+                               Name="DisplayName"
+                               Value="$(var.ProductName) $(var.ProductVersion)"
+                               Type="string" />
+                <RegistryValue Root="HKCU"
+                               Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\JyGlobalVST"
+                               Name="DisplayVersion"
+                               Value="$(var.ProductVersion)"
+                               Type="string" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Audio engine DLL: jyglobalvst_audio_engine.dll -->
+        <DirectoryRef Id="JYGLOBALVSTFOLDER">
+            <Component Id="AudioEngineComponent" Guid="660e8400-e29b-41d4-a716-446655440002">
+                <File Id="AudioEngineDll"
+                      Name="jyglobalvst_audio_engine.dll"
+                      Source="!(bind.FILE_AudioEngineDll)"
+                      KeyPath="yes"
+                      Vital="yes" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Start Menu shortcut -->
+        <DirectoryRef Id="ApplicationProgramsMenuFolder">
+            <Component Id="StartMenuShortcutComponent" Guid="660e8400-e29b-41d4-a716-446655440003">
+                <Shortcut Id="StartMenuShortcut"
+                          Name="$(var.ProductName)"
+                          Description="Launch $(var.ProductName)"
+                          Target="[JYGLOBALVSTFOLDER]JyGlobalVST.exe"
+                          WorkingDirectory="JYGLOBALVSTFOLDER" />
+                <RemoveFolder Id="RemoveApplicationProgramsMenuFolder" On="uninstall" />
+                <RegistryValue Root="HKCU"
+                               Key="Software\JyGlobalVST\Installer"
+                               Name="StartMenuShortcut"
+                               Value="1"
+                               Type="integer" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Desktop shortcut -->
+        <DirectoryRef Id="DesktopFolder">
+            <Component Id="DesktopShortcutComponent" Guid="660e8400-e29b-41d4-a716-446655440004">
+                <Shortcut Id="DesktopShortcut"
+                          Name="$(var.ProductName)"
+                          Description="Launch $(var.ProductName)"
+                          Target="[JYGLOBALVSTFOLDER]JyGlobalVST.exe"
+                          WorkingDirectory="JYGLOBALVSTFOLDER" />
+                <RegistryValue Root="HKCU"
+                               Key="Software\JyGlobalVST\Installer"
+                               Name="DesktopShortcut"
+                               Value="1"
+                               Type="integer" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Auto-launch on user login (optional, via Run registry key) -->
+        <DirectoryRef Id="JYGLOBALVSTFOLDER">
+            <Component Id="AutoLaunchComponent" Guid="660e8400-e29b-41d4-a716-446655440005">
+                <RegistryValue Root="HKCU"
+                               Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                               Name="JyGlobalVST"
+                               Value="[JYGLOBALVSTFOLDER]JyGlobalVST.exe"
+                               Type="string" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- UI customization (commented out for testing without UI extension) -->
+        <!-- <UIRef Id="WixUI_InstallDir" /> -->
+        <!-- <WixVariable Id="WixUIInstallDirectory" Value="JYGLOBALVSTFOLDER" /> -->
+        <!-- <WixVariable Id="WixUIBannerBmp" Value="banner.bmp" /> -->
+        <!-- <WixVariable Id="WixUIDialogBmp" Value="dialog.bmp" /> -->
+        <!-- <WixVariable Id="WixUILicenseRtf" Value="license.rtf" /> -->
+
+    </Product>
+
+</Wix>

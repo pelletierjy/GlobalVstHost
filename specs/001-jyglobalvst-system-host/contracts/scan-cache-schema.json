@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jyglobalvst.local/schemas/scan-cache-v1.json",
+  "title": "JyGlobalVST Plugin Scan Cache",
+  "description": "Machine-local catalog at %LocalAppData%\\JyGlobalVST\\scan-cache.json (FR-022l). Rebuilt on any user-triggered rescan. Tolerant of corruption — discarded silently on parse failure (FR-022d-style behavior).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scan_completed_at", "plugins"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "scan_completed_at": { "type": "string", "format": "date-time" },
+    "scanned_paths": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 4096 },
+      "description": "Snapshot of paths scanned in this pass (defaults + custom, minus disabled)."
+    },
+    "plugins": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ScannedPlugin" }
+    }
+  },
+  "$defs": {
+    "ScannedPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plugin_uid",
+        "name",
+        "vendor",
+        "file_path",
+        "scan_timestamp"
+      ],
+      "properties": {
+        "plugin_uid": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{32}$"
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "vendor": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "version": { "type": "string", "maxLength": 64 },
+        "file_path": { "type": "string", "maxLength": 4096 },
+        "category": { "type": "string", "maxLength": 128 },
+        "supports_double_precision": { "type": "boolean" },
+        "has_editor": { "type": "boolean" },
+        "scan_timestamp": { "type": "string", "format": "date-time" },
+        "is_blocklisted_by_user": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}

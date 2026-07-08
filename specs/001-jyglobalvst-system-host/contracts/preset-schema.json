@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jyglobalvst.local/schemas/preset-v1.json",
+  "title": "JyGlobalVST Preset (.jvst)",
+  "description": "User-portable plugin-chain preset. Persisted at %UserProfile%\\Documents\\JyGlobalVST\\Presets\\*.jvst. Validated strictly on import per FR-022g-1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "preset_name",
+    "created_at",
+    "updated_at",
+    "target_buffer_size",
+    "slots"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Currently 1. Incremented on incompatible schema changes (FR-022b)."
+    },
+    "preset_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC, e.g. 2026-06-04T14:32:00Z"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "target_sample_rate": {
+      "type": ["integer", "null"],
+      "enum": [44100, 48000, 96000, 176400, 192000, null],
+      "description": "Advisory only — runtime negotiates with hardware endpoint."
+    },
+    "target_buffer_size": {
+      "type": "integer",
+      "enum": [32, 64, 128, 256, 512, 1024]
+    },
+    "target_device_friendly_name": {
+      "type": ["string", "null"],
+      "maxLength": 256,
+      "description": "Advisory; resolved per FR-022m priority chain on load."
+    },
+    "slots": {
+      "type": "array",
+      "minItems": 0,
+      "items": { "$ref": "#/$defs/PresetSlot" }
+    }
+  },
+  "$defs": {
+    "PresetSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "position",
+        "plugin_uid",
+        "plugin_vendor",
+        "plugin_name",
+        "is_bypassed",
+        "state_chunk_b64"
+      ],
+      "properties": {
+        "position": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "plugin_uid": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{32}$",
+          "description": "VST3 class UID (TUID) — 16 bytes as a 32-character hex string."
+        },
+        "plugin_vendor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "plugin_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "plugin_path_hint": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Display-only hint. Host MUST NOT load a plugin binary from this path; resolution is by (uid, vendor, name) only per FR-022g-2."
+        },
+        "is_bypassed": { "type": "boolean" },
+        "state_chunk_b64": {
+          "type": "string",
+          "maxLength": 22369622,
+          "description": "Base64-encoded VST3 state. Decoded size MUST NOT exceed 16 MB (FR-022g-1). 22369622 chars ≈ 16 MB decoded."
+        }
+      }
+    }
+  },
+  "x-validation-notes": {
+    "max_file_size_bytes": 52428800,
+    "max_state_chunk_bytes": 16777216,
+    "validation_rules": [
+      "FR-022g-1: reject unknown top-level fields (additionalProperties:false enforces this).",
+      "FR-022g-1: enforce 50 MB file-size cap (checked before parse).",
+      "FR-022g-1: enforce per-state-chunk 16 MB decoded cap (checked after base64-decode).",
+      "FR-022g-1: reject unrecognized schema_version unless migratable (FR-022b).",
+      "slot positions MUST form contiguous range [0..N-1]; checked post-parse.",
+      "FR-022g-2: plugin_path_hint is informational only and MUST NOT be used to load binaries."
+    ]
+  }
+}

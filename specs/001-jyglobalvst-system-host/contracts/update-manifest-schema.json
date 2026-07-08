@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jyglobalvst.local/schemas/update-manifest-v1.json",
+  "title": "JyGlobalVST Update Manifest",
+  "description": "Response body returned by the configured update-check HTTPS endpoint (FR-022n). The request is a single HTTPS GET initiated only by explicit user action; no identifying payload is sent. The response MUST be a JSON document conforming to this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "latest_version", "release_notes_url", "download_url"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "latest_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$",
+      "description": "Semantic version of the latest available release."
+    },
+    "minimum_supported": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$",
+      "description": "Optional. If the installed version is below this, the UI MAY display a stronger 'please update' message."
+    },
+    "release_notes_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "download_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://",
+      "description": "HTTPS URL of the .msi/.msix installer. User MUST click to download (FR-022o)."
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "x-client-rules": [
+    "FR-022n: client MUST NOT send any identifying headers, query strings, or body. A plain HTTPS GET with default platform User-Agent only.",
+    "FR-022n: client MUST NOT poll on launch or on a timer; only on explicit 'Check for updates…' invocation.",
+    "FR-022o: the MSI/MSIX download and install MUST remain explicit user actions.",
+    "Failures (offline, DNS, TLS, 4xx/5xx) surface only as in-session UI notifications — no disk log (FR-022n)."
+  ]
+}

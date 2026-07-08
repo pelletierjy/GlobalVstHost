@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jyglobalvst.local/schemas/settings-v1.json",
+  "title": "JyGlobalVST Roaming Settings",
+  "description": "User-portable preferences at %AppData%\\Roaming\\JyGlobalVST\\settings.json (FR-022k). Forward-compatible: unknown top-level fields MUST be preserved on save (round-trip), unlike presets where unknown fields are rejected on import.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "default_buffer_size",
+    "theme",
+    "update_check_endpoint_url"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "custom_scan_paths": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 4096 },
+      "default": [],
+      "description": "Additional VST3 directories beyond the two default paths in FR-005."
+    },
+    "disabled_default_paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "%ProgramFiles%\\Common Files\\VST3",
+          "%LocalAppData%\\Programs\\Common\\VST3"
+        ]
+      },
+      "default": []
+    },
+    "default_buffer_size": {
+      "type": "integer",
+      "enum": [32, 64, 128, 256, 512, 1024],
+      "default": 256
+    },
+    "theme": {
+      "type": "string",
+      "enum": ["light", "dark", "system"],
+      "default": "system"
+    },
+    "default_hardware_device_friendly_name": {
+      "type": ["string", "null"],
+      "maxLength": 256,
+      "description": "Resolution fallback (priority 2) per FR-022m."
+    },
+    "update_check_endpoint_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://",
+      "description": "HTTPS-only. Per FR-022n: only hit when user explicitly invokes 'Check for updates…'."
+    }
+  },
+  "x-validation-notes": {
+    "max_file_size_bytes": 1048576,
+    "round_trip_unknown_fields": true,
+    "validation_rules": [
+      "FR-022k: schema-versioned, JSON, forward-compatible — preserve unknown fields on save.",
+      "Invalid default_buffer_size falls back to 256 with a non-modal notification."
+    ]
+  }
+}

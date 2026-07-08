@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GlobalVSTHost — User Guide</title>
+<style>
+  :root {
+    --bg: #0A0E1A;
+    --panel: #12182B;
+    --border: #1E2A4A;
+    --accent: #00E5FF;
+    --accent2: #2979FF;
+    --text: #E0E6F1;
+    --dim: #8A96B8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 24px 80px; }
+  header {
+    display: flex; align-items: center; gap: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px; margin-bottom: 28px;
+  }
+  header h1 {
+    margin: 0; font-size: 28px; font-weight: 700;
+    color: var(--accent);
+  }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 14px; }
+  .logo {
+    width: 48px; height: 48px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 22px; color: #041018;
+    flex-shrink: 0;
+  }
+  nav {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 32px;
+  }
+  nav h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase;
+           letter-spacing: 1px; color: var(--dim); }
+  nav ul { margin: 0; padding-left: 18px; columns: 2; }
+  nav a { color: var(--accent); text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+  section { margin-bottom: 40px; }
+  h2 {
+    font-size: 20px; color: var(--accent);
+    border-left: 3px solid var(--accent); padding-left: 12px;
+    margin: 32px 0 12px;
+  }
+  h3 { font-size: 16px; color: var(--text); margin: 20px 0 6px; }
+  p, li { color: var(--text); }
+  code {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 6px; font-size: 13px;
+    color: var(--accent);
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; margin: 12px 0;
+  }
+  .note {
+    border-left: 3px solid var(--accent2);
+    background: rgba(41,121,255,0.08);
+    padding: 10px 16px; border-radius: 0 8px 8px 0; margin: 14px 0;
+    color: var(--dim);
+  }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--dim); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+  footer { border-top: 1px solid var(--border); padding-top: 20px; color: var(--dim); font-size: 13px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">JY</div>
+    <div>
+      <h1>GlobalVSTHost</h1>
+      <p>User Guide</p>
+    </div>
+  </header>
+
+  <nav>
+    <h2>Contents</h2>
+    <ul>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#getting-started">Getting Started</a></li>
+      <li><a href="#devices">Audio Devices &amp; Transport</a></li>
+      <li><a href="#chain">The Plugin Chain</a></li>
+      <li><a href="#builtin">Built-In Effects</a></li>
+      <li><a href="#volume">Master Volume</a></li>
+      <li><a href="#presets">Presets</a></li>
+      <li><a href="#themes">Themes</a></li>
+      <li><a href="#tray">System Tray</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ul>
+  </nav>
+
+  <section id="overview">
+    <h2>Overview</h2>
+    <p>GlobalVSTHost captures your Windows system audio, routes it through an ordered
+       chain of VST3 plugins, and plays the processed result out to a hardware output
+       device. This lets you apply effects — EQ, dynamics, spatial processing, and more —
+       to <em>everything</em> your PC plays, regardless of which application produced it.</p>
+    <p>Audio is captured using WASAPI loopback, so no virtual audio driver needs to be
+       installed. Internal processing runs in 32-bit float.</p>
+  </section>
+
+  <section id="getting-started">
+    <h2>Getting Started</h2>
+    <ol>
+      <li>Launch the application. On first run it scans for installed VST3 plugins.</li>
+      <li>Choose your <strong>output device</strong> — the speakers or headphones you
+          want to hear the processed audio on.</li>
+      <li>Press <strong>Start Audio</strong> to begin capturing and routing system audio.</li>
+      <li>Add plugins to the chain and adjust them while audio plays.</li>
+    </ol>
+    <div class="note">Because the app captures system audio via loopback, make sure the
+      Windows output you are capturing from is not the same physical device you route to,
+      or use a separate output to avoid a feedback loop.</div>
+  </section>
+
+  <section id="devices">
+    <h2>Audio Devices &amp; Transport</h2>
+    <p>The device panel lets you select where audio is captured from and where it is sent.</p>
+    <h3>Transport modes</h3>
+    <table>
+      <tr><th>Mode</th><th>Description</th></tr>
+      <tr><td>WASAPI (Shared)</td><td>Standard shared-mode output. Coexists with other apps using the device.</td></tr>
+      <tr><td>WASAPI (Exclusive)</td><td>Takes exclusive control of the output device for lower latency.</td></tr>
+      <tr><td>ASIO</td><td>Uses an ASIO driver when available. Use <strong>ASIO Settings</strong> to open the driver's control panel.</td></tr>
+    </table>
+    <p>The buffer size setting trades latency against stability — smaller buffers give
+       lower latency but are more sensitive to CPU spikes.</p>
+    <div class="note">The engine automatically follows the output device's sample rate.</div>
+  </section>
+
+  <section id="chain">
+    <h2>The Plugin Chain</h2>
+    <p>The plugin chain is an ordered list of effects. Audio flows through each slot from
+       top to bottom.</p>
+    <ul>
+      <li><strong>Load Plugin…</strong> — add a VST3 plugin (or a built-in effect) to the chain.</li>
+      <li><strong>Reorder</strong> — move slots up or down to change processing order.</li>
+      <li><strong>Bypass</strong> — temporarily disable a slot without removing it.</li>
+      <li><strong>Editor</strong> — open a plugin's own interface to adjust its parameters.</li>
+      <li><strong>Remove</strong> — delete a slot from the chain.</li>
+    </ul>
+    <div class="note">If a plugin fails while processing, it is automatically bypassed so
+      audio keeps flowing, and a notification appears in the window.</div>
+  </section>
+
+  <section id="builtin">
+    <h2>Built-In Effects</h2>
+    <p>GlobalVSTHost ships with built-in effects that appear alongside your VST3 plugins
+       and can be added to the chain like any other effect.</p>
+
+    <h3>EQ + Bass Boost</h3>
+    <p>A 10-band graphic equalizer with a dedicated bass-boost control. Drag each band
+       slider to cut or boost that frequency range; use the bass-boost slider for extra
+       low-end. <strong>Flat/Reset</strong> returns all bands to 0 dB.</p>
+
+    <h3>Night-time</h3>
+    <p>A dynamics processor that evens out loud and quiet passages so you can listen at
+       low volume without missing detail or disturbing others. Choose a preset
+       (Light, Medium, Strong, Extreme) — stronger presets compress the dynamic range
+       more aggressively. Each preset is level-matched so switching between them (or
+       bypassing the effect) keeps the overall loudness roughly consistent. The editor
+       shows a before/after graph illustrating how the selected preset reshapes a
+       high-dynamic example signal.</p>
+
+    <div class="note">The built-in effect editors follow the color theme you select in the
+      main window.</div>
+  </section>
+
+  <section id="volume">
+    <h2>Master Volume</h2>
+    <p>The master volume slider controls the overall output gain applied after the plugin
+       chain. Your setting is saved automatically and restored the next time you open the
+       app.</p>
+  </section>
+
+  <section id="presets">
+    <h2>Presets</h2>
+    <p>A preset stores your entire plugin chain — the plugins, their order, and their
+       saved state — in a single shareable file.</p>
+    <ul>
+      <li><strong>Save Preset…</strong> — write the current chain to a <code>.jvst</code> file.</li>
+      <li><strong>Load Preset…</strong> — restore a chain from a saved preset.</li>
+    </ul>
+    <p>Presets are stored under
+       <code>Documents\JyGlobalVST\Presets</code>. You can also drag a preset file onto
+       the window to load it.</p>
+    <div class="note">If a preset references a plugin that is not installed, the app lets
+      you repoint that slot to a different plugin.</div>
+  </section>
+
+  <section id="themes">
+    <h2>Themes</h2>
+    <p>Use the theme selector to change the app's color scheme. Available themes include
+       Neon Blue, Neon Purple, Neon Green, Neon Orange, Neon Red, and Monochrome. The
+       selected theme is remembered between sessions and is also applied to the built-in
+       effect editors.</p>
+  </section>
+
+  <section id="tray">
+    <h2>System Tray</h2>
+    <p>GlobalVSTHost lives in the Windows system tray. Closing the window keeps the app
+       running in the background so audio processing continues. Right-click the tray icon
+       for quick actions.</p>
+    <p>Enable <strong>Start minimized to tray</strong> to have the app launch directly to
+       the tray without showing the window.</p>
+  </section>
+
+  <section id="troubleshooting">
+    <h2>Troubleshooting</h2>
+    <h3>No sound / no processing</h3>
+    <p>Make sure you pressed <strong>Start Audio</strong> and selected a valid output
+       device. Confirm system audio is actually playing.</p>
+
+    <h3>Glitches or dropouts (xruns)</h3>
+    <p>Increase the buffer size, close CPU-heavy applications, or reduce the number of
+       plugins in the chain. The status bar shows CPU load and latency.</p>
+
+    <h3>Reset Engine</h3>
+    <p><strong>Reset Engine</strong> reinitializes the audio device and transport while
+       <em>keeping</em> your loaded plugin chain intact. Use it if audio stops responding
+       or after changing devices.</p>
+
+    <h3>A plugin crashed</h3>
+    <p>Faulty plugins are isolated and bypassed automatically so the rest of the chain
+       keeps working. Remove the offending plugin from the chain if the problem persists.</p>
+  </section>
+
+  <footer>
+    GlobalVSTHost — Windows system-wide VST3 host. This guide describes the features
+    available in the application window.
+  </footer>
+</div>
+</body>
+</html>

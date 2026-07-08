@@ -1,0 +1,7 @@
+#pragma code_page(65001)
+
+#include <windows.h>
+
+// Application icon for taskbar, window decoration, and system tray
+// Using numeric ID 1 for compatibility
+1 ICON DISCARDABLE "../../assets/app_icon.ico"

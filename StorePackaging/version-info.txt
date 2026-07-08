@@ -1,0 +1,5 @@
+# JyGlobalVST MSIX Package Version
+# Format: Major.Minor.Build.Revision (all integers)
+# Update this file before each Store release
+
+1.0.0.0
