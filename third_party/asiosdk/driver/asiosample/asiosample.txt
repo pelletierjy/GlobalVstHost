@@ -2,8 +2,6 @@ Asiosample
 
 This sample driver illustrates the implementation of an ASIO driver.
 
-
-
 Windows notes:
 
 For Windows a COM implementation is provided. The final driver can be

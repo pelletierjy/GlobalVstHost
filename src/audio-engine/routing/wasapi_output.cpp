@@ -314,7 +314,7 @@ void WasapiOutput::renderThreadLoop()
                     const UINT32 pad_frames = available - static_cast<UINT32>(frames_read);
                     if (SUCCEEDED(impl_->render_client_->GetBuffer(pad_frames, &buffer)))
                     {
-                        std::fill(buffer, buffer + pad_frames * sample_size * 4, 0);
+                        std::fill(buffer, buffer + pad_frames * sample_size * 4, static_cast<BYTE>(0));
                         impl_->render_client_->ReleaseBuffer(pad_frames, 0);
                     }
                     impl_->xrun_count_.fetch_add(1, std::memory_order_relaxed);
@@ -323,7 +323,7 @@ void WasapiOutput::renderThreadLoop()
             else
             {
                 // No data available, fill with silence
-                std::fill(buffer, buffer + available * sample_size * 4, 0);
+                std::fill(buffer, buffer + available * sample_size * 4, static_cast<BYTE>(0));
                 impl_->render_client_->ReleaseBuffer(available, 0);
                 impl_->xrun_count_.fetch_add(1, std::memory_order_relaxed);
             }
@@ -333,7 +333,7 @@ void WasapiOutput::renderThreadLoop()
             // No ring buffer, fill with silence
             if (buffer)
             {
-                std::fill(buffer, buffer + available * sample_size * 4, 0);
+                std::fill(buffer, buffer + available * sample_size * 4, static_cast<BYTE>(0));
                 impl_->render_client_->ReleaseBuffer(available, 0);
             }
         }
