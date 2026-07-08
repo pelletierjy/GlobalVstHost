@@ -1,12 +1,20 @@
-/*
-	Steinberg Audio Stream I/O API
-	(c) 1996 - 2019, Steinberg Media Technologies GmbH
-	charlie (May 1996)
-
-	asiodrvr.cpp
-	c++ superclass to implement asio functionality. from this,
-	you can derive whatever required
-*/
+//------------------------------------------------------------------------
+// Project     : ASIO SDK
+//
+// Category    : Interfaces
+// Filename    : common/asiodrvr.cpp
+// Created by  : Steinberg, 05/1996
+// Description : Steinberg Audio Stream I/O Helpers
+//	c++ superclass to implement asio functionality.
+//	From this, you can derive whatever required
+//
+//-----------------------------------------------------------------------------
+// This file is part of a Steinberg SDK. It is subject to the license terms
+// in the LICENSE file found in the top-level directory of this distribution
+// and at www.steinberg.net/sdklicenses. 
+// No part of the SDK, including this file, may be copied, modified, propagated,
+// or distributed except according to the terms contained in the LICENSE file.
+//-----------------------------------------------------------------------------
 
 #include <string.h>
 #include "asiosys.h"

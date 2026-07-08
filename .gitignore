@@ -78,3 +78,6 @@ coverage/
 build-service/
 _bmad/*
 .specify/
+third_party/juce/
+third_party/nlohmann_json/
+third_party/googletest/
