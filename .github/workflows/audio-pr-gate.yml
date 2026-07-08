@@ -1,0 +1,158 @@
+# .github/workflows/audio-pr-gate.yml
+# T130 — Per-PR CI workflow for audio-component PRs.
+#
+# Runs on every PR that touches audio-engine, driver, chain, vst-host,
+# monitoring, or tray-app sources. Gates merge on:
+#   1. Build succeeds (Release + Debug)
+#   2. All unit / integration / contract tests pass
+#   3. 30-minute soak test (xrun count)
+#   4. RT-safety audits (T106, T107, T107a)
+#   5. Virtualized-loopback latency measurement (software-only)
+#   6. CPU usage report
+
+name: Audio PR Gate
+
+on:
+  pull_request:
+    paths:
+      - 'src/audio-engine/**'
+      - 'src/driver/**'
+      - 'src/tray-app/**'
+      - 'src/shared/**'
+      - 'src/service/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/audio-pr-gate.yml'
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-and-test:
+    name: Build & Test (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure CMake
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_BUILD_DRIVER=OFF
+
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
+
+      - name: Build Debug
+        run: cmake --build build --config Debug --parallel
+
+      - name: Run unit + integration + contract tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  rt-audit:
+    name: Real-Time Safety Audit
+    runs-on: windows-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run RT-safety audit (T106)
+        shell: pwsh
+        run: |
+          $result = .\tests\audit\rt_audit.ps1
+          if ($result -ne 0) {
+            Write-Error "RT-safety audit failed"
+            exit 1
+          }
+
+      - name: Run header-presence audit (T107)
+        shell: pwsh
+        run: |
+          $result = .\tests\audit\header_audit.ps1
+          if ($result -ne 0) {
+            Write-Error "Header audit failed"
+            exit 1
+          }
+
+      - name: Run no-i18n audit (T107a)
+        shell: pwsh
+        run: |
+          $result = .\tests\audit\no_i18n_audit.ps1
+          if ($result -ne 0) {
+            Write-Error "No-i18n audit failed"
+            exit 1
+          }
+
+  soak-test:
+    name: 30-Min Soak Test
+    runs-on: windows-latest
+    needs: build-and-test
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_BUILD_DRIVER=OFF
+
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
+
+      - name: Run soak test
+        run: |
+          .\build\bin\Release\jyglobalvst_tray.exe --soak-test --duration-minutes 30
+        continue-on-error: false
+
+  latency-report:
+    name: Virtual Loopback Latency
+    runs-on: windows-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_BUILD_DRIVER=OFF
+
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
+
+      - name: Run virtual loopback latency test
+        run: ctest --test-dir build -C Release -R "us1_empty_chain_passthrough" --output-on-failure
+
+      - name: Upload latency report
+        uses: actions/upload-artifact@v4
+        with:
+          name: latency-report
+          path: build/latency_report.json
+          if-no-files-found: warn
+
+  cpu-report:
+    name: CPU Usage Report
+    runs-on: windows-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_BUILD_DRIVER=OFF
+
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
+
+      - name: Run CPU warning test
+        run: ctest --test-dir build -C Release -R "us4_cpu_warning" --output-on-failure
+
+      - name: Upload CPU report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-report
+          path: build/cpu_report.json
+          if-no-files-found: warn
