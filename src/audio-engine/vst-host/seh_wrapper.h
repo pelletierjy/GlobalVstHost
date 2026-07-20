@@ -36,6 +36,17 @@ public:
                                   double sample_rate,
                                   int samples_per_block) noexcept;
 
+    // Run an arbitrary callback under SEH + C++ exception guards. Used to isolate
+    // plugin *loading* during a scan: a faulty VST3 can raise a Windows structured
+    // exception (e.g. an access violation while its factory initialises) that a
+    // plain C++ catch(...) cannot stop, which otherwise takes down the whole app.
+    // `context` is passed straight through to `fn`. Returns true iff fn(context)
+    // ran to completion without any C++ or structured exception.
+    // NOTE: on a structured-exception escape, C++ objects constructed inside `fn`
+    // are NOT unwound (SEH skips C++ destructors) — acceptable here because the
+    // process would otherwise have crashed. Not for use on the audio thread.
+    static bool invokeGuarded(void (*fn)(void*), void* context) noexcept;
+
     // Pre-allocate notification slots for error reporting.
     // Call once at initialization to ensure RT-path never allocates.
     static void prepareNotificationSlots(int num_slots);

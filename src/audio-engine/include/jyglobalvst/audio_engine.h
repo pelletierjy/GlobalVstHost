@@ -64,6 +64,12 @@ public:
 
     // FR-018: loopback capture muting is required but failed; fallback needed.
     virtual void onCaptureMuteFallbackRequired(const EndpointId& endpoint) = 0;
+
+    // Energy Saver: the engine transitioned between active processing and the
+    // low-power "sleeping" state (heavy DSP suspended while input is silent).
+    // `sleeping == true` means processing is currently suspended. Non-pure so
+    // existing listeners need not implement it.
+    virtual void onEnergySaverStateChanged(bool /*sleeping*/) {}
 };
 
 class IAudioEngine
@@ -81,6 +87,18 @@ public:
     virtual void setListener(IAudioEngineListener* listener) = 0;
     virtual void setMasterVolume(float gain_linear) = 0;
     virtual void reset() = 0;
+
+    // --- Energy Saver ------------------------------------------------------
+    // When enabled, the engine watches the input level while running. After a
+    // sustained silence it suspends the CPU-heavy processing path (VST chain)
+    // and emits silence, keeping only a lightweight input probe alive so it can
+    // auto-resume the instant audio returns. Toggling has no audible effect
+    // while audio is not running; the preference is simply remembered.
+    // State transitions are reported via IAudioEngineListener::onEnergySaverStateChanged.
+    virtual void setEnergySaverEnabled(bool enabled) = 0;
+    virtual bool isEnergySaverEnabled() const = 0;
+    // True while the engine is currently in the suspended (sleeping) state.
+    virtual bool isEnergySaverSleeping() const = 0;
 
     // --- Device selection --------------------------------------------------
     virtual std::vector<HardwareOutputInfo> listOutputs() const = 0;

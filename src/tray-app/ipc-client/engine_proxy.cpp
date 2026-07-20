@@ -269,6 +269,27 @@ void IpcEngineProxy::reset()
     sendCommand("engine.reset", {});
 }
 
+void IpcEngineProxy::setEnergySaverEnabled(bool enabled)
+{
+    sendCommand("engine.set_energy_saver_enabled", {{"enabled", enabled}});
+}
+
+bool IpcEngineProxy::isEnergySaverEnabled() const
+{
+    auto resp = const_cast<IpcEngineProxy*>(this)->sendCommand("engine.is_energy_saver_enabled", {});
+    if (resp.contains("result") && resp["result"].contains("enabled"))
+        return resp["result"]["enabled"].get<bool>();
+    return false;
+}
+
+bool IpcEngineProxy::isEnergySaverSleeping() const
+{
+    auto resp = const_cast<IpcEngineProxy*>(this)->sendCommand("engine.is_energy_saver_sleeping", {});
+    if (resp.contains("result") && resp["result"].contains("sleeping"))
+        return resp["result"]["sleeping"].get<bool>();
+    return false;
+}
+
 std::vector<HardwareOutputInfo> IpcEngineProxy::listOutputs() const
 {
     auto resp = const_cast<IpcEngineProxy*>(this)->sendCommand("device.list_outputs", {});

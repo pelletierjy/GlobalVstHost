@@ -27,6 +27,25 @@ namespace jyglobalvst::tray {
 // Forward declaration of the content component defined in main_window.cpp.
 class MainContentComponent;
 
+// Green leaf toggle button for Energy Saver mode. Sits in the header next to the
+// "?" button. Painted directly (no bitmap) so it stays crisp at any DPI and can
+// reflect three states through colour/fill:
+//   • feature off      → muted grey outline
+//   • enabled, awake    → green outline + faint fill
+//   • enabled, sleeping → brighter green, solid fill (engine is saving energy)
+class LeafButton : public juce::Button
+{
+public:
+    LeafButton();
+    void setEnergyState(bool enabled, bool sleeping);
+
+private:
+    void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
+
+    bool enabled_ {false};
+    bool sleeping_ {false};
+};
+
 // Special endpoint ID representing no device connection
 constexpr std::string_view kDisconnectedDeviceId = "";
 
@@ -68,11 +87,13 @@ public:
     void onPresetPartialLoad(const std::vector<MissingPluginInfo>& missing) override;
     void onSameDeviceConflict(const EndpointId& device) override;
     void onCaptureMuteFallbackRequired(const EndpointId& endpoint) override;
+    void onEnergySaverStateChanged(bool sleeping) override;
 
     // System tray -----------------------------------------------------------
     void createTrayIcon();
     void destroyTrayIcon();
     void updateTrayIconTooltip(const juce::String& text);
+    void updateTrayIconAppearance();
     void showTrayContextMenu();
     void showTrayVolumePopup();
     void restoreFromTray();
@@ -106,6 +127,8 @@ private:
     void showRepointPlaceholderDialog(int position);
     void handleAbout();
     void handleHelp();
+    void toggleEnergySaver();
+    void updateEnergySaverVisual();
     void handleCheckForUpdates();
     void applyThemeChange(CustomLookAndFeel::ThemeId id);
     void saveWindowStateIfNeeded();
@@ -159,6 +182,7 @@ private:
     std::unique_ptr<juce::TextButton> save_preset_button_;
     std::unique_ptr<juce::TextButton> load_preset_button_;
     std::unique_ptr<juce::TextButton> about_button_;
+    std::unique_ptr<LeafButton> energy_saver_button_;
     std::unique_ptr<juce::TextButton> help_button_;
     std::unique_ptr<juce::Slider> volume_slider_;
     std::unique_ptr<juce::TextButton> mute_button_;
@@ -230,8 +254,10 @@ private:
 
     // System tray state.
     bool tray_icon_created_ {false};
+    bool tray_icon_active_shown_ {false};  // true when the colour (active) icon is displayed
     HMENU tray_menu_ {nullptr};
     HICON tray_hicon_ {nullptr};
+    HICON tray_hicon_gray_ {nullptr};      // desaturated icon shown while paused
     HICON window_icon_big_ {nullptr};
     HICON window_icon_small_ {nullptr};
 

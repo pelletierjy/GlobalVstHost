@@ -36,6 +36,10 @@ public:
     void setMasterVolume(float gain_linear) override;
     void reset() override;
 
+    void setEnergySaverEnabled(bool enabled) override;
+    bool isEnergySaverEnabled() const override;
+    bool isEnergySaverSleeping() const override;
+
     std::vector<HardwareOutputInfo> listOutputs() const override;
     void selectOutput(const EndpointId& id) override;
     EndpointId currentOutput() const override;

@@ -12,6 +12,7 @@
 #include "plugin_scanner.h"
 
 #include "scan_cache.h"
+#include "seh_wrapper.h"
 #include "vst3_loader.h"
 
 #include <windows.h>
@@ -139,7 +140,32 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
 
             try
             {
-                auto result = loader->load(file);
+                // Load each plugin under an SEH guard: a faulty VST3 can raise a
+                // structured exception (access violation) during instantiation
+                // that a C++ catch(...) cannot stop, which would otherwise crash
+                // the whole app mid-scan. On such a failure we skip the plugin and
+                // keep scanning. (Matches the SEH isolation used for processBlock.)
+                struct LoadCtx
+                {
+                    VST3PluginLoader* loader;
+                    const std::filesystem::path* file;
+                    VST3PluginLoader::LoadResult result;
+                } ctx {loader.get(), &file, {}};
+
+                const bool loaded_cleanly = SEHPluginWrapper::invokeGuarded(
+                    [](void* p) {
+                        auto* c = static_cast<LoadCtx*>(p);
+                        c->result = c->loader->load(*c->file);
+                    },
+                    &ctx);
+
+                if (!loaded_cleanly)
+                {
+                    // Plugin crashed while loading; leave it out of the catalog.
+                    continue;
+                }
+
+                auto& result = ctx.result;
                 if (result && result.instance)
                 {
                     PluginCatalogEntry entry;
