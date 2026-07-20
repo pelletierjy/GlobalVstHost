@@ -25,6 +25,7 @@ struct RoamingSettings
     std::string update_check_endpoint_url;
     bool start_minimized_to_tray {false};
     float master_volume {1.0f};  // Master output gain (0.0–1.0), persisted across sessions.
+    bool energy_saver_enabled {false};  // Auto-suspend the engine during silence (off by default).
 
     // T013: Driverless audio capture device persistence
     std::optional<std::string> capture_endpoint_id;     // Loopback source endpoint

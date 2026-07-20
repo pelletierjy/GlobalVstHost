@@ -54,6 +54,8 @@ class DeviceWatchdog;
 }
 
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -99,6 +101,10 @@ public:
     void setListener(IAudioEngineListener* listener) override;
     void setMasterVolume(float gain_linear) override;
     void reset() override;
+
+    void setEnergySaverEnabled(bool enabled) override;
+    bool isEnergySaverEnabled() const override;
+    bool isEnergySaverSleeping() const override;
 
     std::vector<HardwareOutputInfo> listOutputs() const override;
     void selectOutput(const EndpointId& id) override;
@@ -222,6 +228,13 @@ private:
     bool capture_priming_ {true};             // fill to target before draining
     std::atomic<std::size_t> capture_fill_frames_ {0};  // diagnostics (UI-readable)
     std::atomic<double> capture_corr_ {0.0};            // diagnostics: applied correction
+    // Diagnostics for hunting audible cutouts. capture_reprime_count_ counts how
+    // often the bridge re-entered priming (each event = a silence gap that is NOT
+    // an xrun). capture_fill_min_frames_ is the worst (lowest) ring fill seen since
+    // the last diag sample — the once-per-second capture_fill_frames_ snapshot hides
+    // sub-second dips that trigger those re-primes. Both are reset by the diag thread.
+    std::atomic<std::uint64_t> capture_reprime_count_ {0};
+    std::atomic<std::size_t> capture_fill_min_frames_ {SIZE_MAX};
 
     void openWasapiCapture();
     void closeWasapiCapture();
@@ -234,6 +247,25 @@ private:
     void engineThreadLoop();
     std::thread engine_thread_;
     std::atomic<bool> engine_thread_running_ {false};
+
+    // --- Energy Saver ------------------------------------------------------
+    // When enabled and running, energy_saver_thread_ polls the input peak at
+    // ~10 Hz. After kEnergySaverIdleMs of silence (input below the wake
+    // threshold) it sets energy_saver_sleeping_, which makes the audio callback
+    // skip the VST chain and emit silence. The input peak is still computed
+    // every metering block while sleeping, so the same thread wakes the engine
+    // the moment audio returns. The thread never touches the audio path — it
+    // only flips atomics and fires the listener notification.
+    std::atomic<bool> energy_saver_enabled_ {false};
+    std::atomic<bool> energy_saver_sleeping_ {false};
+    std::thread energy_saver_thread_;
+    std::atomic<bool> energy_saver_thread_running_ {false};
+    static constexpr int kEnergySaverIdleMs = 30'000;        // silence before sleeping
+    static constexpr float kEnergySaverWakeDb = -50.0f;      // input level counted as "audio"
+    void startEnergySaver();
+    void stopEnergySaver();
+    void energySaverThreadLoop();
+    void setEnergySaverSleeping(bool sleeping);
 
     // Low-rate (~1 Hz) diagnostics thread: logs ring fill / correction / xruns so
     // the drift controller can be observed without touching the audio thread.

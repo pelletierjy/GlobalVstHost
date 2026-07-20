@@ -15,6 +15,7 @@
 
 #include "audio_engine_impl.h"
 #include "device_watchdog.h"
+#include "energy_saver_controller.h"
 
 #include "../builtin-effects/builtin_effect_registry.h"
 #include "../chain/preset_serializer.h"
@@ -28,6 +29,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -42,6 +44,15 @@ namespace {
 
 constexpr int kMeterThrottleDivisor = 3;  // ~30 Hz meter updates @ 48kHz 256-sample buffers
 
+// Highest sample rate we size real-time buffers for. WASAPI shared mode ignores
+// the requested rate and runs at the endpoint's mix-format rate, which can be up
+// to 192 kHz. Ring buffers must give the drift controller the same real-time
+// headroom (in milliseconds) regardless of that rate, so we size them from this
+// ceiling rather than from desired_sample_rate_ (which defaults to 48 kHz and
+// would leave the rings ~half their intended duration at 96 kHz → starvation and
+// re-priming, audible as dropouts/clicks at correct pitch).
+constexpr double kMaxSupportedSampleRate = 192000.0;
+
 // --- Capture→ASIO clock-drift controller tuning -------------------------
 // The WASAPI-capture → ASIO-output bridge crosses two independent clocks. A PI
 // controller on the ring-buffer fill level continuously trims the resampling
@@ -51,7 +62,12 @@ constexpr int kMeterThrottleDivisor = 3;  // ~30 Hz meter updates @ 48kHz 256-sa
 //
 // Target ring fill — effectively the added bridge latency. Large enough to
 // absorb WASAPI packet bursts and ASIO scheduling jitter without underrunning.
-constexpr double kCaptureTargetSeconds = 0.030;  // 30 ms
+// Raised 30 → 45 ms: at 30 ms the WASAPI burst/jitter envelope could dip the ring
+// below the re-prime threshold (kCaptureUnderrunFactor), and each re-prime emits a
+// silence gap (audible cutout) that is NOT counted as an xrun. The extra 15 ms of
+// cushion keeps the fill clear of that threshold. This is capture-bridge latency
+// only; it is independent of the <10 ms plugin-chain processing budget.
+constexpr double kCaptureTargetSeconds = 0.045;  // 45 ms
 // Fill-measurement low-pass coefficient. WASAPI delivers audio in bursts, so the
 // instantaneous ring fill is a fast sawtooth; the clock drift we actually
 // correct is quasi-DC. Heavily filtering the fill (time constant ~1–2 s) lets
@@ -247,6 +263,7 @@ AudioEngineImpl::~AudioEngineImpl()
 {
     stop();
     stopCaptureDiagnostics();  // defensive: guarantee the diag thread is joined
+    stopEnergySaver();         // defensive: guarantee the energy-saver thread is joined
 }
 
 void AudioEngineImpl::start()
@@ -374,6 +391,9 @@ void AudioEngineImpl::start()
             capture_smoothed_corr_ = 0.0;
             capture_drift_integral_ = 0.0;
             capture_priming_ = true;
+            capture_reprime_count_.store(0, std::memory_order_relaxed);
+            capture_fill_min_frames_.store(SIZE_MAX, std::memory_order_relaxed);
+            xrun_count_.store(0, std::memory_order_relaxed);
 
             const int raw_max = static_cast<int>(std::ceil(
                                     static_cast<double>(desired_buffer_size_) * capture_nominal_ratio_ *
@@ -445,6 +465,7 @@ void AudioEngineImpl::start()
     {
         startCaptureDiagnostics();
     }
+    startEnergySaver();
     LogDebug("start() completed");
 }
 
@@ -457,6 +478,7 @@ void AudioEngineImpl::stop()
         LogDebug("stop() not running, returning");
         return;
     }
+    stopEnergySaver();
     stopCaptureDiagnostics();
     scanner_->cancel();
     scanner_->waitUntilFinished();
@@ -516,6 +538,92 @@ void AudioEngineImpl::reset()
     notifyOnUiThread([this](IAudioEngineListener& l) {
         l.onChainRevision(chain_revision_.load());
     });
+}
+
+// =====================================================================
+// Energy Saver
+// =====================================================================
+
+void AudioEngineImpl::setEnergySaverEnabled(bool enabled)
+{
+    const bool was = energy_saver_enabled_.exchange(enabled);
+    if (was == enabled)
+        return;
+
+    LogDebug("setEnergySaverEnabled(%d)", enabled ? 1 : 0);
+
+    // Turning the feature off must wake immediately so the chain resumes right
+    // away; the polling thread would otherwise leave the engine silent for up to
+    // one tick. The thread itself keeps running for the engine's lifetime.
+    if (!enabled)
+    {
+        setEnergySaverSleeping(false);
+    }
+}
+
+bool AudioEngineImpl::isEnergySaverEnabled() const
+{
+    return energy_saver_enabled_.load();
+}
+
+bool AudioEngineImpl::isEnergySaverSleeping() const
+{
+    return energy_saver_sleeping_.load();
+}
+
+void AudioEngineImpl::setEnergySaverSleeping(bool sleeping)
+{
+    if (energy_saver_sleeping_.exchange(sleeping) == sleeping)
+        return;
+    LogDebug("EnergySaver: %s", sleeping ? "sleeping" : "awake");
+    notifyOnUiThread([sleeping](IAudioEngineListener& l) {
+        l.onEnergySaverStateChanged(sleeping);
+    });
+}
+
+void AudioEngineImpl::startEnergySaver()
+{
+    if (energy_saver_thread_running_.exchange(true))
+        return;
+    energy_saver_thread_ = std::thread([this]() { energySaverThreadLoop(); });
+}
+
+void AudioEngineImpl::stopEnergySaver()
+{
+    if (!energy_saver_thread_running_.exchange(false))
+        return;
+    if (energy_saver_thread_.joinable())
+        energy_saver_thread_.join();
+    // Never leave the audio path suspended once we are no longer watching it.
+    setEnergySaverSleeping(false);
+}
+
+void AudioEngineImpl::energySaverThreadLoop()
+{
+    using clock = std::chrono::steady_clock;
+    // All decision logic lives in EnergySaverController (unit-tested separately);
+    // this thread just samples input level at ~10 Hz and syncs the result into
+    // the atomics the audio callback reads.
+    EnergySaverController controller(kEnergySaverIdleMs, kEnergySaverWakeDb);
+    const auto t0 = clock::now();
+    auto now_ms = [&t0]() {
+        return static_cast<long long>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t0).count());
+    };
+    controller.reset(now_ms());
+
+    while (energy_saver_thread_running_.load(std::memory_order_acquire))
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        controller.setEnabled(energy_saver_enabled_.load(std::memory_order_relaxed));
+        const float peak = std::max(meter_input_peak_l_.load(std::memory_order_relaxed),
+                                    meter_input_peak_r_.load(std::memory_order_relaxed));
+        if (controller.update(now_ms(), peak))
+        {
+            setEnergySaverSleeping(controller.sleeping());
+        }
+    }
 }
 
 std::vector<HardwareOutputInfo> AudioEngineImpl::listOutputs() const
@@ -1827,6 +1935,17 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
         // rail (over/underrun) within seconds and glitch continuously.
         std::size_t avail = capture_ring_buffer_->available();
         capture_fill_frames_.store(avail, std::memory_order_relaxed);
+        // Track the worst-case (lowest) fill since the last diagnostic sample so the
+        // once-per-second snapshot cannot hide the sub-second dips that trigger a
+        // re-prime silence gap. Monotonic min; reset by the diag thread.
+        {
+            std::size_t prev_min = capture_fill_min_frames_.load(std::memory_order_relaxed);
+            while (avail < prev_min &&
+                   !capture_fill_min_frames_.compare_exchange_weak(prev_min, avail,
+                                                                   std::memory_order_relaxed))
+            {
+            }
+        }
 
         // Symmetric under-fill resync: if the ring has starved (source paused or
         // seeked and stopped delivering), re-enter priming and refill to target
@@ -1837,6 +1956,9 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             avail < static_cast<std::size_t>(capture_target_frames_ * kCaptureUnderrunFactor))
         {
             capture_priming_ = true;
+            // Count this re-prime: it produces a silence gap (audible cutout) that is
+            // NOT counted as an xrun, so this is the only signal that it happened.
+            capture_reprime_count_.fetch_add(1, std::memory_order_relaxed);
             capture_fill_avg_ = static_cast<double>(capture_target_frames_);
             capture_drift_integral_ = 0.0;
             capture_smoothed_corr_ = 0.0;
@@ -1961,9 +2083,19 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
         }
     }
 
-    // 3. Process through plugin chain.
-    juce::MidiBuffer empty_midi;
-    plugin_chain_->processBlock(work_buffer_, empty_midi);
+    // 3. Process through plugin chain. Energy Saver: while sleeping we skip the
+    //    CPU-heavy chain entirely and emit silence. The input peak/RMS above is
+    //    still computed every metering block, so the energy-saver thread keeps
+    //    seeing the true input level and resumes the instant audio returns.
+    if (energy_saver_sleeping_.load(std::memory_order_relaxed))
+    {
+        work_buffer_.clear();
+    }
+    else
+    {
+        juce::MidiBuffer empty_midi;
+        plugin_chain_->processBlock(work_buffer_, empty_midi);
+    }
 
     // 3a. Apply master volume scalar.
     {
@@ -2101,6 +2233,9 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
             capture_smoothed_corr_ = 0.0;
             capture_drift_integral_ = 0.0;
             capture_priming_ = true;
+            capture_reprime_count_.store(0, std::memory_order_relaxed);
+            capture_fill_min_frames_.store(SIZE_MAX, std::memory_order_relaxed);
+            xrun_count_.store(0, std::memory_order_relaxed);
 
             // Worst-case input consumed per callback = block * nominal * (1 + max
             // correction), plus sinc-kernel headroom. The raw peek buffer must
@@ -2283,6 +2418,16 @@ void AudioEngineImpl::applyAsioTransport()
     if (!report.error.empty())
     {
         fallback_reason_ = report.error;
+        LogDebug("ASIO open failed for '%s': %s — falling back to WASAPI",
+                 desired_asio_device_name_.c_str(), report.error.c_str());
+        // Surface the fallback so the user knows they're on WASAPI, not ASIO.
+        // The tray UI treats onDeviceLost as informational (status label +
+        // device-list refresh); it does not auto-reconnect or restart.
+        const EndpointId lost = desired_asio_device_name_;
+        const EndpointId fallback_to = desired_output_id_;
+        notifyOnUiThread([lost, fallback_to](IAudioEngineListener& l) {
+            l.onDeviceLost(lost, fallback_to);
+        });
         fallbackToWasapi();
         applyDeviceSelection();
         return;
@@ -2320,8 +2465,9 @@ void AudioEngineImpl::openWasapiCapture()
 
     closeWasapiCapture();
 
-    // Size for ~500 ms at the desired rate — large enough for any WASAPI/ASIO rate combo.
-    const std::size_t ring_capacity = static_cast<std::size_t>(desired_sample_rate_ * 0.5) + 1;
+    // Size for ~500 ms at the maximum supported rate so the drift controller keeps
+    // the same real-time headroom for any WASAPI/ASIO rate combo (incl. 96/192 kHz).
+    const std::size_t ring_capacity = static_cast<std::size_t>(kMaxSupportedSampleRate * 0.5) + 1;
     capture_ring_buffer_ = std::make_unique<shared::LockFreeAudioRingBuffer>(
         ring_capacity,
         2);
@@ -2373,11 +2519,13 @@ void AudioEngineImpl::openWasapiOutput()
     if (desired_output_id_.empty())
         return;
 
-    // Create ring buffer for audio to feed to output
-    // Size: 16384 frames = ~341ms @ 48kHz
+    // Create ring buffer for audio to feed to output.
+    // Size for ~500 ms at the maximum supported rate so the render thread keeps the
+    // same real-time headroom for any output rate (incl. 96/192 kHz) — a fixed
+    // 16384-frame ring is only ~170 ms at 96 kHz and starves under load.
     output_ring_buffer_ = std::make_unique<shared::LockFreeAudioRingBuffer>(
-        16384,  // max frames
-        2);     // stereo
+        static_cast<std::size_t>(kMaxSupportedSampleRate * 0.5) + 1,  // max frames
+        2);                                                            // stereo
 
     if (!output_ring_buffer_)
         return;
@@ -2436,17 +2584,31 @@ void AudioEngineImpl::startCaptureDiagnostics()
             {
                 break;
             }
-            if (mixed_mode_active_.load(std::memory_order_acquire) && capture_resampling_enabled_)
+            // Log whenever the drift bridge is active — in BOTH pure-WASAPI and
+            // mixed ASIO modes (they share the same capture ring + resampler, so
+            // cutouts reproduce in both). The min-fill and reprime counters expose
+            // the sub-second dips and silence gaps the plain fill snapshot hides.
+            if (capture_resampling_enabled_)
             {
-                LogDebug("drift-SRC: fill=%zu/%zu frames (%.0f%%) corr=%+.4f%% xruns=%llu",
-                         capture_fill_frames_.load(std::memory_order_relaxed),
-                         capture_target_frames_,
+                const std::size_t fill = capture_fill_frames_.load(std::memory_order_relaxed);
+                std::size_t min_fill = capture_fill_min_frames_.exchange(SIZE_MAX, std::memory_order_relaxed);
+                if (min_fill == SIZE_MAX)
+                {
+                    min_fill = fill;
+                }
+                LogDebug("drift-SRC[%s]: fill=%zu/%zu (%.0f%%) min=%zu (%.0f%%) corr=%+.4f%% xruns=%llu reprimes=%llu",
+                         mixed_mode_active_.load(std::memory_order_acquire) ? "ASIO" : "WASAPI",
+                         fill, capture_target_frames_,
                          capture_target_frames_ > 0
-                             ? 100.0 * static_cast<double>(capture_fill_frames_.load(std::memory_order_relaxed)) /
-                                   static_cast<double>(capture_target_frames_)
+                             ? 100.0 * static_cast<double>(fill) / static_cast<double>(capture_target_frames_)
+                             : 0.0,
+                         min_fill,
+                         capture_target_frames_ > 0
+                             ? 100.0 * static_cast<double>(min_fill) / static_cast<double>(capture_target_frames_)
                              : 0.0,
                          capture_corr_.load(std::memory_order_relaxed) * 100.0,
-                         static_cast<unsigned long long>(xrun_count_.load(std::memory_order_relaxed)));
+                         static_cast<unsigned long long>(xrun_count_.load(std::memory_order_relaxed)),
+                         static_cast<unsigned long long>(capture_reprime_count_.load(std::memory_order_relaxed)));
             }
         }
     });

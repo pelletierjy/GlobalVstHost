@@ -28,8 +28,10 @@ std::vector<std::string> ASIOTransport::listDevices() const
         return cached_devices_;
 
 #if JUCE_ASIO
-    // Create the temp manager only once — ASIO drivers must not be loaded and
-    // unloaded repeatedly within the same process or the driver state corrupts.
+    // Enumerate ASIO drivers into a fresh local list. Use a temporary
+    // AudioDeviceManager rather than the engine's live one so this scan can never
+    // disturb a running WASAPI/ASIO stream.
+    std::vector<std::string> found;
     juce::AudioDeviceManager tempManager;
     for (auto* type : tempManager.getAvailableDeviceTypes())
     {
@@ -38,15 +40,28 @@ std::vector<std::string> ASIOTransport::listDevices() const
             type->scanForDevices();
             for (const auto& name : type->getDeviceNames())
             {
-                cached_devices_.emplace_back(name.toStdString());
+                found.emplace_back(name.toStdString());
             }
             break;
         }
     }
-#endif
 
+    // CRITICAL: only cache a SUCCESSFUL (non-empty) scan. An ASIO scan can
+    // transiently return nothing — e.g. the driver is momentarily held by another
+    // client, or was busy during startup. Caching that empty result would leave
+    // ASIO permanently unselectable for the rest of the session (the user's
+    // "ASIO isn't selectable" symptom). By only latching a non-empty result we
+    // re-scan on the next call until the drivers actually enumerate.
+    if (!found.empty())
+    {
+        cached_devices_ = std::move(found);
+        devices_cached_ = true;
+    }
+    return cached_devices_;
+#else
     devices_cached_ = true;
     return cached_devices_;
+#endif
 }
 
 bool ASIOTransport::setPreferred(const SessionConfig& config)
@@ -120,7 +135,22 @@ AsioSessionReport ASIOTransport::open(juce::AudioDeviceManager* manager,
     setup.useDefaultInputChannels  = false;
     setup.useDefaultOutputChannels = false;
 
-    const juce::String err = manager->setAudioDeviceSetup(setup, true);
+    juce::String err = manager->setAudioDeviceSetup(setup, true);
+
+    // Many ASIO drivers are locked to the sample rate / buffer size configured in
+    // their own control panel and reject a mismatched explicit request. Rather
+    // than fail the whole ASIO open (which silently drops the user to WASAPI),
+    // retry accepting the driver's own settings: sampleRate/bufferSize == 0 make
+    // JUCE use the device's current/default values. The channel masks are kept.
+    // The engine reads back the negotiated rate below and adopts it as the chain
+    // rate, so accepting the driver's native rate is safe.
+    if (err.isNotEmpty())
+    {
+        setup.sampleRate = 0.0;
+        setup.bufferSize = 0;
+        err = manager->setAudioDeviceSetup(setup, true);
+    }
+
     if (err.isNotEmpty())
     {
         report.error = err.toStdString();

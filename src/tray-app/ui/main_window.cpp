@@ -790,15 +790,16 @@ class HeaderComponent : public juce::Component
 public:
     HeaderComponent(juce::ImageComponent* logo, juce::Label* title,
                     juce::TextButton* reset, juce::TextButton* audio_toggle,
-                    juce::TextButton* about, juce::TextButton* help)
+                    juce::TextButton* about, juce::Button* energy_saver, juce::TextButton* help)
         : logo_(logo), title_(title), reset_(reset), audio_toggle_(audio_toggle),
-          about_(about), help_(help)
+          about_(about), energy_saver_(energy_saver), help_(help)
     {
         addAndMakeVisible(logo_);
         addAndMakeVisible(title_);
         addAndMakeVisible(reset_);
         addAndMakeVisible(audio_toggle_);
         addAndMakeVisible(about_);
+        addAndMakeVisible(energy_saver_);
         addAndMakeVisible(help_);
     }
 
@@ -818,6 +819,9 @@ public:
         fb.items.add(juce::FlexItem().withWidth(6));
         fb.items.add(juce::FlexItem(*about_).withMinWidth(80).withWidth(80).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
+        // Green leaf toggle, sits immediately left of the "?" button.
+        fb.items.add(juce::FlexItem(*energy_saver_).withMinWidth(34).withWidth(34).withMinHeight(28).withHeight(28));
+        fb.items.add(juce::FlexItem().withWidth(6));
         fb.items.add(juce::FlexItem(*help_).withMinWidth(70).withWidth(70).withMinHeight(28).withHeight(28));
         fb.performLayout(b);
     }
@@ -828,6 +832,7 @@ private:
     juce::TextButton* reset_;
     juce::TextButton* audio_toggle_;
     juce::TextButton* about_;
+    juce::Button* energy_saver_;
     juce::TextButton* help_;
 };
 
@@ -986,6 +991,66 @@ private:
 // MainWindow implementation
 // ============================================================================
 
+// =====================================================================
+// LeafButton — Energy Saver toggle
+// =====================================================================
+
+LeafButton::LeafButton() : juce::Button("EnergySaver")
+{
+    setTooltip("Energy Saver: off");
+}
+
+void LeafButton::setEnergyState(bool enabled, bool sleeping)
+{
+    enabled_ = enabled;
+    sleeping_ = sleeping;
+    setTooltip(enabled_ ? (sleeping_ ? "Energy Saver: sleeping (engine idle)"
+                                     : "Energy Saver: on (monitoring)")
+                        : "Energy Saver: off");
+    repaint();
+}
+
+void LeafButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool /*shouldDrawDown*/)
+{
+    auto area = getLocalBounds().toFloat().reduced(3.0f);
+
+    const juce::Colour leaf_on {0xFF00E676};     // active green
+    const juce::Colour leaf_sleep {0xFF69F0AE};  // brighter mint while sleeping
+    const juce::Colour leaf_off {0xFF5A6472};    // muted grey when disabled
+
+    juce::Colour col = enabled_ ? (sleeping_ ? leaf_sleep : leaf_on) : leaf_off;
+    if (shouldDrawHighlighted)
+        col = col.brighter(0.25f);
+
+    // A symmetric pointed-oval leaf with a central midrib, drawn vertically.
+    const float h = area.getHeight();
+    const float cx = area.getCentreX();
+    const float cy = area.getCentreY();
+    const float top = area.getY() + h * 0.10f;
+    const float bottom = area.getBottom() - h * 0.10f;
+    const float half = area.getWidth() * 0.32f;
+
+    juce::Path leaf;
+    leaf.startNewSubPath(cx, top);
+    leaf.quadraticTo(cx + half, cy, cx, bottom);
+    leaf.quadraticTo(cx - half, cy, cx, top);
+    leaf.closeSubPath();
+
+    const float fill_alpha = enabled_ ? (sleeping_ ? 0.55f : 0.28f) : 0.0f;
+    if (fill_alpha > 0.0f)
+    {
+        g.setColour(col.withAlpha(fill_alpha));
+        g.fillPath(leaf);
+    }
+    g.setColour(col);
+    g.strokePath(leaf, juce::PathStrokeType(1.8f));
+
+    juce::Path rib;
+    rib.startNewSubPath(cx, top + h * 0.04f);
+    rib.lineTo(cx, bottom - h * 0.04f);
+    g.strokePath(rib, juce::PathStrokeType(1.2f));
+}
+
 MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     : juce::DocumentWindow("GlobalVSTHost", kBgDeep, juce::DocumentWindow::closeButton)
     , engine_(std::move(engine))
@@ -1132,6 +1197,10 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     {
         setVisible(false);
     }
+
+    // Restore the Energy Saver preference and reflect it on the leaf button.
+    engine_->setEnergySaverEnabled(rs.energy_saver_enabled);
+    updateEnergySaverVisual();
 
     // Start a background plugin scan
     status_label_->setText("Scanning plugins...", juce::dontSendNotification);
@@ -1711,6 +1780,10 @@ void MainWindow::buildUI()
     about_button_ = std::make_unique<juce::TextButton>("About");
     about_button_->addListener(this);
 
+    // --- Energy Saver leaf toggle -----------------------------------------
+    energy_saver_button_ = std::make_unique<LeafButton>();
+    energy_saver_button_->addListener(this);
+
     // --- Help button -------------------------------------------------------
     help_button_ = std::make_unique<juce::TextButton>("?");
     help_button_->addListener(this);
@@ -1733,7 +1806,8 @@ void MainWindow::buildUI()
 
     auto* header = new HeaderComponent(logo_comp, title_label_,
                                        reset_engine_button_.get(), audio_toggle_.get(),
-                                       about_button_.get(), help_button_.get());
+                                       about_button_.get(), energy_saver_button_.get(),
+                                       help_button_.get());
 
     // --- Panels ------------------------------------------------------------
     auto* device_panel = new DevicePanel(
@@ -1953,6 +2027,10 @@ void MainWindow::buttonClicked(juce::Button* button)
     else if (button == about_button_.get())
     {
         handleAbout();
+    }
+    else if (button == energy_saver_button_.get())
+    {
+        toggleEnergySaver();
     }
     else if (button == help_button_.get())
     {
@@ -2413,6 +2491,41 @@ void MainWindow::handleHelp()
     catch (const std::exception& e)
     {
         status_label_->setText(juce::String("Could not open user guide: ") + e.what(),
+                               juce::dontSendNotification);
+    }
+}
+
+void MainWindow::toggleEnergySaver()
+{
+    const bool enable = !engine_->isEnergySaverEnabled();
+    engine_->setEnergySaverEnabled(enable);
+
+    // Persist the preference so it is restored next launch.
+    auto rs = roaming_settings_store_.load();
+    rs.energy_saver_enabled = enable;
+    roaming_settings_store_.save(rs);
+
+    status_label_->setText(enable ? "Energy Saver enabled" : "Energy Saver disabled",
+                           juce::dontSendNotification);
+    updateEnergySaverVisual();
+}
+
+void MainWindow::updateEnergySaverVisual()
+{
+    if (energy_saver_button_ == nullptr)
+        return;
+    energy_saver_button_->setEnergyState(engine_->isEnergySaverEnabled(),
+                                         engine_->isEnergySaverSleeping());
+}
+
+void MainWindow::onEnergySaverStateChanged(bool sleeping)
+{
+    // Fired on the UI thread by the engine when it suspends/resumes processing.
+    updateEnergySaverVisual();
+    if (engine_->isEnergySaverEnabled())
+    {
+        status_label_->setText(sleeping ? "Energy Saver: engine sleeping (no audio)"
+                                        : "Energy Saver: audio resumed",
                                juce::dontSendNotification);
     }
 }
