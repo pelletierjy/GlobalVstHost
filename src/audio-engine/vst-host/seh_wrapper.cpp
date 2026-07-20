@@ -55,6 +55,19 @@ bool prepareToPlayWithSeh(juce::AudioPluginInstance* plugin,
         return false;
     }
 }
+
+bool invokeWithSeh(void (*fn)(void*), void* context) noexcept
+{
+    __try
+    {
+        fn(context);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
 #endif
 
 }  // namespace
@@ -100,6 +113,30 @@ bool SEHPluginWrapper::prepareToPlaySafe(juce::AudioPluginInstance* plugin,
         return prepareToPlayWithSeh(plugin, sample_rate, samples_per_block);
 #else
         plugin->prepareToPlay(sample_rate, samples_per_block);
+        return true;
+#endif
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+bool SEHPluginWrapper::invokeGuarded(void (*fn)(void*), void* context) noexcept
+{
+    if (!fn)
+        return false;
+
+    try
+    {
+#if defined(_WIN32)
+        return invokeWithSeh(fn, context);
+#else
+        fn(context);
         return true;
 #endif
     }
