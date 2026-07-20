@@ -93,6 +93,7 @@ public:
     void createTrayIcon();
     void destroyTrayIcon();
     void updateTrayIconTooltip(const juce::String& text);
+    void updateTrayIconAppearance();
     void showTrayContextMenu();
     void showTrayVolumePopup();
     void restoreFromTray();
@@ -253,8 +254,10 @@ private:
 
     // System tray state.
     bool tray_icon_created_ {false};
+    bool tray_icon_active_shown_ {false};  // true when the colour (active) icon is displayed
     HMENU tray_menu_ {nullptr};
     HICON tray_hicon_ {nullptr};
+    HICON tray_hicon_gray_ {nullptr};      // desaturated icon shown while paused
     HICON window_icon_big_ {nullptr};
     HICON window_icon_small_ {nullptr};
 

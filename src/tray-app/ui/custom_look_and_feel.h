@@ -24,6 +24,12 @@ inline const juce::Colour kMeterBg      {0xFF080C14};
 inline const juce::Colour kMagenta      {0xFFD500F9};
 inline const juce::Colour kRedNeon      {0xFFFF1744};
 
+// Shared active/inactive icon colours. The leaf button established this
+// language (green = active, grey = inactive); the power icon reuses the exact
+// same colours so state-toggle icons read consistently across the UI.
+inline const juce::Colour kIconActiveGreen  {0xFF00E676};
+inline const juce::Colour kIconInactiveGrey {0xFF5A6472};
+
 // All per-theme colours grouped together.
 struct ThemeColors
 {
@@ -129,7 +135,9 @@ public:
             g.fillRoundedRectangle(bounds, radius);
         }
 
-        if (button.getToggleState())
+        // State buttons (power / mute / EQ / NT) convey on/off through their
+        // green/grey drawing, so they skip the cyan toggle frame.
+        if (button.getToggleState() && !isStateButtonText(button.getButtonText()))
         {
             g.setColour(colors_.accentCyan);
             g.drawRoundedRectangle(bounds, radius, 1.5f);
@@ -164,7 +172,9 @@ public:
             g.fillRoundedRectangle(bounds, radius);
         }
 
-        if (button.getToggleState())
+        // State buttons (power / mute / EQ / NT) — e.g. the tray popup toggles —
+        // show on/off via green/grey, so they skip the cyan toggle frame.
+        if (button.getToggleState() && !isStateButtonText(button.getButtonText()))
         {
             g.setColour(colors_.accentCyan);
             g.drawRoundedRectangle(bounds, radius, 1.5f);
@@ -220,9 +230,22 @@ private:
         {
             drawSpeakerIcon(g, bounds, false, textColour);
         }
+        else if (text == "?")
+        {
+            drawQuestionIcon(g, bounds, textColour);
+        }
+        else if (text == "EQ" || text == "NT")
+        {
+            // Text state buttons: green when active (toggled on), grey when off —
+            // same language as the power/leaf icons, no cyan frame.
+            g.setColour(button.getToggleState() ? kIconActiveGreen : kIconInactiveGrey);
+            g.setFont(juce::Font{juce::FontOptions{}}.withHeight(14.0f).boldened());
+            g.drawFittedText(text, bounds.toNearestInt(),
+                           juce::Justification::centred, 1);
+        }
         else
         {
-            // Render regular text for all other buttons (EQ, NT, etc.)
+            // Render regular text for all other buttons.
             g.setColour(textColour);
             g.setFont(14.0f);
             g.drawFittedText(text, bounds.toNearestInt(),
@@ -233,102 +256,212 @@ private:
 public:
 
 private:
+    // Buttons whose text is one of these tokens convey their on/off state through
+    // colour (green = active, grey = inactive) like the leaf button, so they skip
+    // the cyan toggle frame that ordinary toggle buttons draw.
+    static bool isStateButtonText(const juce::String& t)
+    {
+        return t == "ON" || t == "OFF"
+            || t == "SPEAKER_ON" || t == "SPEAKER_OFF"
+            || t == "EQ" || t == "NT";
+    }
+
+    // Shared stroke for all vector icons: rounded caps + joints and a common
+    // weight, so the trash / pencil / power / question / leaf marks read as one
+    // family (matching the LeafButton in main_window.cpp).
+    static juce::PathStrokeType iconStroke(float width = 1.8f)
+    {
+        return juce::PathStrokeType(width, juce::PathStrokeType::curved,
+                                    juce::PathStrokeType::rounded);
+    }
+
+    // Subtle translucent fill sat under an icon's outline, echoing the leaf.
+    static constexpr float kIconFillAlpha = 0.20f;
+
     void drawTrashIcon(juce::Graphics& g, juce::Rectangle<float> bounds,
                        juce::Colour colour) const
     {
-        auto center = bounds.getCentre();
-        auto size = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+        const auto c = bounds.getCentre();
+        const float s = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
 
+        // Gently tapering can body (trapezoid) with a soft fill + outline.
+        const float topHalf = s * 0.38f;
+        const float botHalf = s * 0.30f;
+        const float bodyTop = c.y - s * 0.20f;
+        const float bodyBot = c.y + s * 0.52f;
+
+        juce::Path body;
+        body.startNewSubPath(c.x - topHalf, bodyTop);
+        body.lineTo(c.x + topHalf, bodyTop);
+        body.lineTo(c.x + botHalf, bodyBot);
+        body.lineTo(c.x - botHalf, bodyBot);
+        body.closeSubPath();
+
+        g.setColour(colour.withAlpha(kIconFillAlpha));
+        g.fillPath(body);
         g.setColour(colour);
+        g.strokePath(body, iconStroke());
 
-        // Trash can body
-        auto body = juce::Rectangle<float>(center.x - size * 0.4f, center.y - size * 0.3f,
-                                           size * 0.8f, size * 0.5f);
-        g.drawRoundedRectangle(body, 1.0f, 1.5f);
+        // Lid.
+        juce::Path lid;
+        const float lidY = bodyTop - s * 0.16f;
+        lid.startNewSubPath(c.x - s * 0.52f, lidY);
+        lid.lineTo(c.x + s * 0.52f, lidY);
+        g.strokePath(lid, iconStroke());
 
-        // Trash can lid
-        g.drawLine(center.x - size * 0.5f, center.y - size * 0.35f,
-                   center.x + size * 0.5f, center.y - size * 0.35f, 1.5f);
+        // Handle: a small bump arc above the lid.
+        juce::Path handle;
+        handle.addCentredArc(c.x, lidY, s * 0.18f, s * 0.18f, 0.0f,
+                             -juce::MathConstants<float>::halfPi,
+                             juce::MathConstants<float>::halfPi, true);
+        g.strokePath(handle, iconStroke());
 
-        // Handle
-        g.drawLine(center.x - size * 0.2f, center.y - size * 0.4f,
-                   center.x - size * 0.2f, center.y - size * 0.5f, 1.0f);
-        g.drawLine(center.x + size * 0.2f, center.y - size * 0.4f,
-                   center.x + size * 0.2f, center.y - size * 0.5f, 1.0f);
-        g.drawLine(center.x - size * 0.2f, center.y - size * 0.5f,
-                   center.x + size * 0.2f, center.y - size * 0.5f, 1.0f);
+        // Two ribs inside the can (echoes the leaf's midrib).
+        juce::Path ribs;
+        for (int i = -1; i <= 1; i += 2)
+        {
+            const float x = c.x + i * s * 0.15f;
+            ribs.startNewSubPath(x, bodyTop + s * 0.14f);
+            ribs.lineTo(x, bodyBot - s * 0.12f);
+        }
+        g.strokePath(ribs, iconStroke(1.4f));
     }
 
     void drawPencilIcon(juce::Graphics& g, juce::Rectangle<float> bounds,
                         juce::Colour colour) const
     {
-        auto center = bounds.getCentre();
-        auto size = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.4f;
+        const auto c = bounds.getCentre();
+        const float s = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+        const float half = s * 0.20f;
 
+        const float topY = c.y - s * 0.5f;   // eraser end
+        const float bandY = c.y + s * 0.24f;  // wood/paint band
+        const float tipY = c.y + s * 0.56f;   // graphite point
+
+        // Barrel with a soft fill + outline.
+        juce::Path barrel;
+        barrel.startNewSubPath(c.x - half, topY);
+        barrel.lineTo(c.x + half, topY);
+        barrel.lineTo(c.x + half, bandY);
+        barrel.lineTo(c.x - half, bandY);
+        barrel.closeSubPath();
+
+        g.setColour(colour.withAlpha(kIconFillAlpha));
+        g.fillPath(barrel);
         g.setColour(colour);
+        g.strokePath(barrel, iconStroke());
 
-        // Pencil shaft
-        g.drawLine(center.x - size * 0.2f, center.y + size * 0.5f,
-                   center.x - size * 0.2f, center.y - size * 0.5f, 2.0f);
-        g.drawLine(center.x + size * 0.2f, center.y + size * 0.5f,
-                   center.x + size * 0.2f, center.y - size * 0.5f, 2.0f);
-
-        // Pencil tip (triangle)
+        // Wood tip (triangle) with a filled graphite point.
         juce::Path tip;
-        tip.addTriangle(center.x - size * 0.3f, center.y + size * 0.4f,
-                       center.x + size * 0.3f, center.y + size * 0.4f,
-                       center.x, center.y + size * 0.6f);
-        g.fillPath(tip);
+        tip.startNewSubPath(c.x - half, bandY);
+        tip.lineTo(c.x + half, bandY);
+        tip.lineTo(c.x, tipY);
+        tip.closeSubPath();
+        g.strokePath(tip, iconStroke());
+
+        juce::Path point;
+        point.startNewSubPath(c.x - half * 0.42f, tipY - s * 0.14f);
+        point.lineTo(c.x + half * 0.42f, tipY - s * 0.14f);
+        point.lineTo(c.x, tipY);
+        point.closeSubPath();
+        g.fillPath(point);
+
+        // Midrib down the barrel + the band line.
+        juce::Path detail;
+        detail.startNewSubPath(c.x, topY + s * 0.1f);
+        detail.lineTo(c.x, bandY - s * 0.04f);
+        g.strokePath(detail, iconStroke(1.4f));
     }
 
+    // Universal power symbol (IEC 5009): a ring broken at the top with a stem
+    // through the gap. Coloured like the leaf button — green when active (on),
+    // grey when inactive (off) — so state reads from colour, not a frame. The
+    // passed-in text colour is intentionally ignored here.
     void drawOnOffIcon(juce::Graphics& g, juce::Rectangle<float> bounds, bool isOn,
-                       juce::Colour colour) const
+                       juce::Colour /*colour*/) const
     {
-        auto center = bounds.getCentre();
-        auto size = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.35f;
+        const auto c = bounds.getCentre();
+        const float s = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+        const float r = s * 0.48f;
+        const float gap = 0.62f;  // half-angle of the top gap, radians
 
-        g.setColour(colour);
+        const juce::Colour markColour = isOn ? kIconActiveGreen : kIconInactiveGrey;
 
-        // Draw circle
-        g.drawEllipse(center.x - size, center.y - size, size * 2.0f, size * 2.0f, 1.5f);
-
-        // Draw indicator
         if (isOn)
         {
-            g.fillEllipse(center.x - size * 0.3f, center.y - size * 0.8f,
-                         size * 0.6f, size * 0.6f);
+            g.setColour(kIconActiveGreen.withAlpha(0.26f));
+            g.fillEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
         }
-        else
-        {
-            g.fillEllipse(center.x - size * 0.3f, center.y + size * 0.2f,
-                         size * 0.6f, size * 0.6f);
-        }
+
+        juce::Path ring;
+        ring.addCentredArc(c.x, c.y, r, r, 0.0f, gap,
+                           juce::MathConstants<float>::twoPi - gap, true);
+        g.setColour(markColour);
+        g.strokePath(ring, iconStroke());
+
+        // Stem through the gap.
+        juce::Path stem;
+        stem.startNewSubPath(c.x, c.y - r - s * 0.14f);
+        stem.lineTo(c.x, c.y - s * 0.02f);
+        g.strokePath(stem, iconStroke());
     }
 
-    void drawSpeakerIcon(juce::Graphics& g, juce::Rectangle<float> bounds, bool isOn,
-                         juce::Colour colour) const
+    // Circular badge with a soft fill + "?" glyph — same outline+fill DNA as the
+    // leaf and power icons.
+    void drawQuestionIcon(juce::Graphics& g, juce::Rectangle<float> bounds,
+                          juce::Colour colour) const
     {
-        auto center = bounds.getCentre();
+        const auto c = bounds.getCentre();
+        const float s = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+        const float r = s * 0.62f;
+
+        g.setColour(colour.withAlpha(kIconFillAlpha));
+        g.fillEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
+
+        juce::Path ring;
+        ring.addEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
+        g.setColour(colour);
+        g.strokePath(ring, iconStroke());
+
+        juce::Font glyph{juce::FontOptions{}};
+        glyph.setHeight(r * 1.5f);
+        glyph.setBold(true);
+        g.setFont(glyph);
+        g.drawText("?", bounds.toNearestInt(), juce::Justification::centred, false);
+    }
+
+    // Coloured like the rest of the state icons: green when active (unmuted),
+    // grey when inactive (muted). The passed-in text colour is ignored.
+    void drawSpeakerIcon(juce::Graphics& g, juce::Rectangle<float> bounds, bool isOn,
+                         juce::Colour /*colour*/) const
+    {
+        const auto center = bounds.getCentre();
         const float size = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.4f;
         const float iconLeft = center.x - size * 0.9f;
 
-        g.setColour(colour);
+        const juce::Colour markColour = isOn ? kIconActiveGreen : kIconInactiveGrey;
 
-        // Speaker body + cone.
+        // Speaker body + cone as one outlined shape with a soft fill, matching
+        // the rest of the icon family (leaf / trash / pencil / power).
         const float bodyW = size * 0.35f;
         const float bodyH = size * 0.55f;
-        juce::Rectangle<float> body(iconLeft, center.y - bodyH * 0.5f, bodyW, bodyH);
-        g.fillRect(body);
+        const juce::Rectangle<float> body(iconLeft, center.y - bodyH * 0.5f, bodyW, bodyH);
 
-        juce::Path cone;
-        cone.startNewSubPath(body.getRight(), body.getY());
-        cone.lineTo(body.getRight() + size * 0.3f, center.y - size * 0.7f);
-        cone.lineTo(body.getRight() + size * 0.3f, center.y + size * 0.7f);
-        cone.lineTo(body.getRight(), body.getBottom());
-        cone.closeSubPath();
-        g.fillPath(cone);
+        juce::Path speaker;
+        speaker.startNewSubPath(body.getX(), body.getY());
+        speaker.lineTo(body.getRight(), body.getY());
+        speaker.lineTo(body.getRight() + size * 0.3f, center.y - size * 0.7f);
+        speaker.lineTo(body.getRight() + size * 0.3f, center.y + size * 0.7f);
+        speaker.lineTo(body.getRight(), body.getBottom());
+        speaker.lineTo(body.getX(), body.getBottom());
+        speaker.closeSubPath();
 
-        const float markX = body.getRight() + size * 0.45f;
+        g.setColour(markColour.withAlpha(kIconFillAlpha));
+        g.fillPath(speaker);
+        g.setColour(markColour);
+        g.strokePath(speaker, iconStroke());
+
+        const float markX = body.getRight() + size * 0.55f;
         if (isOn)
         {
             // Sound waves emanating to the right.
@@ -339,14 +472,18 @@ private:
                 const float r = size * (0.3f + i * 0.28f);
                 juce::Path arc;
                 arc.addCentredArc(markX, center.y, r, r, 0.0f, startAngle, endAngle, true);
-                g.strokePath(arc, juce::PathStrokeType(1.5f));
+                g.strokePath(arc, iconStroke(1.6f));
             }
         }
         else
         {
             // Mute X mark.
-            g.drawLine(markX, center.y - size * 0.35f, markX + size * 0.5f, center.y + size * 0.35f, 1.5f);
-            g.drawLine(markX, center.y + size * 0.35f, markX + size * 0.5f, center.y - size * 0.35f, 1.5f);
+            juce::Path x;
+            x.startNewSubPath(markX, center.y - size * 0.35f);
+            x.lineTo(markX + size * 0.5f, center.y + size * 0.35f);
+            x.startNewSubPath(markX, center.y + size * 0.35f);
+            x.lineTo(markX + size * 0.5f, center.y - size * 0.35f);
+            g.strokePath(x, iconStroke(1.6f));
         }
     }
 

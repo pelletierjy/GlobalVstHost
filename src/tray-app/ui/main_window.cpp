@@ -344,8 +344,11 @@ juce::String endpointDisplayName(const HardwareOutputInfo& info)
     return s;
 }
 
-// Create an HICON from a JUCE Image at the requested size.
-HICON createHICONFromJuceImage(const juce::Image& sourceImage, int width, int height)
+// Create an HICON from a JUCE Image at the requested size. When `grayscale` is
+// true each pixel is desaturated to its luminance (alpha preserved), used for the
+// "engine paused" tray icon.
+HICON createHICONFromJuceImage(const juce::Image& sourceImage, int width, int height,
+                               bool grayscale = false)
 {
     auto image = sourceImage.rescaled(width, height);
 
@@ -394,9 +397,21 @@ HICON createHICONFromJuceImage(const juce::Image& sourceImage, int width, int he
         for (int x = 0; x < width; ++x)
         {
             // Convert from ARGB to BGRA, keeping straight alpha (not premultiplied)
-            dst[0] = src[2];  // B
-            dst[1] = src[1];  // G
-            dst[2] = src[0];  // R
+            if (grayscale)
+            {
+                // Rec. 601 luma; alpha untouched so the icon keeps its shape.
+                const auto lum = static_cast<uint8_t>(
+                    (src[0] * 299 + src[1] * 587 + src[2] * 114) / 1000);
+                dst[0] = lum;  // B
+                dst[1] = lum;  // G
+                dst[2] = lum;  // R
+            }
+            else
+            {
+                dst[0] = src[2];  // B
+                dst[1] = src[1];  // G
+                dst[2] = src[0];  // R
+            }
             dst[3] = src[3];  // A
             dst += 4;
             src += 4;
@@ -1014,9 +1029,9 @@ void LeafButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool
 {
     auto area = getLocalBounds().toFloat().reduced(3.0f);
 
-    const juce::Colour leaf_on {0xFF00E676};     // active green
-    const juce::Colour leaf_sleep {0xFF69F0AE};  // brighter mint while sleeping
-    const juce::Colour leaf_off {0xFF5A6472};    // muted grey when disabled
+    const juce::Colour leaf_on = kIconActiveGreen;   // active green (shared with power icon)
+    const juce::Colour leaf_sleep {0xFF69F0AE};      // brighter mint while sleeping
+    const juce::Colour leaf_off = kIconInactiveGrey; // muted grey when disabled (shared)
 
     juce::Colour col = enabled_ ? (sleeping_ ? leaf_sleep : leaf_on) : leaf_off;
     if (shouldDrawHighlighted)
@@ -1348,18 +1363,67 @@ void MainWindow::createTrayIcon()
         tray_hicon_ = createHICONFromJuceImage(app_icon_image_, 16, 16);
     }
 
+    // Grayscale variant shown while the engine is paused (stopped or asleep).
+    // Built from the PNG art; if that is unavailable the paused state simply
+    // keeps the colour icon.
+    if (tray_hicon_gray_ == nullptr && app_icon_image_.isValid())
+    {
+        tray_hicon_gray_ = createHICONFromJuceImage(app_icon_image_, 16, 16, /*grayscale=*/true);
+    }
+
+    // Pick the icon that matches the current engine state up front so it never
+    // flashes colour before the first state refresh.
+    const bool active = audio_running_ && !engine_->isEnergySaverSleeping();
+    HICON initial = active ? tray_hicon_ : (tray_hicon_gray_ != nullptr ? tray_hicon_gray_ : tray_hicon_);
+
     NOTIFYICONDATA nid = {};
     nid.cbSize = sizeof(nid);
     nid.hWnd   = hwnd;
     nid.uID    = kTrayIconId;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = kTrayIconMsg;
-    nid.hIcon  = tray_hicon_ != nullptr ? tray_hicon_ : LoadIcon(nullptr, IDI_APPLICATION);
+    nid.hIcon  = initial != nullptr ? initial : LoadIcon(nullptr, IDI_APPLICATION);
     wcscpy_s(nid.szTip, L"GlobalVSTHost");
 
     if (Shell_NotifyIcon(NIM_ADD, &nid))
     {
         tray_icon_created_ = true;
+        tray_icon_active_shown_ = active;
+    }
+}
+
+// Switch the tray icon between colour (actively processing) and grayscale
+// (paused: audio stopped or Energy-Saver sleeping). Cheap no-op when the shown
+// state already matches, so it is safe to call from any state change.
+void MainWindow::updateTrayIconAppearance()
+{
+    if (!tray_icon_created_)
+        return;
+
+    const bool active = audio_running_ && !engine_->isEnergySaverSleeping();
+    if (active == tray_icon_active_shown_)
+        return;
+
+    HICON icon = active ? tray_hicon_ : (tray_hicon_gray_ != nullptr ? tray_hicon_gray_ : tray_hicon_);
+    if (icon == nullptr)
+        return;
+
+    auto* peer = getPeer();
+    if (peer == nullptr)
+        return;
+    HWND hwnd = static_cast<HWND>(peer->getNativeHandle());
+    if (hwnd == nullptr)
+        return;
+
+    NOTIFYICONDATA nid = {};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd   = hwnd;
+    nid.uID    = kTrayIconId;
+    nid.uFlags = NIF_ICON;
+    nid.hIcon  = icon;
+    if (Shell_NotifyIcon(NIM_MODIFY, &nid))
+    {
+        tray_icon_active_shown_ = active;
     }
 }
 
@@ -1393,6 +1457,12 @@ void MainWindow::destroyTrayIcon()
     {
         DestroyIcon(tray_hicon_);
         tray_hicon_ = nullptr;
+    }
+
+    if (tray_hicon_gray_ != nullptr)
+    {
+        DestroyIcon(tray_hicon_gray_);
+        tray_hicon_gray_ = nullptr;
     }
 }
 
@@ -2017,12 +2087,14 @@ void MainWindow::buttonClicked(juce::Button* button)
         audio_running_ = engine_->isRunning();
         audio_toggle_->setButtonText(audio_running_ ? "Stop Audio" : "Start Audio");
         status_label_->setText("Engine reset", juce::dontSendNotification);
+        updateTrayIconAppearance();
     }
     else if (button == asio_settings_button_.get())
     {
         engine_->openAsioControlPanel();
         audio_running_ = engine_->isRunning();
         audio_toggle_->setButtonText(audio_running_ ? "Stop Audio" : "Start Audio");
+        updateTrayIconAppearance();
     }
     else if (button == about_button_.get())
     {
@@ -2086,6 +2158,7 @@ void MainWindow::setAudioRunning(bool run)
         audio_toggle_->setButtonText("OFF");
         status_label_->setText("Audio stopped", juce::dontSendNotification);
     }
+    updateTrayIconAppearance();
     saveSessionState();
 }
 
@@ -2522,6 +2595,7 @@ void MainWindow::onEnergySaverStateChanged(bool sleeping)
 {
     // Fired on the UI thread by the engine when it suspends/resumes processing.
     updateEnergySaverVisual();
+    updateTrayIconAppearance();
     if (engine_->isEnergySaverEnabled())
     {
         status_label_->setText(sleeping ? "Energy Saver: engine sleeping (no audio)"
