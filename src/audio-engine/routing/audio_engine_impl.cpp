@@ -2032,13 +2032,28 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                 work_buffer_.getNumChannels() > 1 ? work_buffer_.getWritePointer(1) : nullptr};
 
             std::size_t consumed = 0;
-            capture_resampler_.processAdaptive(eff_ratio, src, dst,
-                                               static_cast<std::size_t>(samples), peeked, &consumed);
+            if (capture_resampling_enabled_)
+            {
+                capture_resampler_.processAdaptive(eff_ratio, src, dst,
+                                                   static_cast<std::size_t>(samples), peeked, &consumed);
+            }
+            else
+            {
+                // No resampling: copy directly (rates already matched or no capture resampler)
+                consumed = std::min(peeked, static_cast<std::size_t>(samples));
+                for (int c = 0; c < 2; ++c)
+                {
+                    if (dst[c] != nullptr && src[c] != nullptr && consumed > 0)
+                    {
+                        std::memcpy(dst[c], src[c], consumed * sizeof(float));
+                    }
+                }
+            }
             capture_ring_buffer_->advanceRead(consumed);
 
             // Genuine underrun (ring nearly empty): the resampler zero-filled the
-            // tail. Count it; the controller will lower the ratio to refill.
-            if (peeked < needed)
+            // tail (or we consumed all available in passthrough). Count it.
+            if (peeked < needed && capture_resampling_enabled_)
             {
                 xrun_count_.fetch_add(1, std::memory_order_relaxed);
             }
@@ -2222,10 +2237,12 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         // ALWAYS resample — even at matched sample rates — because the effective
         // ratio must continuously deviate from nominal to track the difference
         // between the free-running WASAPI capture clock and the ASIO clock.
+        // In pure JUCE callback mode, resample if input and output rates differ.
         const double asio_rate = device->getCurrentSampleRate();
         const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : asio_rate;
         capture_resampling_enabled_ =
-            mixed_mode_active_.load() && wasapi_rate > 0.0 && asio_rate > 0.0;
+            (mixed_mode_active_.load() || std::abs(wasapi_rate - asio_rate) > 0.1) &&
+            wasapi_rate > 0.0 && asio_rate > 0.0;
 
         if (capture_resampling_enabled_)
         {
