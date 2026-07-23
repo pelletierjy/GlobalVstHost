@@ -1,3 +1,5 @@
+<img width="989" height="786" alt="image" src="https://github.com/user-attachments/assets/004b2c91-d0ed-4472-b3bf-5e9d9efdedd4" />
+
 # GlobalVST
 
 Low-latency Windows audio processor that routes system audio through a chain of VST3 plugins and outputs to your hardware device.
