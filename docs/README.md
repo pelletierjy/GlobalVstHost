@@ -1,10 +1,10 @@
-# JyGlobalVST
+# GlobalVST
 
 Low-latency Windows audio processor that routes system audio through a chain of VST3 plugins and outputs to your hardware device.
 
 ## What it does
 
-JyGlobalVST appears as a virtual audio output in Windows Sound settings. Select it as your default playback device, load VST3 plugins (EQ, room correction, limiters, etc.), and hear processed audio on your speakers or headphones with under 10 ms round-trip latency.
+GlobalVST appears as a virtual audio output in Windows Sound settings. Select it as your default playback device, load VST3 plugins (EQ, room correction, limiters, etc.), and hear processed audio on your speakers or headphones with under 10 ms round-trip latency.
 
 ## Requirements
 
@@ -14,9 +14,9 @@ JyGlobalVST appears as a virtual audio output in Windows Sound settings. Select 
 
 ## First-run setup
 
-1. Install JyGlobalVST from the MSI (single UAC prompt, no reboot).
-2. Open **Windows Settings → System → Sound → Output** and select **JyGlobalVST Virtual Output**.
-3. Launch JyGlobalVST from the system tray.
+1. Install GlobalVST from the MSI (single UAC prompt, no reboot).
+2. Open **Windows Settings → System → Sound → Output** and select **GlobalVST Virtual Output**.
+3. Launch GlobalVST from the system tray.
 4. In the app, pick your **hardware output** from the Output dropdown.
 5. Click **Scan Plugins** to discover installed VST3 plugins.
 6. Drag a plugin into the chain or use **Load Plugin…** to browse for a `.vst3` file.
@@ -32,7 +32,7 @@ JyGlobalVST appears as a virtual audio output in Windows Sound settings. Select 
 
 ## Presets
 
-- **Save Preset**: writes the current chain + settings to `%UserProfile%\Documents\JyGlobalVST\Presets\<name>.jvst`.
+- **Save Preset**: writes the current chain + settings to `%UserProfile%\Documents\GlobalVST\Presets\<name>.jvst`.
 - **Load Preset**: restores a saved chain instantly.
 - If a preset references a plugin that is no longer installed, a greyed-out **placeholder** appears. You can re-point it to a relocated plugin or remove it.
 
@@ -45,12 +45,12 @@ Choose from **32 / 64 / 128 / 256 / 512 / 1024** samples in the Buffer dropdown.
 
 ## Hardware output selection
 
-JyGlobalVST resolves your output device in this priority:
+GlobalVST resolves your output device in this priority:
 1. Exact endpoint ID from last session (machine-specific).
 2. Friendly name match from roaming settings (follows you across PCs).
 3. Current Windows default output.
 
-If you unplug a USB DAC while audio is playing, JyGlobalVST automatically falls back to the Windows default device and restores your preferred device when it reconnects.
+If you unplug a USB DAC while audio is playing, GlobalVST automatically falls back to the Windows default device and restores your preferred device when it reconnects.
 
 ## Monitoring
 
@@ -60,17 +60,17 @@ If you unplug a USB DAC while audio is playing, JyGlobalVST automatically falls 
 
 ## Sleep / wake
 
-JyGlobalVST automatically reinitializes the audio path when Windows sleeps and wakes. No manual restart is required.
+GlobalVST automatically reinitializes the audio path when Windows sleeps and wakes. No manual restart is required.
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---|---|
-| No audio after starting | Confirm JyGlobalVST is selected as Windows default output. Check that an output device is selected in the app. |
+| No audio after starting | Confirm GlobalVST is selected as Windows default output. Check that an output device is selected in the app. |
 | High CPU warning | Increase buffer size to 512 or 1024. Remove heavy plugins. |
 | Plugin fails to load | Ensure the `.vst3` file is 64-bit. Try rescanning plugins. |
 | Crackles or dropouts | Increase buffer size. Close other audio apps. Check that sample rates match between virtual device and hardware output. |
-| Auto-save lost chain | Auto-save is stored in `%LocalAppData%\JyGlobalVST\autosave.json`. If corrupted, JyGlobalVST starts blank per design. |
+| Auto-save lost chain | Auto-save is stored in `%LocalAppData%\GlobalVST\autosave.json`. If corrupted, GlobalVST starts blank per design. |
 
 ## Privacy
 
