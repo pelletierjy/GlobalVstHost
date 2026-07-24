@@ -392,7 +392,14 @@ void AudioEngineImpl::start()
 
         // Set up drift-compensating capture-side resampler (same as audioDeviceAboutToStart).
         const double out_rate = chain_rate;
-        const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : out_rate;
+        // CRITICAL: When input rate is unknown (capture not yet started), we MUST resample if rates could differ.
+        // Use input rate if known; otherwise assume 48 kHz as the default WASAPI loopback rate.
+        double wasapi_rate = capture_wasapi_rate_;
+        if (wasapi_rate <= 0.0)
+        {
+            // Default to 48 kHz if not yet negotiated; resampler will adapt once actual rate is known
+            wasapi_rate = 48000.0;
+        }
         capture_resampling_enabled_ = wasapi_rate > 0.0 && out_rate > 0.0;
         LogDebug("Capture resampling setup: capture_wasapi_rate_=%.0f, chain_rate=%.0f, wasapi_rate=%.0f, out_rate=%.0f, enabled=%d",
                  capture_wasapi_rate_, chain_rate, wasapi_rate, out_rate, capture_resampling_enabled_ ? 1 : 0);
