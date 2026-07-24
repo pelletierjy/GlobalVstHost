@@ -68,33 +68,61 @@ constexpr double kMaxSupportedSampleRate = 192000.0;
 // cushion keeps the fill clear of that threshold. This is capture-bridge latency
 // only; it is independent of the <10 ms plugin-chain processing budget.
 constexpr double kCaptureTargetSeconds = 0.045;  // 45 ms
-// Fill-measurement low-pass coefficient. WASAPI delivers audio in bursts, so the
-// instantaneous ring fill is a fast sawtooth; the clock drift we actually
-// correct is quasi-DC. Heavily filtering the fill (time constant ~1–2 s) lets
-// the controller track drift while ignoring packet jitter, keeping the ratio —
-// and therefore pitch — smooth. Without this the loop chases noise and wobbles.
-constexpr double kCaptureFillSmoothing = 0.02;
-// Proportional / integral gains on the filtered fractional fill error.
+// --- Loop tuning, expressed in TIME rather than per-callback ---------------
 //
-// These are deliberately TINY. Two independent audio crystals drift by well under
-// 0.01%, and the nominal ratio is already exact, so the loop only ever needs a
-// sub-0.01% steady-state trim. Earlier, larger gains (Kp=0.05, Ki=5e-4) let the
-// proportional term inject the noisy buffer fill straight into the resample ratio,
-// producing an audible ±3% pitch limit-cycle (seasick vibrato) and a multi-second
-// warble after every seek. With gains this small the ratio — and therefore pitch —
-// stays essentially pinned at nominal; the integral still converges to the true
-// rate ratio so the buffer does not walk to a rail. Large fill excursions (startup,
-// seek, pause/resume) are handled by the discontinuous resync below, NOT by bending
-// pitch, so slow gains cost nothing in transient recovery.
-constexpr double kCaptureDriftKp = 0.0015;
-constexpr double kCaptureDriftKi = 0.00002;
+// The PI loop and its two one-pole filters are evaluated once per audio callback.
+// Expressing their coefficients as bare per-callback constants makes the whole
+// loop's behaviour depend on the device configuration: 48 kHz with a 512-frame
+// buffer fires 94 callbacks/s, 96 kHz with 128 frames fires 750 — so identical
+// constants yield an 8x difference in every filter time constant and in integral
+// authority per second. That is why the loop stayed calm in some configs and
+// wobbled audibly (continuous slow speed-up/slow-down) in others: at high rate
+// with a small buffer the "1-2 second" fill filter was really ~65 ms, so
+// packet-arrival jitter reached the resample ratio almost unfiltered.
+//
+// Every coefficient below is therefore derived from the session's real block
+// duration and target fill in prepareCaptureDriftTuning().
+//
+// SECOND, MORE IMPORTANT PROBLEM: the loop was never DAMPED.
+//
+// The plant here is an integrator — ring fill accumulates the rate error:
+//     de/dt = (offset - correction) / T,   T = target fill expressed in seconds
+// Closing a PI controller around it gives a plain second-order system:
+//     T*e" + Kp*e' + Ki*e = 0
+//     => w_n = sqrt(Ki/T),  zeta = Kp / (2*sqrt(Ki*T))
+// so Kp is the DAMPING term, not an optional noise source. With Kp near zero the
+// loop is a near-undamped oscillator: it rings forever instead of settling. That
+// is the continuous slow speed-up/slow-down — measured here as the correction
+// swinging -0.02% -> +0.70% -> -0.11% with a period of roughly 90 s.
+//
+// Both historical tunings were underdamped rather than mis-scaled. Kp=0.05 with
+// Ki=5e-4/callback (0.375/s at 750 Hz) gives zeta ~= 0.19 — the "+/-3% pitch
+// limit-cycle" recorded above. Shrinking both gains afterwards lowered the
+// frequency and amplitude of the ringing but never removed it, because it left
+// zeta essentially unchanged. Hand-picking Kp and Ki cannot work: their ratio,
+// and so the damping, silently changes with every target-fill or rate change.
+//
+// So specify the loop SHAPE and solve for the gains instead.
+//
+// zeta 0.8 — just under critical: no ringing, no sluggish tail.
+constexpr double kCaptureDriftDamping = 0.8;
+// Settling time for a step rate error. Must be well inside the time the fill takes
+// to walk a full target at the worst plausible clock offset: a USB interface can
+// sit ~1000 ppm from the motherboard clock, which walks a 45 ms target in ~45 s
+// (this machine measures ~600 ppm against an ART Pro USB IV), so ~6 s leaves ample
+// margin. Fast convergence costs nothing audible — correcting 1000 ppm over 6 s is
+// a 0.017 %/s glide, orders of magnitude below the ~0.7% swing measured above.
+constexpr double kCaptureDriftSettleSeconds = 6.0;
+// Measurement/output filter time constant as a fraction of the loop period 1/w_n.
+// These filters sit INSIDE the loop, so their phase lag eats the damping designed
+// above unless they are much faster than the loop itself. At 0.2/w_n (~0.24 s here)
+// they are still ~25x slower than the ~10 ms WASAPI packet sawtooth, so burst
+// jitter is well suppressed without destabilising the loop.
+constexpr double kCaptureFilterTauFraction = 0.2;
 // Hard clamp on the total ratio correction (also the integral anti-windup
 // limit). ±5% is ample headroom for any real clock mismatch; the resampler
 // simply produces the correct output rate, so this is not a pitch artifact.
 constexpr double kCaptureDriftMaxCorr = 0.05;  // ±5%
-// One-pole smoothing on the final correction so any residual trim glides in
-// inaudibly rather than stepping the pitch. Small = slow, smooth glide.
-constexpr double kCaptureDriftSmoothing = 0.20;  // Higher smoothing for USB jitter filtering
 // If the ring fill exceeds this multiple of target (startup accumulation, or a
 // seek/pause that dumps a burst), hard-resync by dropping the excess and zeroing
 // the integrator so pitch snaps back to nominal immediately, instead of draining
@@ -392,14 +420,12 @@ void AudioEngineImpl::start()
 
         // Set up drift-compensating capture-side resampler (same as audioDeviceAboutToStart).
         const double out_rate = chain_rate;
-        // CRITICAL: When input rate is unknown (capture not yet started), we MUST resample if rates could differ.
-        // Use input rate if known; otherwise assume 48 kHz as the default WASAPI loopback rate.
-        double wasapi_rate = capture_wasapi_rate_;
-        if (wasapi_rate <= 0.0)
-        {
-            // Default to 48 kHz if not yet negotiated; resampler will adapt once actual rate is known
-            wasapi_rate = 48000.0;
-        }
+        // If the capture rate is not known yet, fall back to the output rate: that
+        // yields a nominal ratio of 1.0, which the drift loop can trim. Substituting
+        // a GUESSED rate here would be far worse — e.g. assuming 48 kHz against a
+        // 96 kHz output bakes in a 2x ratio error, and the loop's ±5% correction
+        // clamp cannot possibly recover from that.
+        const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : out_rate;
         capture_resampling_enabled_ = wasapi_rate > 0.0 && out_rate > 0.0;
         LogDebug("Capture resampling setup: capture_wasapi_rate_=%.0f, chain_rate=%.0f, wasapi_rate=%.0f, out_rate=%.0f, enabled=%d",
                  capture_wasapi_rate_, chain_rate, wasapi_rate, out_rate, capture_resampling_enabled_ ? 1 : 0);
@@ -432,6 +458,7 @@ void AudioEngineImpl::start()
             }
             capture_target_frames_ = target;
             capture_fill_avg_ = static_cast<double>(target);
+            prepareCaptureDriftTuning(out_rate, desired_buffer_size_, capture_target_frames_);
         }
         else
         {
@@ -2014,8 +2041,10 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
 
             // Low-pass the fill so the PI loop tracks the quasi-DC drift and not
             // the WASAPI packet-arrival sawtooth (which otherwise wobbles pitch).
+            // Coefficients are block-duration-derived (prepareCaptureDriftTuning)
+            // so the time constant is the same at any rate / buffer size.
             capture_fill_avg_ +=
-                kCaptureFillSmoothing * (static_cast<double>(avail) - capture_fill_avg_);
+                capture_fill_alpha_ * (static_cast<double>(avail) - capture_fill_avg_);
 
             // PI drift control on the filtered fractional fill error. fill > target
             // ⇒ consume input faster (ratio up) to drain back toward target. The
@@ -2024,12 +2053,12 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             // that eventually walks the buffer to a rail.
             const double target = static_cast<double>(capture_target_frames_);
             const double norm_err = (capture_fill_avg_ - target) / target;
-            capture_drift_integral_ += kCaptureDriftKi * norm_err;
+            capture_drift_integral_ += capture_drift_ki_ * norm_err;
             capture_drift_integral_ =
                 std::clamp(capture_drift_integral_, -kCaptureDriftMaxCorr, kCaptureDriftMaxCorr);
-            double correction = kCaptureDriftKp * norm_err + capture_drift_integral_;
+            double correction = capture_drift_kp_ * norm_err + capture_drift_integral_;
             correction = std::clamp(correction, -kCaptureDriftMaxCorr, kCaptureDriftMaxCorr);
-            capture_smoothed_corr_ += kCaptureDriftSmoothing * (correction - capture_smoothed_corr_);
+            capture_smoothed_corr_ += capture_corr_alpha_ * (correction - capture_smoothed_corr_);
             const double eff_ratio = capture_nominal_ratio_ * (1.0 + capture_smoothed_corr_);
             capture_corr_.store(capture_smoothed_corr_, std::memory_order_relaxed);
 
@@ -2301,6 +2330,7 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
             }
             capture_target_frames_ = target;
             capture_fill_avg_ = static_cast<double>(target);
+            prepareCaptureDriftTuning(asio_rate, block, capture_target_frames_);
 
             LogDebug("audioDeviceAboutToStart() drift-SRC: wasapi=%.0f asio=%.0f ratio=%.6f target=%zu frames",
                      wasapi_rate, asio_rate, capture_nominal_ratio_, capture_target_frames_);
@@ -2496,6 +2526,45 @@ void AudioEngineImpl::fallbackToWasapi()
 {
     asio_transport_->close();
     transport_kind_ = TransportKind::Wasapi;
+}
+
+void AudioEngineImpl::prepareCaptureDriftTuning(double out_rate, int block_frames,
+                                                std::size_t target_frames)
+{
+    // Loop sample period. Guard against a not-yet-known rate/size with a 5 ms
+    // fallback so the coefficients stay sane either way.
+    const double dt = (out_rate > 0.0 && block_frames > 0)
+                          ? static_cast<double>(block_frames) / out_rate
+                          : 0.005;
+
+    // Plant time constant: the target ring fill expressed in seconds. This is what
+    // turns a rate error into a fill error, so both gains scale with it — deriving
+    // them from the ACTUAL target is what keeps the damping ratio constant across
+    // sample rates, buffer sizes and the target-fill clamps.
+    const double plant_t = (out_rate > 0.0 && target_frames > 0)
+                               ? static_cast<double>(target_frames) / out_rate
+                               : kCaptureTargetSeconds;
+
+    // Solve T*e" + Kp*e' + Ki*e = 0 for the requested damping and settling time.
+    // Settling of a 2nd-order system is ~4/(zeta*w_n), hence w_n below; then
+    // Ki = w_n^2 * T and Kp = 2*zeta*w_n*T give exactly that shape.
+    const double w_n = 4.0 / (kCaptureDriftDamping * kCaptureDriftSettleSeconds);
+    const double ki_per_sec = w_n * w_n * plant_t;
+    capture_drift_kp_ = 2.0 * kCaptureDriftDamping * w_n * plant_t;
+    // The integrator accumulates once per callback, so per-second authority must be
+    // scaled by the callback period to stay configuration-independent.
+    capture_drift_ki_ = ki_per_sec * dt;
+
+    // Keep the in-loop filters well inside the loop bandwidth (see the constant's
+    // comment) so their lag does not undo the damping solved for above.
+    const double filt_tau = kCaptureFilterTauFraction / w_n;
+    capture_fill_alpha_ = 1.0 - std::exp(-dt / filt_tau);
+    capture_corr_alpha_ = 1.0 - std::exp(-dt / filt_tau);
+
+    LogDebug("drift tuning: dt=%.3f ms T=%.1f ms w_n=%.3f zeta=%.2f kp=%.5f "
+             "ki/s=%.5f filt_tau=%.0f ms alpha=%.6f",
+             dt * 1000.0, plant_t * 1000.0, w_n, kCaptureDriftDamping, capture_drift_kp_,
+             ki_per_sec, filt_tau * 1000.0, capture_fill_alpha_);
 }
 
 void AudioEngineImpl::openWasapiCapture()

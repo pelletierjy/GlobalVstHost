@@ -226,6 +226,18 @@ private:
     double capture_fill_avg_ {0.0};           // low-passed ring fill (drives the PI loop)
     std::size_t capture_target_frames_ {0};   // desired ring fill (WASAPI frames)
     bool capture_priming_ {true};             // fill to target before draining
+    // Loop coefficients derived from the ACTUAL block duration — see
+    // prepareCaptureDriftTuning(). The PI loop and its two low-pass filters are
+    // evaluated once per audio callback, so a hard-coded per-callback coefficient
+    // silently changes meaning with the device config: 48 kHz/512 gives 94
+    // callbacks/s while 96 kHz/128 gives 750, an 8x swing in every time constant
+    // and in integral authority. Deriving the coefficients from block duration
+    // keeps the loop's behaviour — and therefore its audible pitch stability —
+    // identical across sample rates and buffer sizes.
+    double capture_fill_alpha_ {0.005};       // ring-fill low-pass coefficient
+    double capture_corr_alpha_ {0.007};       // correction-glide low-pass coefficient
+    double capture_drift_kp_ {0.0002};        // proportional gain (dimensionless)
+    double capture_drift_ki_ {0.0};           // integral gain, per callback
     std::atomic<std::size_t> capture_fill_frames_ {0};  // diagnostics (UI-readable)
     std::atomic<double> capture_corr_ {0.0};            // diagnostics: applied correction
     // Diagnostics for hunting audible cutouts. capture_reprime_count_ counts how
@@ -235,6 +247,12 @@ private:
     // sub-second dips that trigger those re-primes. Both are reset by the diag thread.
     std::atomic<std::uint64_t> capture_reprime_count_ {0};
     std::atomic<std::size_t> capture_fill_min_frames_ {SIZE_MAX};
+
+    // Recomputes the clock-drift loop coefficients from the session's real output
+    // rate, block size and target ring fill. Control thread only — must run before
+    // the first audio callback of a session, AFTER capture_target_frames_ is known
+    // (the gains scale with it; see the tuning comment in the .cpp).
+    void prepareCaptureDriftTuning(double out_rate, int block_frames, std::size_t target_frames);
 
     void openWasapiCapture();
     void closeWasapiCapture();
