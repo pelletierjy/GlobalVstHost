@@ -94,7 +94,7 @@ constexpr double kCaptureDriftKi = 0.00002;
 constexpr double kCaptureDriftMaxCorr = 0.05;  // ±5%
 // One-pole smoothing on the final correction so any residual trim glides in
 // inaudibly rather than stepping the pitch. Small = slow, smooth glide.
-constexpr double kCaptureDriftSmoothing = 0.05;
+constexpr double kCaptureDriftSmoothing = 0.20;  // Higher smoothing for USB jitter filtering
 // If the ring fill exceeds this multiple of target (startup accumulation, or a
 // seek/pause that dumps a burst), hard-resync by dropping the excess and zeroing
 // the integrator so pitch snaps back to nominal immediately, instead of draining
