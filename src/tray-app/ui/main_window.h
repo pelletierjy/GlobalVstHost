@@ -46,17 +46,12 @@ private:
     bool sleeping_ {false};
 };
 
-// Power button drawn as a circle with a line at the top. Shows off/on state via colour.
-class PowerButton : public juce::Button
+// Power button showing "ON"/"OFF" text. Styled identically to plugin bypass buttons.
+class PowerButton : public juce::TextButton
 {
 public:
     PowerButton();
     void setPowerState(bool running);
-
-private:
-    void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
-
-    bool running_ {false};
 };
 
 // Reset button drawn as a circular arrow (↻ style).

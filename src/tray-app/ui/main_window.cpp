@@ -1046,46 +1046,17 @@ void LeafButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool
     g.strokePath(rib, juce::PathStrokeType(1.2f));
 }
 
-PowerButton::PowerButton() : juce::Button("Power")
+PowerButton::PowerButton() : juce::TextButton("ON")
 {
     setTooltip("Start/Stop audio");
+    setClickingTogglesState(true);
+    setToggleState(false, juce::dontSendNotification);
 }
 
 void PowerButton::setPowerState(bool running)
 {
-    running_ = running;
-    repaint();
-}
-
-void PowerButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool /*shouldDrawDown*/)
-{
-    auto area = getLocalBounds().toFloat().reduced(3.0f);
-
-    const juce::Colour on_col = kIconActiveGreen;
-    const juce::Colour off_col = kIconInactiveGrey;
-    juce::Colour col = running_ ? on_col : off_col;
-    if (shouldDrawHighlighted)
-        col = col.brighter(0.25f);
-
-    // Power icon: circle with a line at the top (typical power symbol)
-    const float radius = std::min(area.getWidth(), area.getHeight()) * 0.40f;
-    const float cx = area.getCentreX();
-    const float cy = area.getCentreY();
-    const float line_len = radius * 0.35f;
-
-    // Circle
-    g.setColour(col);
-    g.drawEllipse(juce::Rectangle<float>(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f), 1.8f);
-
-    // Line at top
-    g.drawLine(cx, cy - radius - 2.0f, cx, cy - radius - line_len - 2.0f, 1.8f);
-
-    // Optional: small fill when on
-    if (running_)
-    {
-        g.setColour(col.withAlpha(0.25f));
-        g.fillEllipse(juce::Rectangle<float>(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f));
-    }
+    setToggleState(running, juce::dontSendNotification);
+    setButtonText(running ? "ON" : "OFF");
 }
 
 ResetButton::ResetButton() : juce::Button("Reset")
