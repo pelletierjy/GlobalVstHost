@@ -804,8 +804,8 @@ class HeaderComponent : public juce::Component
 {
 public:
     HeaderComponent(juce::ImageComponent* logo, juce::Label* title,
-                    juce::TextButton* reset, juce::TextButton* audio_toggle,
-                    juce::TextButton* about, juce::Button* energy_saver, juce::TextButton* help)
+                    ResetButton* reset, PowerButton* audio_toggle,
+                    SettingsButton* about, juce::Button* energy_saver, juce::TextButton* help)
         : logo_(logo), title_(title), reset_(reset), audio_toggle_(audio_toggle),
           about_(about), energy_saver_(energy_saver), help_(help)
     {
@@ -828,25 +828,25 @@ public:
         fb.items.add(juce::FlexItem().withWidth(8));
         fb.items.add(juce::FlexItem(*title_).withFlex(1).withMinHeight(28));
         fb.items.add(juce::FlexItem().withWidth(8));
-        fb.items.add(juce::FlexItem(*reset_).withMinWidth(110).withWidth(110).withMinHeight(28).withHeight(28));
+        fb.items.add(juce::FlexItem(*reset_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
-        fb.items.add(juce::FlexItem(*audio_toggle_).withMinWidth(100).withWidth(100).withMinHeight(28).withHeight(28));
+        fb.items.add(juce::FlexItem(*audio_toggle_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
-        fb.items.add(juce::FlexItem(*about_).withMinWidth(80).withWidth(80).withMinHeight(28).withHeight(28));
+        fb.items.add(juce::FlexItem(*about_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
         // Green leaf toggle, sits immediately left of the "?" button.
         fb.items.add(juce::FlexItem(*energy_saver_).withMinWidth(34).withWidth(34).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
-        fb.items.add(juce::FlexItem(*help_).withMinWidth(70).withWidth(70).withMinHeight(28).withHeight(28));
+        fb.items.add(juce::FlexItem(*help_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.performLayout(b);
     }
 
 private:
     juce::ImageComponent* logo_;
     juce::Label* title_;
-    juce::TextButton* reset_;
-    juce::TextButton* audio_toggle_;
-    juce::TextButton* about_;
+    ResetButton* reset_;
+    PowerButton* audio_toggle_;
+    SettingsButton* about_;
     juce::Button* energy_saver_;
     juce::TextButton* help_;
 };
@@ -900,20 +900,12 @@ private:
 class StatusBarComponent : public juce::Component
 {
 public:
-    StatusBarComponent(juce::Label* status, juce::Label* latency, juce::Label* cpu,
-                       juce::Label* theme_label, juce::ComboBox* theme_selector,
-                       juce::Label* start_minimized_label, juce::ToggleButton* start_minimized_button)
-        : status_(status), latency_(latency), cpu_(cpu),
-          theme_label_(theme_label), theme_selector_(theme_selector),
-          start_minimized_label_(start_minimized_label), start_minimized_button_(start_minimized_button)
+    StatusBarComponent(juce::Label* status, juce::Label* latency, juce::Label* cpu)
+        : status_(status), latency_(latency), cpu_(cpu)
     {
         addAndMakeVisible(status_);
         addAndMakeVisible(latency_);
         addAndMakeVisible(cpu_);
-        addAndMakeVisible(theme_label_);
-        addAndMakeVisible(theme_selector_);
-        addAndMakeVisible(start_minimized_label_);
-        addAndMakeVisible(start_minimized_button_);
     }
 
     void resized() override
@@ -927,14 +919,6 @@ public:
         fb.items.add(juce::FlexItem(*latency_).withMinWidth(270).withWidth(270));
         fb.items.add(juce::FlexItem().withWidth(8));
         fb.items.add(juce::FlexItem(*cpu_).withMinWidth(180).withWidth(180));
-        fb.items.add(juce::FlexItem().withWidth(8));
-        fb.items.add(juce::FlexItem(*theme_label_).withMinWidth(42).withWidth(42));
-        fb.items.add(juce::FlexItem().withWidth(4));
-        fb.items.add(juce::FlexItem(*theme_selector_).withMinWidth(120).withWidth(120));
-        fb.items.add(juce::FlexItem().withWidth(8));
-        fb.items.add(juce::FlexItem(*start_minimized_label_).withMinWidth(75).withWidth(75));
-        fb.items.add(juce::FlexItem().withWidth(4));
-        fb.items.add(juce::FlexItem(*start_minimized_button_).withMinWidth(70).withWidth(70));
         fb.performLayout(b);
     }
 
@@ -942,10 +926,6 @@ private:
     juce::Label* status_;
     juce::Label* latency_;
     juce::Label* cpu_;
-    juce::Label* theme_label_;
-    juce::ComboBox* theme_selector_;
-    juce::Label* start_minimized_label_;
-    juce::ToggleButton* start_minimized_button_;
 };
 
 } // namespace
@@ -1064,6 +1044,132 @@ void LeafButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool
     rib.startNewSubPath(cx, top + h * 0.04f);
     rib.lineTo(cx, bottom - h * 0.04f);
     g.strokePath(rib, juce::PathStrokeType(1.2f));
+}
+
+PowerButton::PowerButton() : juce::Button("Power")
+{
+    setTooltip("Start/Stop audio");
+}
+
+void PowerButton::setPowerState(bool running)
+{
+    running_ = running;
+    repaint();
+}
+
+void PowerButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool /*shouldDrawDown*/)
+{
+    auto area = getLocalBounds().toFloat().reduced(3.0f);
+
+    const juce::Colour on_col = kIconActiveGreen;
+    const juce::Colour off_col = kIconInactiveGrey;
+    juce::Colour col = running_ ? on_col : off_col;
+    if (shouldDrawHighlighted)
+        col = col.brighter(0.25f);
+
+    // Power icon: circle with a line at the top (typical power symbol)
+    const float radius = std::min(area.getWidth(), area.getHeight()) * 0.40f;
+    const float cx = area.getCentreX();
+    const float cy = area.getCentreY();
+    const float line_len = radius * 0.35f;
+
+    // Circle
+    g.setColour(col);
+    g.drawEllipse(juce::Rectangle<float>(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f), 1.8f);
+
+    // Line at top
+    g.drawLine(cx, cy - radius - 2.0f, cx, cy - radius - line_len - 2.0f, 1.8f);
+
+    // Optional: small fill when on
+    if (running_)
+    {
+        g.setColour(col.withAlpha(0.25f));
+        g.fillEllipse(juce::Rectangle<float>(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f));
+    }
+}
+
+ResetButton::ResetButton() : juce::Button("Reset")
+{
+    setTooltip("Reset engine");
+}
+
+void ResetButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool /*shouldDrawDown*/)
+{
+    auto area = getLocalBounds().toFloat().reduced(3.0f);
+
+    juce::Colour col = kIconInactiveGrey;
+    if (shouldDrawHighlighted)
+        col = col.brighter(0.25f);
+
+    // Circular arrow (reset symbol) ↻
+    const float radius = std::min(area.getWidth(), area.getHeight()) * 0.38f;
+    const float cx = area.getCentreX();
+    const float cy = area.getCentreY();
+
+    // Draw an arc (3/4 circle)
+    juce::Path arc;
+    arc.addCentredArc(cx, cy, radius, radius, 0.0f, juce::MathConstants<float>::pi * 0.5f,
+                      juce::MathConstants<float>::pi * 2.0f, true);
+    g.setColour(col);
+    g.strokePath(arc, juce::PathStrokeType(1.8f));
+
+    // Arrow head at the end (pointing up-right)
+    const float arrow_size = radius * 0.35f;
+    const float arrow_x = cx + radius * 0.707f;  // cos(45°)
+    const float arrow_y = cy - radius * 0.707f;  // -sin(45°)
+
+    juce::Path arrow;
+    arrow.startNewSubPath(arrow_x, arrow_y);
+    arrow.lineTo(arrow_x - arrow_size * 0.5f, arrow_y + arrow_size * 0.35f);
+    arrow.lineTo(arrow_x - arrow_size * 0.35f, arrow_y - arrow_size * 0.5f);
+    arrow.closeSubPath();
+
+    g.fillPath(arrow);
+}
+
+SettingsButton::SettingsButton() : juce::Button("Settings")
+{
+    setTooltip("Settings");
+}
+
+void SettingsButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool /*shouldDrawDown*/)
+{
+    auto area = getLocalBounds().toFloat().reduced(3.0f);
+
+    juce::Colour col = kIconInactiveGrey;
+    if (shouldDrawHighlighted)
+        col = col.brighter(0.25f);
+
+    // Gear/cog icon
+    const float radius = std::min(area.getWidth(), area.getHeight()) * 0.35f;
+    const float cx = area.getCentreX();
+    const float cy = area.getCentreY();
+    const float tooth_h = radius * 0.25f;
+    const int num_teeth = 8;
+
+    // Draw main circle
+    g.setColour(col);
+    g.drawEllipse(juce::Rectangle<float>(cx - radius * 0.6f, cy - radius * 0.6f,
+                                         radius * 1.2f, radius * 1.2f), 1.8f);
+
+    // Draw teeth around the circle
+    for (int i = 0; i < num_teeth; ++i)
+    {
+        const float angle = (juce::MathConstants<float>::twoPi / num_teeth) * i;
+        const float cos_a = std::cos(angle);
+        const float sin_a = std::sin(angle);
+
+        const float inner_x = cx + cos_a * radius * 0.6f;
+        const float inner_y = cy + sin_a * radius * 0.6f;
+        const float outer_x = cx + cos_a * (radius + tooth_h);
+        const float outer_y = cy + sin_a * (radius + tooth_h);
+
+        g.drawLine(inner_x, inner_y, outer_x, outer_y, 1.5f);
+    }
+
+    // Draw center hole
+    g.drawEllipse(juce::Rectangle<float>(cx - radius * 0.25f, cy - radius * 0.25f,
+                                         radius * 0.5f, radius * 0.5f), 1.2f);
 }
 
 MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
@@ -1748,6 +1854,7 @@ void MainWindow::buildUI()
 
     // --- Buffer size -------------------------------------------------------
     buffer_selector_ = std::make_unique<juce::ComboBox>();
+    buffer_selector_->addItem("32", 32);
     buffer_selector_->addItem("64", 64);
     buffer_selector_->addItem("128", 128);
     buffer_selector_->addItem("256", 256);
@@ -1773,8 +1880,8 @@ void MainWindow::buildUI()
     input_rate_value_ = std::make_unique<juce::Label>(juce::String(), juce::String::fromUTF8("\xe2\x80\x94"));
     vst_rate_value_ = std::make_unique<juce::Label>(juce::String(), juce::String::fromUTF8("\xe2\x80\x94"));
 
-    // --- Audio toggle ------------------------------------------------------
-    audio_toggle_ = std::make_unique<juce::TextButton>("OFF");
+    // --- Audio toggle (Power icon) ----------------------------------------
+    audio_toggle_ = std::make_unique<PowerButton>();
     audio_toggle_->addListener(this);
 
     // --- Master volume slider ----------------------------------------------
@@ -1794,8 +1901,8 @@ void MainWindow::buildUI()
     mute_button_->addListener(this);
     updateMuteButtonVisual(persisted_volume <= 0.0f);
 
-    // --- Reset engine button -----------------------------------------------
-    reset_engine_button_ = std::make_unique<juce::TextButton>("Reset Engine");
+    // --- Reset engine button (Icon) -----------------------------------------------
+    reset_engine_button_ = std::make_unique<ResetButton>();
     reset_engine_button_->addListener(this);
 
     // --- Save / Load preset ------------------------------------------------
@@ -1846,8 +1953,8 @@ void MainWindow::buildUI()
     start_minimized_button_->setToggleState(rs.start_minimized_to_tray, juce::dontSendNotification);
     start_minimized_button_->addListener(this);
 
-    // --- About button ------------------------------------------------------
-    about_button_ = std::make_unique<juce::TextButton>("About");
+    // --- Settings button (Gear icon) ----------------------------------------
+    about_button_ = std::make_unique<SettingsButton>();
     about_button_->addListener(this);
 
     // --- Energy Saver leaf toggle -----------------------------------------
@@ -1906,9 +2013,7 @@ void MainWindow::buildUI()
     auto* chain_panel = new ChainEditorPanel(chain_editor_.get());
 
     auto* status_bar = new StatusBarComponent(
-        status_label_.get(), latency_label_.get(), cpu_label_.get(),
-        theme_label_.get(), theme_selector_.get(),
-        start_minimized_label_.get(), start_minimized_button_.get());
+        status_label_.get(), latency_label_.get(), cpu_label_.get());
 
     auto* content = new MainContentComponent(
         header, top_area, chain_panel, plugin_panel, status_bar);
@@ -2085,7 +2190,7 @@ void MainWindow::buttonClicked(juce::Button* button)
     {
         engine_->reset();
         audio_running_ = engine_->isRunning();
-        audio_toggle_->setButtonText(audio_running_ ? "Stop Audio" : "Start Audio");
+        audio_toggle_->setPowerState(audio_running_);
         status_label_->setText("Engine reset", juce::dontSendNotification);
         updateTrayIconAppearance();
     }
@@ -2093,7 +2198,7 @@ void MainWindow::buttonClicked(juce::Button* button)
     {
         engine_->openAsioControlPanel();
         audio_running_ = engine_->isRunning();
-        audio_toggle_->setButtonText(audio_running_ ? "Stop Audio" : "Start Audio");
+        audio_toggle_->setPowerState(audio_running_);
         updateTrayIconAppearance();
     }
     else if (button == about_button_.get())
@@ -2148,14 +2253,14 @@ void MainWindow::setAudioRunning(bool run)
     {
         engine_->start();
         audio_running_ = true;
-        audio_toggle_->setButtonText("ON");
+        audio_toggle_->setPowerState(true);
         status_label_->setText("Audio running", juce::dontSendNotification);
     }
     else
     {
         engine_->stop();
         audio_running_ = false;
-        audio_toggle_->setButtonText("OFF");
+        audio_toggle_->setPowerState(false);
         status_label_->setText("Audio stopped", juce::dontSendNotification);
     }
     updateTrayIconAppearance();
@@ -2215,6 +2320,15 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                     asio_device_selector_->setSelectedItemIndex(0, juce::dontSendNotification);
                     engine_->selectOutput(asio_device_names_[0]);
                 }
+                // refreshDeviceLists() re-derives current_transport_mode_ and the combo box
+                // selection from the engine's current output, which at this point is still
+                // the previous WASAPI device (selectOutput() above hasn't landed yet when
+                // refreshDeviceLists() runs) — so both get clobbered back to Wasapi. Re-assert
+                // Asio on both after the real switch so updateControlVisibility() below (which
+                // reads current_transport_mode_, not the combo box) shows the right controls.
+                current_transport_mode_ = TransportMode::Asio;
+                transport_mode_selector_->setSelectedId(
+                    static_cast<int>(TransportMode::Asio), juce::dontSendNotification);
             }
             updateControlVisibility();
         }
@@ -2537,7 +2651,13 @@ void MainWindow::handleAbout()
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 
-    AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap);
+    SettingsControls settings;
+    settings.theme_label = theme_label_.get();
+    settings.theme_selector = theme_selector_.get();
+    settings.start_minimized_label = start_minimized_label_.get();
+    settings.start_minimized_button = start_minimized_button_.get();
+
+    AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings);
 }
 
 void MainWindow::handleHelp()
@@ -2680,7 +2800,7 @@ void MainWindow::restoreFromAutosave()
                 StartupLog("callAsync: starting audio");
                 engine_->start();
                 audio_running_ = true;
-                audio_toggle_->setButtonText("ON");
+                audio_toggle_->setPowerState(true);
                 status_label_->setText("Session restored - audio running", juce::dontSendNotification);
             });
         }
@@ -2972,7 +3092,7 @@ void MainWindow::onSystemSuspend()
         engine_->stop();
         audio_running_ = false;
         juce::MessageManager::callAsync([this]() {
-            audio_toggle_->setButtonText("OFF");
+            audio_toggle_->setPowerState(false);
             status_label_->setText("Audio stopped (system sleep)", juce::dontSendNotification);
         });
     }
@@ -2985,7 +3105,7 @@ void MainWindow::onSystemResume()
         engine_->start();
         audio_running_ = true;
         juce::MessageManager::callAsync([this]() {
-            audio_toggle_->setButtonText("ON");
+            audio_toggle_->setPowerState(true);
             status_label_->setText("Audio running (system resume)", juce::dontSendNotification);
         });
     }

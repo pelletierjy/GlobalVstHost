@@ -39,12 +39,8 @@ target_compile_definitions(jyglobalvst_audio_engine PUBLIC
     JUCE_STANDALONE_APPLICATION=0
     JUCE_MODAL_LOOPS_PERMITTED=0)
 
-if(JYGLOBALVST_BUILD_ASIO)
-    target_compile_definitions(jyglobalvst_audio_engine PUBLIC JUCE_ASIO=1)
-    target_include_directories(jyglobalvst_audio_engine SYSTEM PUBLIC ${ASIO_SDK_PATH}/common)
-else()
-    target_compile_definitions(jyglobalvst_audio_engine PUBLIC JUCE_ASIO=0)
-endif()
+target_compile_definitions(jyglobalvst_audio_engine PUBLIC JUCE_ASIO=1)
+target_include_directories(jyglobalvst_audio_engine SYSTEM PUBLIC ${ASIO_SDK_PATH}/common)
 
 file(GLOB_RECURSE _engine_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/builtin-effects/*.cpp"

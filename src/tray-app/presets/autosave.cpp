@@ -41,6 +41,14 @@ std::filesystem::path AutoSaveStore::autosavePath() const
 void AutoSaveStore::write(IAudioEngine* engine, bool suppress_slots_due_to_preset_override,
                           int theme_id)
 {
+    // FR-022e: an explicit preset load overrides the auto-save entirely — the next
+    // launch must restore that preset, not a stale auto-save file — so the write is
+    // skipped altogether rather than merely omitting the slot list.
+    if (suppress_slots_due_to_preset_override)
+    {
+        return;
+    }
+
     nlohmann::json doc;
     doc["schema_version"] = 1;
     doc["saved_at"] = iso8601Now();
@@ -55,23 +63,20 @@ void AutoSaveStore::write(IAudioEngine* engine, bool suppress_slots_due_to_prese
     doc["theme_id"] = theme_id;
     doc["wasapi_exclusive"] = engine->wasapiExclusive();
 
-    if (!suppress_slots_due_to_preset_override)
+    const auto chain = engine->snapshotChain();
+    nlohmann::json slots = nlohmann::json::array();
+    for (const auto& slot : chain.slots)
     {
-        const auto chain = engine->snapshotChain();
-        nlohmann::json slots = nlohmann::json::array();
-        for (const auto& slot : chain.slots)
-        {
-            nlohmann::json s;
-            s["position"] = slot.position;
-            s["plugin_uid"] = PluginUidToHexString(slot.ref.plugin_uid);
-            s["plugin_vendor"] = slot.ref.vendor;
-            s["plugin_name"] = slot.ref.name;
-            s["is_bypassed"] = slot.is_bypassed;
-            s["kind"] = (slot.kind == PluginSlotKind::Placeholder) ? "placeholder" : "plugin";
-            slots.push_back(std::move(s));
-        }
-        doc["slots"] = std::move(slots);
+        nlohmann::json s;
+        s["position"] = slot.position;
+        s["plugin_uid"] = PluginUidToHexString(slot.ref.plugin_uid);
+        s["plugin_vendor"] = slot.ref.vendor;
+        s["plugin_name"] = slot.ref.name;
+        s["is_bypassed"] = slot.is_bypassed;
+        s["kind"] = (slot.kind == PluginSlotKind::Placeholder) ? "placeholder" : "plugin";
+        slots.push_back(std::move(s));
     }
+    doc["slots"] = std::move(slots);
 
     std::filesystem::create_directories(path_.parent_path());
     std::ofstream ofs(path_, std::ios::binary);

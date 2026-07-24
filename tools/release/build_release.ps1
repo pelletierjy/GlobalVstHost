@@ -25,9 +25,6 @@
 .PARAMETER BuildService
     If set, builds the Windows Service binary.
 
-.PARAMETER BuildAsio
-    If set, builds the ASIO driver (requires Steinberg SDK).
-
 .EXAMPLE
     .\tools\release\build_release.ps1 -Version "0.2.0" -Sign -BuildDriver
 #>
@@ -39,8 +36,7 @@ param(
     [switch] $Sign,
     [string] $StageDir = ".\staging\release",
     [switch] $BuildDriver,
-    [switch] $BuildService,
-    [switch] $BuildAsio
+    [switch] $BuildService
 )
 
 $ErrorActionPreference = "Stop"
@@ -76,9 +72,6 @@ if (-not $BuildDriver) {
 }
 if ($BuildService) {
     $cmakeArgs += "-DJYGLOBALVST_BUILD_SERVICE=ON"
-}
-if ($BuildAsio) {
-    $cmakeArgs += "-DJYGLOBALVST_BUILD_ASIO=ON"
 }
 
 & cmake @cmakeArgs
@@ -135,9 +128,6 @@ $artifacts = @(
 
 if ($BuildService) {
     $artifacts += "$binDir\jyglobalvst_service.exe"
-}
-if ($BuildAsio) {
-    $artifacts += "$binDir\jyglobalvst_asio.dll"
 }
 if ($BuildDriver) {
     $artifacts += "$binDir\jyglobalvst_driver.sys"

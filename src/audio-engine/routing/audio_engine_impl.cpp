@@ -306,6 +306,13 @@ void AudioEngineImpl::start()
         }
     }
 
+    LogDebug("start() transport setup: mixed_mode=%d, output_kind=%d (Wasapi=0), input_kind=%d (Wasapi=0), input_id='%s', wasapi_loopback=%d",
+             mixed_mode_active_.load(std::memory_order_acquire) ? 1 : 0,
+             static_cast<int>(desired_output_transport_kind_),
+             static_cast<int>(desired_input_transport_kind_),
+             desired_input_id_.c_str(),
+             wasapi_loopback_mode ? 1 : 0);
+
     if (mixed_mode_active_.load(std::memory_order_acquire))
     {
         openWasapiCapture();
@@ -317,6 +324,7 @@ void AudioEngineImpl::start()
     }
     else if (wasapi_loopback_mode)
     {
+        LogDebug("Using pure WASAPI loopback mode");
         openWasapiCapture();
         LogDebug("start(): wasapi_capture_ %s, capture_ring_buffer_ %s, rate=%.0f",
                  wasapi_capture_ ? "ok" : "null",
@@ -376,6 +384,7 @@ void AudioEngineImpl::start()
         {
             // Pure WASAPI mode: use the actual WASAPI output rate.
             chain_rate = output_wasapi_rate_;
+            LogDebug("Pure WASAPI mode: output negotiated %.0f Hz, using as chain_rate", output_wasapi_rate_);
         }
         work_buffer_.setSize(2, desired_buffer_size_, false, false, true);
         plugin_chain_->prepareToPlay(chain_rate, desired_buffer_size_);
@@ -385,9 +394,13 @@ void AudioEngineImpl::start()
         const double out_rate = chain_rate;
         const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : out_rate;
         capture_resampling_enabled_ = wasapi_rate > 0.0 && out_rate > 0.0;
+        LogDebug("Capture resampling setup: capture_wasapi_rate_=%.0f, chain_rate=%.0f, wasapi_rate=%.0f, out_rate=%.0f, enabled=%d",
+                 capture_wasapi_rate_, chain_rate, wasapi_rate, out_rate, capture_resampling_enabled_ ? 1 : 0);
         if (capture_resampling_enabled_)
         {
             capture_nominal_ratio_ = wasapi_rate / out_rate;
+            LogDebug("Resampler ratio: %.4f (input/output rate ratio for %d->%d Hz)",
+                     capture_nominal_ratio_, static_cast<int>(wasapi_rate), static_cast<int>(out_rate));
             capture_smoothed_corr_ = 0.0;
             capture_drift_integral_ = 0.0;
             capture_priming_ = true;
@@ -805,13 +818,13 @@ DeviceResolutionSource AudioEngineImpl::currentResolutionSource() const
 void AudioEngineImpl::setBufferSize(int samples)
 {
     const bool is_asio = desired_output_transport_kind_ == TransportKind::Asio;
-    constexpr int kAllowedWasapi[] = {64, 128, 256, 512, 1024};
-    constexpr int kAllowedAsio[] = {64, 128, 256, 512, 1024};
+    constexpr int kAllowedWasapi[] = {32, 64, 128, 256, 512, 1024};
+    constexpr int kAllowedAsio[] = {32, 64, 128, 256, 512, 1024};
     const auto* allowed = is_asio ? kAllowedAsio : kAllowedWasapi;
     const size_t count = is_asio ? std::size(kAllowedAsio) : std::size(kAllowedWasapi);
     if (std::find(allowed, allowed + count, samples) == allowed + count)
     {
-        throw std::invalid_argument("buffer size must be one of {64, 128, 256, 512, 1024}");
+        throw std::invalid_argument("buffer size must be one of {32, 64, 128, 256, 512, 1024}");
     }
     {
         std::lock_guard lk {control_mutex_};
@@ -2046,6 +2059,11 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                     if (dst[c] != nullptr && src[c] != nullptr && consumed > 0)
                     {
                         std::memcpy(dst[c], src[c], consumed * sizeof(float));
+                    }
+                    // Clear remaining samples to avoid clicks if we didn't consume enough
+                    if (dst[c] != nullptr && consumed < static_cast<std::size_t>(samples))
+                    {
+                        std::memset(dst[c] + consumed, 0, (samples - consumed) * sizeof(float));
                     }
                 }
             }

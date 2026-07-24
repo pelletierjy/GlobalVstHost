@@ -53,11 +53,11 @@ juce::String buildDiagnosticsText(EngineHostMode mode,
     return msg;
 }
 
-class AboutDialogContent : public juce::Component
-                          , public juce::Button::Listener
+// "About" tab: icon, title, and read-only diagnostics text.
+class AboutTab : public juce::Component
 {
 public:
-    AboutDialogContent(const juce::String& diagnostics)
+    explicit AboutTab(const juce::String& diagnostics)
     {
         auto icon = juce::ImageCache::getFromMemory(
             jyglobalvst::BinaryData::app_icon_png,
@@ -86,6 +86,82 @@ public:
         text_editor_->setColour(juce::TextEditor::textColourId, kTextPrimary);
         text_editor_->setColour(juce::TextEditor::outlineColourId, kBgPanelBorder);
         addAndMakeVisible(text_editor_.get());
+    }
+
+    void resized() override
+    {
+        auto b = getLocalBounds().reduced(16);
+
+        auto header = b.removeFromTop(64);
+        if (icon_component_ != nullptr)
+        {
+            icon_component_->setBounds(header.removeFromLeft(64));
+            header.removeFromLeft(12);
+        }
+        title_label_->setBounds(header);
+
+        b.removeFromTop(12);
+        text_editor_->setBounds(b);
+    }
+
+private:
+    std::unique_ptr<juce::ImageComponent> icon_component_;
+    std::unique_ptr<juce::Label> title_label_;
+    std::unique_ptr<juce::TextEditor> text_editor_;
+};
+
+// "Settings" tab: reparents MainWindow's persistent theme/start-minimized controls
+// for the duration of the dialog. Does not own them — they are detached (not
+// destroyed) when this component is destroyed, and remain valid afterwards.
+class SettingsTab : public juce::Component
+{
+public:
+    explicit SettingsTab(const SettingsControls& controls) : controls_(controls)
+    {
+        addAndMakeVisible(controls_.theme_label);
+        addAndMakeVisible(controls_.theme_selector);
+        addAndMakeVisible(controls_.start_minimized_label);
+        addAndMakeVisible(controls_.start_minimized_button);
+    }
+
+    ~SettingsTab() override
+    {
+        removeChildComponent(controls_.theme_label);
+        removeChildComponent(controls_.theme_selector);
+        removeChildComponent(controls_.start_minimized_label);
+        removeChildComponent(controls_.start_minimized_button);
+    }
+
+    void resized() override
+    {
+        auto b = getLocalBounds().reduced(16);
+
+        auto row1 = b.removeFromTop(28);
+        controls_.theme_label->setBounds(row1.removeFromLeft(80));
+        row1.removeFromLeft(8);
+        controls_.theme_selector->setBounds(row1.removeFromLeft(160));
+
+        b.removeFromTop(12);
+        auto row2 = b.removeFromTop(28);
+        controls_.start_minimized_label->setBounds(row2.removeFromLeft(110));
+        row2.removeFromLeft(8);
+        controls_.start_minimized_button->setBounds(row2.removeFromLeft(70));
+    }
+
+private:
+    SettingsControls controls_;
+};
+
+class AboutDialogContent : public juce::Component
+                          , public juce::Button::Listener
+{
+public:
+    AboutDialogContent(const juce::String& diagnostics, const SettingsControls& settings)
+    {
+        tabs_ = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
+        tabs_->addTab("About", kBgDeep, new AboutTab(diagnostics), true);
+        tabs_->addTab("Settings", kBgDeep, new SettingsTab(settings), true);
+        addAndMakeVisible(tabs_.get());
 
         ok_button_ = std::make_unique<juce::TextButton>("OK");
         ok_button_->addListener(this);
@@ -105,26 +181,15 @@ public:
     {
         auto b = getLocalBounds().reduced(16);
 
-        auto header = b.removeFromTop(64);
-        if (icon_component_ != nullptr)
-        {
-            icon_component_->setBounds(header.removeFromLeft(64));
-            header.removeFromLeft(12);
-        }
-        title_label_->setBounds(header);
-
-        b.removeFromTop(12);
         auto buttonArea = b.removeFromBottom(32);
         ok_button_->setBounds(buttonArea.withSizeKeepingCentre(80, 28));
         b.removeFromBottom(8);
 
-        text_editor_->setBounds(b);
+        tabs_->setBounds(b);
     }
 
 private:
-    std::unique_ptr<juce::ImageComponent> icon_component_;
-    std::unique_ptr<juce::Label> title_label_;
-    std::unique_ptr<juce::TextEditor> text_editor_;
+    std::unique_ptr<juce::TabbedComponent> tabs_;
     std::unique_ptr<juce::TextButton> ok_button_;
 };
 
@@ -133,10 +198,11 @@ private:
 void AboutDiagnostics::show(juce::Component* parent,
                             EngineHostMode mode,
                             const juce::String& version,
-                            const DiagnosticSnapshot& snap)
+                            const DiagnosticSnapshot& snap,
+                            const SettingsControls& settings)
 {
     auto content = std::make_unique<AboutDialogContent>(
-        buildDiagnosticsText(mode, version, snap));
+        buildDiagnosticsText(mode, version, snap), settings);
 
     juce::DialogWindow::LaunchOptions options;
     options.dialogTitle = "About / Diagnostics";

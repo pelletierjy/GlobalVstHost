@@ -260,7 +260,7 @@ private:
     std::atomic<bool> energy_saver_sleeping_ {false};
     std::thread energy_saver_thread_;
     std::atomic<bool> energy_saver_thread_running_ {false};
-    static constexpr int kEnergySaverIdleMs = 30'000;        // silence before sleeping
+    static constexpr int kEnergySaverIdleMs = 1'000;         // silence before sleeping
     static constexpr float kEnergySaverWakeDb = -50.0f;      // input level counted as "audio"
     void startEnergySaver();
     void stopEnergySaver();

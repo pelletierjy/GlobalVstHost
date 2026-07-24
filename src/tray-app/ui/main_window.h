@@ -46,6 +46,39 @@ private:
     bool sleeping_ {false};
 };
 
+// Power button drawn as a circle with a line at the top. Shows off/on state via colour.
+class PowerButton : public juce::Button
+{
+public:
+    PowerButton();
+    void setPowerState(bool running);
+
+private:
+    void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
+
+    bool running_ {false};
+};
+
+// Reset button drawn as a circular arrow (↻ style).
+class ResetButton : public juce::Button
+{
+public:
+    ResetButton();
+
+private:
+    void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
+};
+
+// Settings button drawn as a gear/cog.
+class SettingsButton : public juce::Button
+{
+public:
+    SettingsButton();
+
+private:
+    void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
+};
+
 // Special endpoint ID representing no device connection
 constexpr std::string_view kDisconnectedDeviceId = "";
 
@@ -177,17 +210,17 @@ private:
         WasapiExclusive = 3,
     };
     TransportMode current_transport_mode_ {TransportMode::Wasapi};
-    std::unique_ptr<juce::TextButton> audio_toggle_;
+    std::unique_ptr<PowerButton> audio_toggle_;
     std::unique_ptr<juce::TextButton> asio_settings_button_;
     std::unique_ptr<juce::TextButton> save_preset_button_;
     std::unique_ptr<juce::TextButton> load_preset_button_;
-    std::unique_ptr<juce::TextButton> about_button_;
+    std::unique_ptr<SettingsButton> about_button_;
     std::unique_ptr<LeafButton> energy_saver_button_;
     std::unique_ptr<juce::TextButton> help_button_;
     std::unique_ptr<juce::Slider> volume_slider_;
     std::unique_ptr<juce::TextButton> mute_button_;
     float pre_mute_volume_ {1.0f};
-    std::unique_ptr<juce::TextButton> reset_engine_button_;
+    std::unique_ptr<ResetButton> reset_engine_button_;
     std::unique_ptr<juce::Label> latency_label_;
     std::unique_ptr<juce::Label> cpu_label_;
     std::unique_ptr<juce::Label> cpu_warning_banner_;

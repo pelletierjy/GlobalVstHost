@@ -20,8 +20,9 @@ public:
     AutoSaveStore();
 
     // Serialize current chain + device + buffer to autosave.json.
-    // suppress_slots_due_to_preset_override omits the slot list but still
-    // persists buffer size, endpoints, and audio_running state.
+    // suppress_slots_due_to_preset_override (FR-022e) skips the write entirely: an
+    // explicit preset load overrides the auto-save, so the next launch must restore
+    // that preset rather than a stale auto-save file.
     // theme_id is the active ThemeId cast to int (1–6).
     void write(IAudioEngine* engine, bool suppress_slots_due_to_preset_override,
                int theme_id = 1);

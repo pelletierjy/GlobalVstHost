@@ -88,7 +88,7 @@ ctest --test-dir build -C Release --output-on-failure
 
 Requires Visual Studio 2022 or later with C++20 support.
 
-> **ASIO support:** ASIO is enabled by default (`JYGLOBALVST_BUILD_ASIO=ON`). The Steinberg ASIO SDK is auto-detected at `third_party/asiosdk`. To disable ASIO, pass `-DJYGLOBALVST_BUILD_ASIO=OFF`.
+> **ASIO support:** ASIO is mandatory and always built. The Steinberg ASIO SDK is auto-detected at `third_party/asiosdk` (override with `-DJYGLOBALVST_ASIO_SDK_PATH=...`); configuration fails if it cannot be found.
 
 ## License
 

@@ -29,13 +29,26 @@ struct DiagnosticSnapshot
     CpuStats cpu;
 };
 
+// Settings-tab controls owned by MainWindow. Passed in (not owned) so the dialog
+// can reparent the live components into its Settings tab while it is open; they
+// are detached — not destroyed — when the dialog closes, and remain valid for the
+// next time the dialog is shown.
+struct SettingsControls
+{
+    juce::Label* theme_label {nullptr};
+    juce::ComboBox* theme_selector {nullptr};
+    juce::Label* start_minimized_label {nullptr};
+    juce::ToggleButton* start_minimized_button {nullptr};
+};
+
 class AboutDiagnostics
 {
 public:
     static void show(juce::Component* parent,
                      EngineHostMode mode,
                      const juce::String& version,
-                     const DiagnosticSnapshot& snap);
+                     const DiagnosticSnapshot& snap,
+                     const SettingsControls& settings);
 };
 
 }  // namespace jyglobalvst::tray

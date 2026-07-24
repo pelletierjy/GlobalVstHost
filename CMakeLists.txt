@@ -34,9 +34,9 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 option(JYGLOBALVST_BUILD_TESTS "Build unit and integration tests" ON)
-option(JYGLOBALVST_BUILD_ASIO "Build with ASIO support (requires Steinberg ASIO SDK)" OFF)
 
-# ASIO SDK path detection. The SDK can be provided via:
+# ASIO support is mandatory (not a toggle): this host requires ASIO output.
+# The SDK can be provided via:
 #   1. CMake variable: -DJYGLOBALVST_ASIO_SDK_PATH=...
 #   2. Environment variable: JYGLOBALVST_ASIO_SDK_PATH
 #   3. Vcpkg / system path (future)
@@ -44,22 +44,20 @@ option(JYGLOBALVST_BUILD_ASIO "Build with ASIO support (requires Steinberg ASIO 
 # WARNING: The Steinberg ASIO SDK is provided under a proprietary license.
 # See THIRD_PARTY_LICENSES.md for details. Legal review is required before
 # shipping with ASIO enabled.
-if(JYGLOBALVST_BUILD_ASIO)
-    message(WARNING "ASIO support enabled. The Steinberg ASIO SDK is proprietary; "
-        "see THIRD_PARTY_LICENSES.md for licensing details and legal requirements before shipping.")
-    if(DEFINED JYGLOBALVST_ASIO_SDK_PATH AND EXISTS "${JYGLOBALVST_ASIO_SDK_PATH}/common/iasiodrv.h")
-        set(ASIO_SDK_PATH "${JYGLOBALVST_ASIO_SDK_PATH}" CACHE PATH "Steinberg ASIO SDK root" FORCE)
-    elseif(DEFINED ENV{JYGLOBALVST_ASIO_SDK_PATH} AND EXISTS "$ENV{JYGLOBALVST_ASIO_SDK_PATH}/common/iasiodrv.h")
-        set(ASIO_SDK_PATH "$ENV{JYGLOBALVST_ASIO_SDK_PATH}" CACHE PATH "Steinberg ASIO SDK root" FORCE)
-    elseif(EXISTS "${CMAKE_SOURCE_DIR}/third_party/asiosdk/common/iasiodrv.h")
-        set(ASIO_SDK_PATH "${CMAKE_SOURCE_DIR}/third_party/asiosdk" CACHE PATH "Steinberg ASIO SDK root" FORCE)
-    else()
-        message(FATAL_ERROR "JYGLOBALVST_BUILD_ASIO=ON but Steinberg ASIO SDK not found. "
-            "Set JYGLOBALVST_ASIO_SDK_PATH to the SDK root (containing common/iasiodrv.h), "
-            "or place the SDK at ${CMAKE_SOURCE_DIR}/third_party/asiosdk")
-    endif()
-    message(STATUS "ASIO SDK found: ${ASIO_SDK_PATH}")
+message(WARNING "ASIO support enabled. The Steinberg ASIO SDK is proprietary; "
+    "see THIRD_PARTY_LICENSES.md for licensing details and legal requirements before shipping.")
+if(DEFINED JYGLOBALVST_ASIO_SDK_PATH AND EXISTS "${JYGLOBALVST_ASIO_SDK_PATH}/common/iasiodrv.h")
+    set(ASIO_SDK_PATH "${JYGLOBALVST_ASIO_SDK_PATH}" CACHE PATH "Steinberg ASIO SDK root" FORCE)
+elseif(DEFINED ENV{JYGLOBALVST_ASIO_SDK_PATH} AND EXISTS "$ENV{JYGLOBALVST_ASIO_SDK_PATH}/common/iasiodrv.h")
+    set(ASIO_SDK_PATH "$ENV{JYGLOBALVST_ASIO_SDK_PATH}" CACHE PATH "Steinberg ASIO SDK root" FORCE)
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/third_party/asiosdk/common/iasiodrv.h")
+    set(ASIO_SDK_PATH "${CMAKE_SOURCE_DIR}/third_party/asiosdk" CACHE PATH "Steinberg ASIO SDK root" FORCE)
+else()
+    message(FATAL_ERROR "Steinberg ASIO SDK not found (ASIO support is mandatory). "
+        "Set JYGLOBALVST_ASIO_SDK_PATH to the SDK root (containing common/iasiodrv.h), "
+        "or place the SDK at ${CMAKE_SOURCE_DIR}/third_party/asiosdk")
 endif()
+message(STATUS "ASIO SDK found: ${ASIO_SDK_PATH}")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 

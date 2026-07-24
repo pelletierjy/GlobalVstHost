@@ -20,6 +20,7 @@
 #include <chrono>
 #include <thread>
 #include <filesystem>
+#include <cstdlib>
 
 namespace jyglobalvst::testing {
 
@@ -85,6 +86,11 @@ protected:
             std::error_code ec;
             std::filesystem::remove(shared::localStateDir() / "scan-cache.json", ec);
         }
+
+        // Keep rescanPlugins() from touching real, machine-specific VST3 directories
+        // (see default_scan_paths.cpp): tests must not depend on — or hang because
+        // of — whatever plugins happen to be installed on the machine running them.
+        _putenv_s("JYGLOBALVST_TEST_NO_DEFAULT_SCAN_PATHS", "1");
 
         engine_impl_ = std::make_unique<jyglobalvst::engine::AudioEngineImpl>();
         listener_ = std::make_unique<TestAudioEngineListener>();

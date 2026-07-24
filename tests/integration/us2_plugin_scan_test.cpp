@@ -5,6 +5,7 @@
 
 #include "../integration/loopback_fixture.h"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 
@@ -18,9 +19,14 @@ TEST_F(US2PluginScanTest, ScanReturnsEmptyCatalogWhenNoPathsSet)
 {
     StartEngine();
 
-    // Before any scan, catalog should be empty.
+    // Before any scan, the catalog must contain no *scanned* (external VST3) entries.
+    // It is never fully empty: the built-in effects (Night-time, EQ) are always
+    // present — they are registered directly, not discovered by a filesystem scan —
+    // and are identifiable by their empty file_path (see BuiltinEffectRegistry).
     const auto catalog = engine()->catalog();
-    EXPECT_TRUE(catalog.empty()) << "Catalog should be empty before scan";
+    const bool has_scanned_entry = std::any_of(catalog.begin(), catalog.end(),
+        [](const auto& entry) { return !entry.file_path.empty(); });
+    EXPECT_FALSE(has_scanned_entry) << "No scanned plugins should be present before a scan";
 
     StopEngine();
 }
@@ -76,17 +82,28 @@ TEST_F(US2PluginScanTest, CatalogEntriesHaveRequiredFields)
 {
     StartEngine();
 
-    // After a scan, any discovered plugins must have uid, name, vendor, path.
-    engine()->rescanPlugins(nullptr);
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // Exercise the invariant with a deterministic injected entry rather than a real
+    // filesystem scan (see JYGLOBALVST_TEST_NO_DEFAULT_SCAN_PATHS in loopback_fixture.h)
+    // — a real scan depends on whatever VST3 plugins happen to be installed on the
+    // machine running the test, which is neither hermetic nor guaranteed to find
+    // anything to check.
+    InjectTestPlugin("TestVendor", "TestPlugin");
 
     const auto catalog = engine()->catalog();
     for (const auto& entry : catalog)
     {
         EXPECT_FALSE(entry.ref.name.empty()) << "Every catalog entry must have a name";
         EXPECT_FALSE(entry.ref.vendor.empty()) << "Every catalog entry must have a vendor";
-        EXPECT_FALSE(entry.file_path.empty()) << "Every catalog entry must have a file path";
     }
+
+    // Built-in effects (Night-time, EQ) are registered directly, not scanned from
+    // disk, and are identifiable by their deliberately empty file_path (see
+    // BuiltinEffectRegistry) — so the file-path requirement is checked only against
+    // the injected scanned entry above, not the whole catalog.
+    const auto scanned = std::find_if(catalog.begin(), catalog.end(),
+        [](const auto& entry) { return entry.ref.name == "TestPlugin"; });
+    ASSERT_NE(scanned, catalog.end());
+    EXPECT_FALSE(scanned->file_path.empty()) << "Every scanned catalog entry must have a file path";
 
     StopEngine();
 }

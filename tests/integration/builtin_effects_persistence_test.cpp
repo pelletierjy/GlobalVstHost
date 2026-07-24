@@ -16,7 +16,10 @@ void setNonDefaultState(AudioEngineImpl& engine)
     auto* nt = dynamic_cast<NightTimeProcessor*>(engine.testGetProcessor(0));
     ASSERT_NE(nt, nullptr);
     nt->setPresetIndex(2);       // default is 1
-    nt->setLookaheadMs(7.5f);    // default is 0
+    // Look-ahead is intentionally fixed at 10 ms (see NightTimeProcessor) and is no
+    // longer a persisted, user-adjustable value; setLookaheadMs() only affects the
+    // live instance until the next state load/editor open, so it is not part of
+    // this round-trip check.
 
     auto* eq = dynamic_cast<EqProcessor*>(engine.testGetProcessor(1));
     ASSERT_NE(eq, nullptr);
@@ -30,7 +33,7 @@ void expectNonDefaultState(AudioEngineImpl& engine)
     auto* nt = dynamic_cast<NightTimeProcessor*>(engine.testGetProcessor(0));
     ASSERT_NE(nt, nullptr);
     EXPECT_EQ(nt->getPresetIndex(), 2);
-    EXPECT_FLOAT_EQ(nt->getLookaheadMs(), 7.5f);
+    EXPECT_FLOAT_EQ(nt->getLookaheadMs(), 10.0f);
 
     auto* eq = dynamic_cast<EqProcessor*>(engine.testGetProcessor(1));
     ASSERT_NE(eq, nullptr);
