@@ -2267,6 +2267,9 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             if (mode == TransportMode::Wasapi)
             {
                 engine_->setWasapiExclusive(false);
+                // WASAPI benefits from larger buffer for stability
+                buffer_selector_->setSelectedId(512, juce::dontSendNotification);
+                engine_->setBufferSize(512);
                 if (!output_endpoint_ids_.empty())
                 {
                     output_selector_->setSelectedItemIndex(0, juce::dontSendNotification);
@@ -2276,6 +2279,9 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             else if (mode == TransportMode::WasapiExclusive)
             {
                 engine_->setWasapiExclusive(true);
+                // WASAPI Exclusive can use larger buffer
+                buffer_selector_->setSelectedId(512, juce::dontSendNotification);
+                engine_->setBufferSize(512);
                 if (!output_endpoint_ids_.empty())
                 {
                     output_selector_->setSelectedItemIndex(0, juce::dontSendNotification);
@@ -2285,6 +2291,9 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             else  // Asio
             {
                 engine_->setWasapiExclusive(false);
+                // ASIO can handle smaller buffer for lower latency
+                buffer_selector_->setSelectedId(128, juce::dontSendNotification);
+                engine_->setBufferSize(128);
                 refreshDeviceLists();
                 if (!asio_device_names_.empty())
                 {
