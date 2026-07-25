@@ -17,6 +17,8 @@ on:
 #   MSIX_PACKAGE_NAME           Partner Center Identity/@Name, e.g. 12345Contoso.JyGlobalVST
 #   MSIX_PUBLISHER              Partner Center Identity/@Publisher, e.g. CN=1B2C3D4E-...
 #   MSIX_PUBLISHER_DISPLAY_NAME Partner Center seller display name
+#   MSIX_DISPLAY_NAME           App name as reserved in Partner Center (optional; falls
+#                               back to the manifest value)
 #
 # If they are unset the workflow still runs, but builds with the placeholder identity
 # and marks the artifact as NOT submittable. That keeps the pipeline testable before a
@@ -65,6 +67,7 @@ jobs:
           MSIX_PACKAGE_NAME: ${{ vars.MSIX_PACKAGE_NAME }}
           MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
           MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}
+          MSIX_DISPLAY_NAME: ${{ vars.MSIX_DISPLAY_NAME }}
         run: |
           $params = @{
               Version       = '${{ steps.version.outputs.version }}'
@@ -75,6 +78,7 @@ jobs:
               $params.PackageName          = $env:MSIX_PACKAGE_NAME
               $params.Publisher            = $env:MSIX_PUBLISHER
               $params.PublisherDisplayName = $env:MSIX_PUBLISHER_DISPLAY_NAME
+              if ($env:MSIX_DISPLAY_NAME) { $params.DisplayName = $env:MSIX_DISPLAY_NAME }
               "submittable=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
               Write-Host "Building with Partner Center identity: $env:MSIX_PACKAGE_NAME"
           } else {

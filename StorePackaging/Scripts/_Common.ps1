@@ -103,6 +103,10 @@ Leave empty to keep the manifest value.
 
 .PARAMETER PublisherDisplayName
 Overrides Properties/PublisherDisplayName. Leave empty to keep the manifest value.
+
+.PARAMETER DisplayName
+Overrides Properties/DisplayName and VisualElements/@DisplayName. For a Store package this
+must match a name reserved in Partner Center. Leave empty to keep the manifest value.
 #>
 function New-PackagePayload
 {
@@ -113,7 +117,8 @@ function New-PackagePayload
         [Parameter(Mandatory = $true)][string]$Version,
         [string]$PackageName,
         [string]$Publisher,
-        [string]$PublisherDisplayName
+        [string]$PublisherDisplayName,
+        [string]$DisplayName
     )
 
     if (Test-Path $PayloadDir) { Remove-Item -Recurse -Force $PayloadDir }
@@ -144,6 +149,13 @@ function New-PackagePayload
     {
         $xml = [regex]::Replace($xml, '(<PublisherDisplayName>)[^<]*(</PublisherDisplayName>)', "`${1}$PublisherDisplayName`${2}")
     }
+    if ($DisplayName)
+    {
+        # Properties/DisplayName and uap:VisualElements/@DisplayName must agree; a Store
+        # package's DisplayName has to match a name reserved in Partner Center.
+        $xml = [regex]::Replace($xml, '(<DisplayName>)[^<]*(</DisplayName>)', "`${1}$DisplayName`${2}")
+        $xml = [regex]::Replace($xml, '(<uap:VisualElements\b[^>]*?DisplayName=")[^"]*(")', "`${1}$DisplayName`${2}")
+    }
 
     Set-Content -Path (Join-Path $PayloadDir 'AppxManifest.xml') -Value $xml -Encoding UTF8 -NoNewline
 
@@ -173,6 +185,7 @@ function New-PackagePayload
         PackageName          = $parsed.Package.Identity.Name
         Publisher            = $parsed.Package.Identity.Publisher
         PublisherDisplayName = $parsed.Package.Properties.PublisherDisplayName
+        DisplayName          = $parsed.Package.Properties.DisplayName
         Version              = $parsed.Package.Identity.Version
     }
 }

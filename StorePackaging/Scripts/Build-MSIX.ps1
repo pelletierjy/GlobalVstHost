@@ -35,6 +35,10 @@ Identity/@Publisher from Partner Center. Full subject, e.g.
 .PARAMETER PublisherDisplayName
 Properties/PublisherDisplayName from Partner Center - your seller display name.
 
+.PARAMETER DisplayName
+The app name shown in the Store and Start menu. For a Store submission this must match a
+name you reserved in Partner Center. Defaults to the manifest value.
+
 .PARAMETER AllowPlaceholderIdentity
 Build even though the identity is still the checked-in placeholder. The output is
 useful for validation and inspection but CANNOT be submitted to the Store.
@@ -71,6 +75,9 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$PublisherDisplayName,
+
+    [Parameter(Mandatory = $false)]
+    [string]$DisplayName,
 
     [Parameter(Mandatory = $false)]
     [switch]$AllowPlaceholderIdentity,
@@ -140,7 +147,7 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 $payload = New-PackagePayload -StoreDir $storeDir -PayloadDir $payloadDir -ExePath $exePath `
     -Version $Version -PackageName $PackageName -Publisher $Publisher `
-    -PublisherDisplayName $PublisherDisplayName
+    -PublisherDisplayName $PublisherDisplayName -DisplayName $DisplayName
 
 Write-Ok "Assets: $($payload.AssetCount) file(s)"
 if ($payload.CrtCopied -gt 0)
@@ -154,6 +161,7 @@ else
 Write-Ok "Identity Name: $($payload.PackageName)"
 Write-Ok "Identity Publisher: $($payload.Publisher)"
 Write-Ok "PublisherDisplayName: $($payload.PublisherDisplayName)"
+Write-Ok "DisplayName: $($payload.DisplayName)"
 
 # --- Identity gate ----------------------------------------------------------
 $isPlaceholder = Test-PlaceholderIdentity -PackageName $payload.PackageName -Publisher $payload.Publisher
