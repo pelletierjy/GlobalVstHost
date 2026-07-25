@@ -50,14 +50,24 @@ installed.
 
 ABOUT THE MICROPHONE CAPABILITY
 
-The app declares the "microphone" device capability. It does NOT listen to the
-microphone and does not record anything.
+The app declares the "microphone" device capability because it captures audio.
+No audio is ever written to disk or transmitted in any mode - it is processed in
+memory in real time and discarded.
 
-Windows requires this capability for audio capture, and it is the permission
-that covers WASAPI loopback capture - reading the audio your system is already
-sending to its OUTPUT device. This is why Windows shows the microphone privacy
-indicator while the app runs. No audio is written to disk or transmitted; it is
-processed in memory in real time and discarded.
+There are two capture sources, chosen by the user:
+
+  1. System audio via WASAPI loopback (the default and primary use case). This
+     reads the audio the system is already sending to its OUTPUT device. No
+     microphone is involved, but Windows still requires the microphone
+     capability for audio capture, which is why the microphone privacy
+     indicator appears.
+
+  2. A hardware input device the user selects from the input list, which
+     enumerates WASAPI capture endpoints. If the user selects a microphone, the
+     app processes that microphone's audio in real time, by explicit user
+     choice. This is disclosed in the privacy policy.
+
+The app never records, stores, or transmits captured audio in either mode.
 
 THIRD-PARTY VST3 PLUGIN SUPPORT
 

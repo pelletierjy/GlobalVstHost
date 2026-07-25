@@ -64,6 +64,7 @@ the audio.
 
 DESIGNED FOR EVERYDAY LISTENING
 
+- Process your system audio, or select a hardware input device instead
 - Choose any audio output on your system, including ASIO devices
 - Save and load effect chains as preset files
 - Stereo input and output level meters, plus a live latency and CPU readout
@@ -79,9 +80,13 @@ presets stay on your machine.
 It captures the audio your computer is playing, processes it in memory, and passes
 it straight to your output device. Audio is never recorded, saved, or sent anywhere.
 
-Windows requires the microphone permission for audio capture, so you may see a
-microphone prompt and the microphone privacy indicator. Global VST Host does not
-listen to your microphone — it reads what your speakers are already playing.
+By default it reads what your speakers are already playing, not your microphone.
+You can choose a hardware input device instead if you want to process a line
+input or an audio interface channel.
+
+Windows requires the microphone permission for any audio capture, so you may see
+a microphone prompt and the microphone privacy indicator even when only system
+audio is being processed.
 
 REQUIREMENTS AND LIMITATIONS
 
@@ -153,20 +158,45 @@ merit PEGI 12 / ESRB Everyone 10+ or lower. The draft copy above is well inside 
 
 ## Screenshots
 
-Not yet produced. You need at least one; more is better. Suggested set, in order:
+**Hard requirement: PNG, minimum 1366 × 768, under 50 MB. Maximum 10; 4 recommended.**
+(Source below.)
 
-1. Main window with a chain of two or three effects, meters showing activity
+### The existing README screenshot is too small
+
+The screenshot in `docs/README.md` is **989 × 786** — the width fails the 1366 minimum, so
+Partner Center will reject it. Content-wise it is a good shot: it shows the plugin chain with
+a third-party plugin (ARC X) alongside both built-ins, the level meters, ASIO output, and the
+preset buttons.
+
+Two ways to fix it, in order of preference:
+
+1. **Resize the app window wider before capturing.** Native pixels at ≥1366 wide are sharper
+   than anything done afterwards. Best option if the window is resizable that far.
+2. **Composite the window onto a larger canvas.** Centre the real window on a 1920 × 1080
+   neutral background. Legitimate and common for desktop apps, and avoids upscaling blur.
+   Do **not** simply upscale the 989 px image — it will look soft and cheap.
+
+### Suggested set
+
+1. Main window, chain of two or three effects, meters showing activity
 2. The Night-time effect's controls
 3. The EQ with a visible bass boost applied
-4. Output device selection
+4. Input/output device selection
 5. Preset save/load
 
-Capture on the **installed MSIX package** at 100% scaling, and make sure no personal
-information (device names, file paths, other windows) is visible.
+Capture on the **installed MSIX package** at 100% scaling. Note the existing screenshot
+exposes a specific audio interface name ("Art Pro (B) (USB IV 3/4)") — harmless, but prefer
+generic device names if convenient.
 
-Note: the current app icons are functional placeholders rather than designed artwork. They
-will pass certification, but they are the weakest part of the listing. Worth addressing
-before you push for visibility.
+### Two cosmetic issues worth fixing first
+
+- **The app calls itself "GlobalVSTHost", the Store calls it "Global VST Host".** The window
+  title bar and the in-app header both read `GlobalVSTHost` (no spaces), while the reserved
+  name, manifest `DisplayName`, and Store listing are `Global VST Host`. Not a certification
+  blocker, but customers see both names and it reads as sloppy. One-line UI text change, and
+  worth doing before screenshots are taken so they do not need retaking.
+- **The icons are functional placeholders**, not designed artwork. They will pass
+  certification but are the weakest part of the listing.
 
 ---
 
@@ -176,7 +206,8 @@ before you push for visibility.
 
 | Claim | Evidence |
 |---|---|
-| WASAPI loopback capture, no driver | `src/audio-engine/routing/wasapi_capture.cpp`; no driver or NT service dependency anywhere |
+| WASAPI loopback capture, no driver | `src/audio-engine/routing/wasapi_capture.cpp:333` sets `AUDCLNT_STREAMFLAGS_LOOPBACK`; no driver or NT service dependency anywhere |
+| Selectable hardware input device | `audio_engine_impl.cpp:2374` — `listInputs()` enumerates `EndpointFlow::Capture` endpoints; `selectInput()` at `798`. Visible in the screenshot as an Input selector |
 | "Night-time" is a stereo compressor/limiter for consistent late-night volume | `src/audio-engine/builtin-effects/nighttime_processor.cpp`; registered as `"Night-time"` in `builtin_effect_registry.cpp`; intent per `specs/006-builtin-plugins/spec.md` US1 |
 | EQ with multi-band gains and a dedicated bass boost | `src/audio-engine/builtin-effects/eq_processor.cpp` (`setBandGain`, `setBassBoost`, bass shelf at 200 Hz); registered as `"EQ (Bass Boost)"` |
 | Built-ins need no scan or download | Registered in-process at construction; spec 006 US1 AC1 |
@@ -231,3 +262,5 @@ before you push for visibility.
   — 10.1.1, 10.1.3, 10.1.4, 10.2.4, 10.5.1, 10.14, 11.1, 11.11
 - [Categories and subcategories](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/categories-and-subcategories)
   — the category taxonomy quoted above
+- [App screenshots, images, and trailers for MSIX app](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/screenshots-and-images)
+  — the 1366 × 768 minimum and the 10-image cap

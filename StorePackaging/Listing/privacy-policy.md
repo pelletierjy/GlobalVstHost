@@ -34,19 +34,33 @@ network communication as shipped.
 
 ## Audio processing
 
-Global VST Host captures the audio your computer is already playing, using the Windows
-WASAPI loopback interface, processes it, and sends it to an audio output device you choose.
+Global VST Host captures audio, runs it through your chosen chain of effects, and sends the
+result to an audio output device you select.
 
-Two points worth being explicit about:
+**Audio is processed in memory only and is never recorded, saved, or transmitted.** It exists
+only for as long as it takes to pass through the processing chain, in real time. This is true
+of every capture mode below.
 
-- **Audio is processed in memory only and is never recorded, saved, or transmitted.** It
-  exists only for as long as it takes to pass through the processing chain, in real time.
-- **The app declares the Windows "microphone" capability, but it does not listen to your
-  microphone.** Windows requires this permission for audio capture generally, and it is the
-  permission that covers loopback capture of your system's audio *output*. Windows may
-  therefore show a microphone permission prompt and display the microphone privacy
-  indicator while the app is running. The app captures what your speakers are playing, not
-  what your microphone hears.
+### Where the audio comes from
+
+The app can capture from two kinds of source, and **you choose which**:
+
+- **System audio (the default).** Using the Windows WASAPI loopback interface, the app reads
+  the audio your computer is already playing — what would otherwise go to your speakers. This
+  is the app's primary purpose. It does not involve your microphone.
+- **A hardware input device you select.** You may instead pick an audio input device, such as
+  a line input, an audio interface channel, or a microphone. **If you select a microphone, the
+  app processes audio from that microphone** — because you asked it to. Nothing is recorded or
+  sent anywhere; it is processed live and passed to your output.
+
+### About the microphone permission
+
+The app declares the Windows "microphone" capability. Windows requires this permission for
+audio capture generally, including loopback capture of your system's *output*, so you may see
+a microphone permission prompt and the microphone privacy indicator even when the app is only
+processing system audio and no microphone is involved.
+
+You can see which source is active at any time in the app's input selector, and change it.
 
 ## Data stored on your device
 
