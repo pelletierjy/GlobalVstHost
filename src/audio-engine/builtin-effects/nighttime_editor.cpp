@@ -69,8 +69,12 @@ NightTimeEditor::NightTimeEditor(NightTimeProcessor& processor)
     graph_ = std::make_unique<DynamicsGraph>(processor_);
     addAndMakeVisible(*graph_);
 
+    // fromUTF8 is required for the em dash: juce::String's const char* constructor does not
+    // treat high bytes as UTF-8, so passing them directly renders as mojibake ("â??").
+    // Same pattern as the rate labels in main_window.cpp.
     graph_caption_ = std::make_unique<juce::Label>(
-        "GraphCaption", "High-dynamic example \xe2\x80\x94 before (yellow) vs after (green)");
+        "GraphCaption",
+        juce::String::fromUTF8("High-dynamic example \xe2\x80\x94 before (yellow) vs after (green)"));
     graph_caption_->setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(*graph_caption_);
 

@@ -161,7 +161,46 @@ merit PEGI 12 / ESRB Everyone 10+ or lower. The draft copy above is well inside 
 **Hard requirement: PNG, minimum 1366 × 768, under 50 MB. Maximum 10; 4 recommended.**
 (Source below.)
 
-### The existing README screenshot is too small
+### Current state: three usable screenshots exist
+
+`StorePackaging/Listing/screenshots/` contains three composites at **1920 × 1080**, built
+from real captures placed 1:1 (no upscaling) on a dark backdrop matching the app's own
+palette, with soft shadows:
+
+| File | Shows |
+|---|---|
+| `01-main-window.png` | Main window, chain of both built-ins, meters active, ASIO output |
+| `02-eq-bass-boost.png` | EQ editor open over the main window, bands and bass boost set |
+| `03-master-volume.png` | Master Volume overlay with the level meters running |
+
+These clear the size requirement and are submittable. Regenerate with
+`scratchpad/compose_shots.ps1` if the sources change.
+
+**The status bar is cropped out.** The capture's status strip starts at y=646 in the 848×682
+source (its text sits at rows 661–674), so the main window is trimmed to 646 px tall. That
+removes the `CPU: 16.3 % (peak 16.3 %) ⚠ HIGH` warning and the device-specific
+`Latency: 7.91 ms` readout, while keeping the preset panel's bottom border so the window
+still ends on a real edge rather than a hard cut.
+
+Dropping the latency figure is deliberate beyond aesthetics: it is the app's own readout on
+one particular ASIO interface at 96 kHz / 128 samples, not an independently measured round
+trip, and publishing it invites users to hold you to it.
+
+**Three caveats still baked into these images.** None blocks submission; all argue for
+recapturing once the app-side fixes land:
+
+1. The window title and header read `GlobalVSTHost`, not `Global VST Host` — see below.
+2. A specific audio interface name is visible (`Art Pro (B) (USB IV 3/4)`). Harmless, but
+   generic device names look better.
+3. In `02`, the EQ editor covers the level meters. Reposition it when recapturing.
+
+**A fourth screenshot of the Night-time editor was deliberately excluded.** The available
+capture shows the caption as `High-dynamic example â□□ before…` — a UTF-8 mojibake bug that
+has since been fixed in `nighttime_editor.cpp`. Publishing it would show a defect the app no
+longer has. **Rebuild, then capture the Night-time editor** — it is the most compelling
+effect to show, with its before/after waveform graph.
+
+### The original README screenshot is too small
 
 The screenshot in `docs/README.md` is **989 × 786** — the width fails the 1366 minimum, so
 Partner Center will reject it. Content-wise it is a good shot: it shows the plugin chain with
