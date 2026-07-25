@@ -2,20 +2,24 @@
 
 **Project**: JyGlobalVST  
 **Feature**: Microsoft Store Publication via MSIX Packaging  
-**Implementation Date**: 2026-07-05  
-**Status**: v1.0 (Initial Release)
+**Last verified against code**: 2026-07-24  
+**Status**: packaging works locally; **not submitted, not submittable** — see
+[Partner-Center-Checklist.md](Partner-Center-Checklist.md)
 
 ---
 
 ## Project Scope
 
 ### In Scope (v1)
-- ✓ Windows 10 1909+ and Windows 11 support (x64 only)
-- ✓ MSIX packaging with automatic signing
-- ✓ GitHub Actions CI/CD pipeline
-- ✓ Local testing procedures
-- ✓ Partner Center submission materials
-- ✓ Comprehensive documentation
+- Windows 10 1909+ and Windows 11 support (x64 only) — **done**
+- MSIX packaging via Windows SDK MakeAppx — **done**
+- Self-signed local sideload build for testing — **done, verified end to end**
+- GitHub Actions CI pipeline — **done**, but produces a non-submittable package until the
+  Partner Center identity variables are configured
+- Local testing procedures — **partly automated** (`Test-LocalInstall.ps1`); functional and
+  persistence checks remain manual
+- Partner Center submission materials — **not started**: no screenshots, description, age
+  rating or privacy policy
 
 ### Out of Scope (v2+)
 - 32-bit (x86) and ARM64 architecture support
@@ -38,14 +42,27 @@
 - Microsoft Store native support
 - No cost vs. traditional signing
 
-### 2. Automatic Signing (vs. Purchased Certificates)
+### 2. Self-Signed Local Certificate (vs. Purchased Certificates)
 
-**Decision**: Use free automatic signing from MSIX tools  
-**Rationale**:
-- Zero cost (satisfies project constraint)
-- Development signing for testing
-- Microsoft Store handles production signing
-- Industry-standard practice for Store apps
+**Decision**: sign local test packages with a self-signed certificate generated on demand;
+submit Store packages unsigned.
+
+**How it actually works** — there is no "automatic signing from MSIX tools":
+
+- `Build-MSIX-Local.ps1` creates a self-signed code-signing certificate in
+  `Cert:\CurrentUser\My` whose subject matches the manifest `Publisher` exactly (SignTool
+  requires the match), then signs with SignTool. It reuses the certificate on later runs.
+- Installing that package requires importing the exported `.cer` into
+  `LocalMachine\TrustedPeople` once, which needs elevation.
+- `Build-MSIX.ps1` produces an **unsigned** package. Partner Center applies the Store
+  signature. A developer signature on a submission is not wanted.
+
+**Rationale**: zero cost, no certificate authority needed, and the Store handles production
+signing. The tradeoff is that the local package is not distributable — anyone else would
+have to trust the certificate manually.
+
+No `.pfx` is ever written to disk or committed; the private key stays in the user's
+certificate store.
 
 ### 3. x64 Only (vs. Multi-Architecture)
 
@@ -80,7 +97,9 @@
 
 ### Assumptions Made
 
-1. **Build Environment**: Developer machines have Visual Studio 2022 Community + CMake
+1. **Build Environment**: CMake 3.22+, a Visual Studio C++ toolset (any version providing
+   `VC\Redist\MSVC`), and a Windows 10/11 SDK for MakeAppx/SignTool. Not pinned to VS 2022 —
+   the scripts discover the newest installed SDK and redist at runtime.
 2. **Application Stability**: Core audio functionality is stable and tested
 3. **No Breaking Changes**: API/settings format won't change between releases
 4. **Settings Migration**: Not implementing cross-version settings migration in v1
@@ -172,17 +191,19 @@ Use semantic versioning:
 
 ### Pre-Submission Testing
 
-1. **Unit Tests**: Run existing audio engine tests
-2. **Integration Tests**: Full audio chain with VST3 plugins
-3. **MSIX Validation**: MSAP tool validation (zero errors)
-4. **Local Installation**: Test on clean Windows 10/11 VM
-5. **Functionality Verification**: Core features work in MSIX environment
+1. **Unit / integration tests**: `ctest --test-dir build -C Release`
+2. **Package validation**: `Validate-Package.ps1` — manifest elements, full-trust wiring,
+   logo dimensions and alpha, bundled CRT DLLs
+3. **Local installation**: install the self-signed local build (the Store build cannot be
+   sideloaded), ideally on a clean VM
+4. **Functional verification**: plugin chain with real VST3 plugins, settings and preset
+   persistence across restart, clean uninstall
 
 ### Certification Testing
 
-- Microsoft performs additional security and functionality testing
-- Typical timeline: 24-48 hours
-- Feedback provided if rejections occur
+Microsoft performs its own review. I have no verified figure for current review turnaround —
+rely on the status Partner Center reports for your submission rather than any number quoted
+in this repository.
 
 ---
 
@@ -196,10 +217,23 @@ Use semantic versioning:
 
 ### Capability Declarations
 
-- **Principle of Least Privilege**: Only declare truly necessary capabilities
-- **User Transparency**: Users see permission requests for sensitive operations
-- **Registry Isolation**: Access limited to `HKEY_CURRENT_USER\Software\JyGlobalVST\`
-- **File Access**: Limited to Documents, Music, and AppData folders
+Three declared: `runFullTrust`, `documentsLibrary`, `microphone`. See
+[Capability-Declaration.md](Capability-Declaration.md) for justification and open questions.
+
+Be clear-eyed about what this does and does not constrain: **`runFullTrust` gives the app
+the file-system and registry reach of the launching user.** The other two capabilities do
+not narrow that. The app *by convention* confines itself to:
+
+- `HKCU\Software\JyGlobalVST\AudioDevice` (device GUID)
+- `%AppData%\Roaming\JyGlobalVST\`, `%LocalAppData%\JyGlobalVST\`
+- `%UserProfile%\Documents\JyGlobalVST\Presets\`
+
+That is a property of the code, not a sandbox the platform enforces. MSIX does virtualize
+`%AppData%` and `HKCU` writes for packaged apps, so packaged state is separate from an
+unpackaged build's state.
+
+A `microphone` prompt and the Windows privacy indicator will appear because of the loopback
+capture. Explain this in the Store listing.
 
 ### No Telemetry
 
@@ -215,27 +249,28 @@ Use semantic versioning:
 ### Local Build
 
 ```powershell
-.\StorePackaging\Scripts\Build-MSIX.ps1 -Version 1.0.0.0
+# Installable test package
+.\StorePackaging\Scripts\Build-MSIX-Local.ps1 -Install
+
+# Store submission package (requires the Partner Center identity)
+.\StorePackaging\Scripts\Build-MSIX.ps1 -PackageName "..." -Publisher "..." -PublisherDisplayName "..."
 ```
 
-### CI/CD Build
+### CI Build
 
-1. Create git tag: `git tag v1.0.0.0`
-2. Push tag: `git push origin v1.0.0.0`
-3. GitHub Actions automatically:
-   - Builds MSIX package
-   - Validates package
-   - Creates release with artifacts
+1. Configure repository variables `MSIX_PACKAGE_NAME`, `MSIX_PUBLISHER`,
+   `MSIX_PUBLISHER_DISPLAY_NAME` — without them the workflow warns and builds a
+   non-submittable placeholder package
+2. Tag and push: `git tag v1.0.0.0 && git push origin v1.0.0.0`
+3. GitHub Actions builds, validates the `.msix` and the `.msixbundle`, uploads artifacts,
+   and opens a **draft** release (drafted deliberately: the artifact is unsigned and will
+   not sideload, so it should not be offered as a public download)
 
 ### Store Submission
 
-1. Download .msixbundle from release
-2. Sign into Partner Center
-3. Create new submission
-4. Upload .msixbundle
-5. Fill app details
-6. Submit for certification
-7. Monitor certification progress
+Not yet performed. See [Partner-Center-Submission.md](Partner-Center-Submission.md) for the
+walkthrough and [Partner-Center-Checklist.md](Partner-Center-Checklist.md) for what still
+blocks it.
 
 ---
 

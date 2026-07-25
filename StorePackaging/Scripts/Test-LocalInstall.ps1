@@ -159,9 +159,9 @@ if (-not $SkipUninstall) {
 }
 
 # Summary
-Write-Host "`n" + ("=" * 50)
+Write-Host "`n$('=' * 50)"
 Write-Host "Test Summary" -ForegroundColor Cyan
-Write-Host "=" * 50
+Write-Host $('=' * 50)
 Write-Host "Tests Passed: $testsPassed"
 Write-Host "Tests Failed: $testsFailed"
 

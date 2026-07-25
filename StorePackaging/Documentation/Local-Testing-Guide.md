@@ -9,8 +9,27 @@
 
 - Windows 10 version 1909 (build 18363) or Windows 11
 - 64-bit (x64) architecture
-- Administrator PowerShell access (for installation only)
-- Latest `.msixbundle` file from build output
+- A **self-signed local** package from
+  `Build-MSIX-Local.ps1` (`build/store-packages/local/`), plus its exported `.cer`
+- Administrator PowerShell — needed **once**, only to trust the certificate
+
+> **Test the local build, not the Store build.** The Store package from `Build-MSIX.ps1` is
+> unsigned by design and cannot be sideloaded. Everything below assumes the self-signed
+> local package.
+
+> **Two accounts, two steps.** MSIX installs are per-user. Trusting the certificate needs
+> elevation; `Add-AppxPackage` must run as the account you are logged into. If your elevated
+> shell is a *different* administrator account, the install succeeds silently for that
+> account and the app never appears in your Start menu.
+>
+> ```powershell
+> # ELEVATED, once per certificate
+> Import-Certificate -FilePath 'build\store-packages\local\JyGlobalVST-LocalTest.cer' `
+>                    -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+>
+> # NOT elevated, as the logged-in user
+> Add-AppxPackage -Path 'build\store-packages\local\JyGlobalVST_1.0.0.0_x64.msix'
+> ```
 
 ---
 
@@ -263,13 +282,22 @@
 
 ## Automated Testing Script
 
-Use the provided PowerShell script for automated testing:
+`Test-LocalInstall.ps1` automates scenarios 2, 3 and 6 — install, launch, uninstall:
 
 ```powershell
-.\StorePackaging\Scripts\Test-PackageFull.ps1 -PackagePath "path\to\package.msixbundle"
+.\StorePackaging\Scripts\Test-LocalInstall.ps1 `
+    -PackagePath build\store-packages\local\JyGlobalVST_1.0.0.0_x64.msix
+
+# Keep the package installed for manual verification afterwards
+.\StorePackaging\Scripts\Test-LocalInstall.ps1 -PackagePath ... -SkipUninstall
 ```
 
-This script runs all scenarios above automatically and reports results.
+Scenarios 1, 4 and 5 are not automated: manifest validation is covered by
+`Validate-Package.ps1`, and the functional and persistence checks need a human driving the
+tray UI with real plugins and real audio playing.
+
+There is no `Test-PackageFull.ps1` — an earlier version of this guide referenced one that
+was never written.
 
 ---
 

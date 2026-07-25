@@ -5,13 +5,28 @@
 
 ---
 
+> **This walkthrough has never been executed.** It describes the expected Partner Center
+> flow, but the exact UI labels and step order change over time — treat it as orientation
+> and follow Partner Center's own prompts. Nothing here is a verified transcript.
+>
+> Submission is currently blocked; see
+> [Partner-Center-Checklist.md](Partner-Center-Checklist.md).
+
+---
+
 ## Prerequisites
 
 - [ ] Microsoft Account created
 - [ ] Partner Center account active (partner.microsoft.com)
 - [ ] Publisher identity verified
 - [ ] App name reserved in Partner Center
-- [ ] Validated .msixbundle file from build output
+- [ ] **Package rebuilt with the Partner Center identity.** Copy `Identity/@Name`,
+      `Identity/@Publisher` and the publisher display name from
+      Partner Center → your app → Product management → Product identity, then run
+      `Build-MSIX.ps1 -PackageName ... -Publisher ... -PublisherDisplayName ...`.
+      The placeholder identity in the repo is rejected at upload.
+- [ ] `Validate-Package.ps1` passes on that `.msixbundle`
+- [ ] Package is **unsigned** — Partner Center applies the Store signature
 - [ ] All materials from Partner-Center-Checklist.md prepared
 
 ---
@@ -35,7 +50,8 @@
 
 1. Go to "Packages" section
 2. Click "Browse files"
-3. Select your `.msixbundle` file from `build/store-packages/`
+3. Select your `.msixbundle` file from `build/store-packages/store/`
+   (not `build/store-packages/local/` — that one is the self-signed test build)
 4. Wait for upload to complete
 
 ### 4. Fill App Details
@@ -83,7 +99,9 @@ Address any errors before proceeding.
 2. Click "Submit for certification"
 3. Confirm submission
 
-**Timeline**: 24-48 hours typical for certification review
+**Timeline**: I have no verified figure for current certification review times. Partner
+Center reports live status for your submission — rely on that rather than any duration
+quoted in this repository.
 
 ### 8. Monitor Certification
 

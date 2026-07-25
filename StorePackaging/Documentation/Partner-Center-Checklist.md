@@ -2,9 +2,22 @@
 
 **Application**: JyGlobalVST  
 **Version**: 1.0.0.0  
-**Date**: 2026-07-05
+**Checklist reviewed against code**: 2026-07-24
 
 Use this checklist to prepare all materials for Microsoft Partner Center submission.
+
+> **Current status: not submittable.** Three things block any submission today:
+>
+> 1. **No Partner Center account or reserved app name**, so the manifest still carries a
+>    placeholder identity. `Build-MSIX.ps1` refuses to build a Store package until real
+>    values are supplied.
+> 2. **No listing materials** — no screenshots, description, age rating or privacy policy.
+> 3. **An unresolved policy question**: whether a packaged full-trust app that loads
+>    arbitrary user-supplied VST3 DLLs passes certification. There is no verified source on
+>    this. Check it first — a negative answer invalidates everything else here.
+>
+> What *is* done: the package builds, validates, installs, launches and works. See
+> [Certification-Reference.md](Certification-Reference.md) for the verified/unverified split.
 
 ---
 
@@ -36,10 +49,14 @@ Use this checklist to prepare all materials for Microsoft Partner Center submiss
 - [ ] Version number format: `Major.Minor.Build.Revision` (e.g., 1.0.0.0)
 - [ ] Version number incremented from previous release
 - [ ] AppxManifest.xml validates without errors
-- [ ] `.msixbundle` file generated successfully
-- [ ] Package size < 500MB (typical: 50-200MB)
+- [ ] `Identity` carries the real Partner Center values, not the placeholders
+- [ ] `.msixbundle` generated in `build/store-packages/store/`
+- [ ] Package is **unsigned** (Partner Center signs Store submissions)
 - [ ] Architecture: x64 only
 - [ ] Minimum OS: Windows 10 1909 (10.0.18363.0) or later
+
+Current package size is ~3.5 MB, well inside any Store limit. Confirm the current maximum
+against Partner Center if that ever changes materially.
 
 ---
 
@@ -60,14 +77,18 @@ Use this checklist to prepare all materials for Microsoft Partner Center submiss
 
 ## Capabilities & Declarations
 
-### Audio Capabilities
-- [ ] `microphone` - Declared and justified (WASAPI loopback audio capture)
-- [ ] `audioLibrary` - Declared if app accesses audio files
+The manifest declares exactly three capabilities. See
+[Capability-Declaration.md](Capability-Declaration.md) for the code justification of each.
 
-### File & Storage
-- [ ] `documentsLibrary` - Declared for preset/configuration storage
-- [ ] `registryRead` - Declared if app reads settings from registry
-- [ ] `registryWrite` - Declared if app persists settings to registry
+- [ ] `rescap:runFullTrust` - mandatory for a packaged Win32 desktop app
+- [ ] `DeviceCapability microphone` - WASAPI loopback capture. **Requirement unverified**:
+      capture may work under `runFullTrust` alone. Be ready to explain to a reviewer that
+      loopback records system output, not microphone input
+- [ ] `uap:documentsLibrary` - **redundant under `runFullTrust`; recommend removing**
+      before submission
+
+Do not add `registryRead` or `registryWrite` — those are not real MSIX capability names.
+`HKEY_CURRENT_USER` access under full trust needs no declaration.
 
 ### Additional
 - [ ] No over-declared capabilities (minimizes rejection risk)
@@ -116,13 +137,14 @@ Use this checklist to prepare all materials for Microsoft Partner Center submiss
 
 ## Pre-Submission Validation
 
-- [ ] MSAP validation passed (zero errors)
-- [ ] Manifest schema validation passed
-- [ ] Local installation test passed (Windows 10/11)
+- [ ] `Validate-Package.ps1` passes with zero errors on the `.msixbundle` you will upload
+- [ ] Manifest schema validation passed (implicit — MakeAppx fails the pack otherwise)
+- [ ] Local installation test passed (Windows 10/11) using a **self-signed local** build;
+      the Store package is unsigned and will not sideload
 - [ ] Application launch test passed
-- [ ] Basic functionality verified
+- [ ] Plugin chain exercised with real VST3 plugins
+- [ ] Settings and presets persist across restart
 - [ ] Uninstall verification passed
-- [ ] No errors in validation script output
 
 ---
 
@@ -189,10 +211,9 @@ Use this checklist to prepare all materials for Microsoft Partner Center submiss
 - Check that all icons exist in manifest references
 
 **If rejected for "manifest errors"**:
-- Run MSAP validation locally
-- Fix any schema errors
-- Validate XML structure
-- Re-submit
+- Run `Validate-Package.ps1` locally
+- Rebuild — MakeAppx reports the offending line and reason on any schema violation
+- Re-submit with an incremented version
 
 ---
 

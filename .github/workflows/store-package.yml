@@ -5,6 +5,22 @@ on:
     tags:
       - 'v*.*.*'
       - 'store-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version (Major.Minor.Build.Revision)'
+        required: true
+        default: '1.0.0.0'
+
+# Package identity comes from repository variables (Settings > Actions > Variables).
+# These are not secrets - they are embedded in every published package.
+#   MSIX_PACKAGE_NAME           Partner Center Identity/@Name, e.g. 12345Contoso.JyGlobalVST
+#   MSIX_PUBLISHER              Partner Center Identity/@Publisher, e.g. CN=1B2C3D4E-...
+#   MSIX_PUBLISHER_DISPLAY_NAME Partner Center seller display name
+#
+# If they are unset the workflow still runs, but builds with the placeholder identity
+# and marks the artifact as NOT submittable. That keeps the pipeline testable before a
+# Partner Center account exists.
 
 jobs:
   build-msix:
@@ -17,85 +33,100 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from tag
+      - name: Resolve version
         id: version
-        shell: powershell
+        shell: pwsh
         run: |
-          $tag = "${{ github.ref }}".Replace("refs/tags/", "")
-          # Convert v1.2.3 to 1.2.3.0
-          $version = $tag -replace '^v', ''
-          if ($version -notmatch '\d+\.\d+\.\d+\.\d+') {
-            $version = "$version.0"
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+              $version = '${{ inputs.version }}'
+          } else {
+              # refs/tags/v1.2.3 or refs/tags/store-v1.2.3 -> 1.2.3
+              $version = '${{ github.ref }}' -replace '^refs/tags/', '' -replace '^(store-)?v', ''
           }
-          Write-Output "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "Version: $version"
+          # Normalise to four components
+          $parts = $version.Split('.')
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $version = ($parts[0..3] -join '.')
 
-      - name: Setup Visual Studio
-        uses: microsoft/setup-msbuild@v1.1
+          if ($version -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+              Write-Host "::error::Could not derive a valid version from '${{ github.ref }}' (got '$version')"
+              exit 1
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Version: $version"
 
       - name: Install CMake
         uses: lukka/get-cmake@latest
-        with:
-          cmake-version: latest
 
-      - name: Build MSIX Package
-        shell: powershell
+      - name: Build Store package
+        id: build
+        shell: pwsh
+        env:
+          MSIX_PACKAGE_NAME: ${{ vars.MSIX_PACKAGE_NAME }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}
         run: |
-          .\StorePackaging\Scripts\Build-MSIX.ps1 `
-            -Version "${{ steps.version.outputs.version }}" `
-            -Configuration Release `
-            -Architecture x64
-
-      - name: Validate Package
-        shell: powershell
-        run: |
-          $packages = Get-ChildItem -Path "build\store-packages" -Filter "*.msixbundle"
-          if ($packages) {
-            .\StorePackaging\Scripts\Validate-Package.ps1 -PackagePath $packages[0].FullName
-          } else {
-            Write-Error "No MSIX package found in output directory"
-            exit 1
+          $params = @{
+              Version       = '${{ steps.version.outputs.version }}'
+              Configuration = 'Release'
           }
 
+          if ($env:MSIX_PACKAGE_NAME -and $env:MSIX_PUBLISHER) {
+              $params.PackageName          = $env:MSIX_PACKAGE_NAME
+              $params.Publisher            = $env:MSIX_PUBLISHER
+              $params.PublisherDisplayName = $env:MSIX_PUBLISHER_DISPLAY_NAME
+              "submittable=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              Write-Host "Building with Partner Center identity: $env:MSIX_PACKAGE_NAME"
+          } else {
+              $params.AllowPlaceholderIdentity = $true
+              "submittable=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              Write-Host '::warning::MSIX_PACKAGE_NAME / MSIX_PUBLISHER repository variables are not set. Building with the placeholder identity - this package CANNOT be submitted to the Microsoft Store.'
+          }
+
+          .\StorePackaging\Scripts\Build-MSIX.ps1 @params
+
+      # Build-MSIX.ps1 already runs Validate-Package.ps1 on the .msix and fails the build
+      # on error. Validate the bundle too, since that is the artifact that gets uploaded.
+      - name: Validate bundle
+        shell: pwsh
+        run: |
+          $bundle = Get-ChildItem -Path 'build\store-packages\store' -Filter '*.msixbundle' | Select-Object -First 1
+          if (-not $bundle) {
+              Write-Host '::error::No .msixbundle produced'
+              exit 1
+          }
+          .\StorePackaging\Scripts\Validate-Package.ps1 -PackagePath $bundle.FullName
+
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        if: success()
+        uses: actions/upload-artifact@v4
         with:
           name: msix-package-${{ steps.version.outputs.version }}
-          path: build/store-packages/
+          path: |
+            build/store-packages/store/*.msix
+            build/store-packages/store/*.msixbundle
+            build/store-packages/store/AppxManifest.xml
           retention-days: 30
+          if-no-files-found: error
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: success()
+      # Draft, not published: the artifact is an unsigned Store submission package, and
+      # publishing it as a public release invites people to sideload something that will
+      # not install without the Store signature.
+      - name: Create draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
-          files: build/store-packages/*.msixbundle
-          draft: false
-          prerelease: false
+          files: build/store-packages/store/*.msixbundle
+          draft: true
           body: |
             # JyGlobalVST MSIX Package v${{ steps.version.outputs.version }}
 
-            This release contains the MSIX package ready for Microsoft Store submission.
+            Unsigned MSIX bundle for Microsoft Store submission. Partner Center applies
+            the Store signature - this file will not sideload as-is. For a locally
+            installable build see `StorePackaging/Scripts/Build-MSIX-Local.ps1`.
 
-            ## Files
-            - `JyGlobalVST_${{ steps.version.outputs.version }}_x64.msixbundle` - Ready for Store submission
+            **Submittable to the Store:** ${{ steps.build.outputs.submittable }}
 
-            ## Next Steps
-            1. Download the .msixbundle file
-            2. Review [Partner Center Submission Guide](https://github.com/${{ github.repository }}/blob/main/StorePackaging/Documentation/Partner-Center-Submission.md)
-            3. Upload to Microsoft Partner Center
-
-            See [MSIX Build Guide](https://github.com/${{ github.repository }}/blob/main/StorePackaging/Documentation/MSIX-Build-Guide.md) for details.
+            Submission steps and remaining requirements:
+            `StorePackaging/Documentation/Partner-Center-Checklist.md`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish workflow status
-        if: always()
-        shell: powershell
-        run: |
-          if (${{ job.status }} -eq 'success') {
-            Write-Host "✅ Build workflow completed successfully" -ForegroundColor Green
-          } else {
-            Write-Host "❌ Build workflow failed" -ForegroundColor Red
-            exit 1
-          }
