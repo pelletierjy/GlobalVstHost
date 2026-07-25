@@ -217,7 +217,7 @@ in this repository.
 
 ### Capability Declarations
 
-Three declared: `runFullTrust`, `documentsLibrary`, `microphone`. See
+Two declared: `runFullTrust` and `microphone` (`documentsLibrary` was removed 2026-07-24). See
 [Capability-Declaration.md](Capability-Declaration.md) for justification and open questions.
 
 Be clear-eyed about what this does and does not constrain: **`runFullTrust` gives the app

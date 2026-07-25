@@ -6,18 +6,26 @@
 
 Use this checklist to prepare all materials for Microsoft Partner Center submission.
 
-> **Current status: not submittable.** Three things block any submission today:
+> **Current status as of 2026-07-24: one hard blocker left.**
 >
-> 1. **No Partner Center account or reserved app name**, so the manifest still carries a
->    placeholder identity. `Build-MSIX.ps1` refuses to build a Store package until real
->    values are supplied.
-> 2. **No listing materials** — no screenshots, description, age rating or privacy policy.
-> 3. **An unresolved policy question**: whether a packaged full-trust app that loads
->    arbitrary user-supplied VST3 DLLs passes certification. There is no verified source on
->    this. Check it first — a negative answer invalidates everything else here.
+> **Blocking:** the **IARC age rating** has not been completed. It is mandatory under policy
+> 11.11 and can only be done inside Partner Center during submission.
 >
-> What *is* done: the package builds, validates, installs, launches and works. See
-> [Certification-Reference.md](Certification-Reference.md) for the verified/unverified split.
+> **Done:** Partner Center identity (`JYPSolutions.GlobalVSTHost`), package builds and
+> validates clean in CI with that identity, privacy policy live at
+> https://pelletierjy.github.io/GlobalVstHost/privacy-policy.html, support email, category,
+> description, search terms, certification notes, and three 1920x1080 screenshots.
+>
+> **Recommended before submitting, not blocking:** capture a fourth screenshot of the
+> Night-time editor (needs a rebuild — the old capture showed a since-fixed mojibake bug),
+> walk the six-step test in Listing/certification-notes.md against the installed package, and
+> confirm preset save/load still works now that `documentsLibrary` has been removed.
+>
+> **Researched, residual risk:** no Store policy prohibits a packaged full-trust app from
+> loading user-supplied VST3 plugins, and MSIX does not block it technically (verified by
+> loading three real plugins inside the package container). But no precedent for a VST host
+> on the Store as MSIX was found, so expect a reviewer question. See
+> [Certification-Reference.md](Certification-Reference.md).
 
 ---
 
@@ -77,15 +85,14 @@ against Partner Center if that ever changes materially.
 
 ## Capabilities & Declarations
 
-The manifest declares exactly three capabilities. See
+The manifest declares exactly two capabilities. See
 [Capability-Declaration.md](Capability-Declaration.md) for the code justification of each.
 
 - [ ] `rescap:runFullTrust` - mandatory for a packaged Win32 desktop app
 - [ ] `DeviceCapability microphone` - WASAPI loopback capture. **Requirement unverified**:
       capture may work under `runFullTrust` alone. Be ready to explain to a reviewer that
       loopback records system output, not microphone input
-- [ ] `uap:documentsLibrary` - **redundant under `runFullTrust`; recommend removing**
-      before submission
+- [x] `uap:documentsLibrary` - **removed 2026-07-24** as redundant under `runFullTrust`
 
 Do not add `registryRead` or `registryWrite` — those are not real MSIX capability names.
 `HKEY_CURRENT_USER` access under full trust needs no declaration.
@@ -110,14 +117,15 @@ Do not add `registryRead` or `registryWrite` — those are not real MSIX capabil
 
 ## Store Listing & Description
 
-- [ ] **Short name**: JyGlobalVST (50 chars or less)
+- [x] **Short name**: Global VST Host (matches the reserved name and manifest DisplayName)
 - [ ] **Long description**: Comprehensive feature overview (200+ chars)
   - Describe core functionality
   - Mention VST3 plugin support
   - Note system audio processing capability
 - [ ] **Release notes**: Feature overview and version info
 - [ ] **Keywords**: Relevant search terms (VST, audio, processor, effects, host)
-- [ ] **Category**: Audio (or appropriate category)
+- [x] **Category**: primary `Music`, secondary `Multimedia design > Music production`.
+      There is no "Audio" category — see Listing/store-listing.md
 - [ ] **Content rating**: Complete IARC form
 
 ---
@@ -130,7 +138,7 @@ Do not add `registryRead` or `registryWrite` — those are not real MSIX capabil
 - [ ] **Availability**: 
   - [ ] Select regions (all regions recommended)
   - [ ] Select languages (English initially recommended)
-- [ ] **Age group**: Select appropriate rating (typically 12+ or 16+)
+- [ ] **Age group**: set by the IARC questionnaire; expect the lowest available rating
 - [ ] **Content declaration**: Mark applicable content (if any)
 
 ---
@@ -176,7 +184,7 @@ Do not add `registryRead` or `registryWrite` — those are not real MSIX capabil
    - Store listings
 6. **Add supplementary content** (screenshots, descriptions)
 7. **Submit for certification**
-8. **Monitor review status**: Typically 24-48 hours
+8. **Monitor review status** in Partner Center (no reliable published turnaround figure)
 9. **Respond to feedback** if rejections occur
 10. **Publish** when approved
 

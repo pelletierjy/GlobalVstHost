@@ -46,8 +46,13 @@
   </Applications>
 
   <Capabilities>
+    <!-- runFullTrust: mandatory for a packaged Win32 desktop app (EntryPoint below).
+         microphone: required by Windows for audio capture, including WASAPI loopback of
+         the system's own output, and for a user-selected hardware input device.
+         documentsLibrary was previously declared for preset files in Documents; it was
+         removed as redundant - runFullTrust already permits that file access, and an
+         unnecessary declaration invites over-declaration questions under policy 10.6. -->
     <rescap:Capability Name="runFullTrust" />
-    <uap:Capability Name="documentsLibrary" />
     <DeviceCapability Name="microphone" />
   </Capabilities>
 

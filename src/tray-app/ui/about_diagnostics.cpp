@@ -31,7 +31,7 @@ juce::String buildDiagnosticsText(EngineHostMode mode,
                                   const DiagnosticSnapshot& snap)
 {
     juce::String msg;
-    msg << "GlobalVSTHost " << version << "\n\n";
+    msg << "Global VST Host " << version << "\n\n";
     msg << "Engine host mode: " << hostModeString(mode) << "\n";
     msg << "Current output: " << snap.current_output_friendly_name << "\n";
     msg << "Current input: " << snap.current_input_friendly_name << "\n";
@@ -69,7 +69,7 @@ public:
             addAndMakeVisible(icon_component_.get());
         }
 
-        title_label_ = std::make_unique<juce::Label>(juce::String(), "GlobalVSTHost");
+        title_label_ = std::make_unique<juce::Label>(juce::String(), "Global VST Host");
         juce::FontOptions fontOpts;
         juce::Font titleFont{fontOpts};
         titleFont.setHeight(20.0f);

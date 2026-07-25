@@ -76,8 +76,9 @@ expects for a single-architecture desktop app before uploading.
 
 ### Over-declared capabilities
 
-Declare only what is used. **This project's status:** `documentsLibrary` is declared but
-redundant under `runFullTrust` — recommend removing it. See
+Declare only what is used. **This project's status: resolved.** `documentsLibrary` was
+removed on 2026-07-24 as redundant under `runFullTrust`; the manifest now declares only
+`runFullTrust` and `microphone`. See
 [Capability-Declaration.md](Capability-Declaration.md).
 
 ### Identity mismatch

@@ -1144,7 +1144,9 @@ void SettingsButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, 
 }
 
 MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
-    : juce::DocumentWindow("GlobalVSTHost", kBgDeep, juce::DocumentWindow::closeButton)
+    // MUST stay identical to kWindowTitle in main.cpp - the single-instance check
+    // locates a running instance by exact window caption via FindWindowW.
+    : juce::DocumentWindow("Global VST Host", kBgDeep, juce::DocumentWindow::closeButton)
     , engine_(std::move(engine))
 {
     StartupLog("constructor start");
@@ -1460,7 +1462,7 @@ void MainWindow::createTrayIcon()
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = kTrayIconMsg;
     nid.hIcon  = initial != nullptr ? initial : LoadIcon(nullptr, IDI_APPLICATION);
-    wcscpy_s(nid.szTip, L"GlobalVSTHost");
+    wcscpy_s(nid.szTip, L"Global VST Host");
 
     if (Shell_NotifyIcon(NIM_ADD, &nid))
     {
@@ -1579,7 +1581,7 @@ void MainWindow::showTrayContextMenu()
     AppendMenu(tray_menu_, MF_STRING | flags, 4, L"Start minimized to tray");
     AppendMenu(tray_menu_, MF_SEPARATOR, 0, nullptr);
 
-    AppendMenu(tray_menu_, MF_STRING, 1, L"Show GlobalVSTHost");
+    AppendMenu(tray_menu_, MF_STRING, 1, L"Show Global VST Host");
     AppendMenu(tray_menu_, MF_SEPARATOR, 0, nullptr);
 
     if (audio_running_)
@@ -1944,7 +1946,7 @@ void MainWindow::buildUI()
     }
     logo_comp->setSize(36, 36);
 
-    title_label_ = new juce::Label(juce::String(), "GlobalVSTHost");
+    title_label_ = new juce::Label(juce::String(), "Global VST Host");
     juce::FontOptions fontOpts;
     juce::Font titleFont{fontOpts};
     titleFont.setHeight(20.0f);
@@ -2548,7 +2550,7 @@ void MainWindow::handleSavePreset()
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = nullptr;
-    ofn.lpstrFilter = L"GlobalVSTHost Presets (*.jvst)\0*.jvst\0";
+    ofn.lpstrFilter = L"Global VST Host Presets (*.jvst)\0*.jvst\0";
     ofn.lpstrFile = file_name;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_OVERWRITEPROMPT;
@@ -2582,7 +2584,7 @@ void MainWindow::handleLoadPreset()
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = nullptr;
-    ofn.lpstrFilter = L"GlobalVSTHost Presets (*.jvst)\0*.jvst\0";
+    ofn.lpstrFilter = L"Global VST Host Presets (*.jvst)\0*.jvst\0";
     ofn.lpstrFile = file_name;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;

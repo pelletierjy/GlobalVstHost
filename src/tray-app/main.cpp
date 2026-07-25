@@ -18,7 +18,10 @@
 
 namespace jyglobalvst::tray {
 
-constexpr wchar_t kWindowTitle[] = L"GlobalVSTHost";
+// MUST stay identical to the DocumentWindow title in main_window.cpp: the
+// single-instance check below locates the running instance with
+// FindWindowW(nullptr, kWindowTitle), which matches on the exact window caption.
+constexpr wchar_t kWindowTitle[] = L"Global VST Host";
 
 class TrayApplication : public juce::JUCEApplication
 {
@@ -27,7 +30,7 @@ public:
 
     const juce::String getApplicationName() override
     {
-        return "GlobalVSTHost";
+        return "Global VST Host";
     }
 
     const juce::String getApplicationVersion() override

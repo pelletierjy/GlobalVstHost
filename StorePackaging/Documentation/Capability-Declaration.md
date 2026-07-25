@@ -13,15 +13,16 @@
 
 ## What is actually declared
 
-Exactly three capabilities, as of the manifest in this directory:
+Exactly two capabilities, as of the manifest in this directory:
 
 ```xml
 <Capabilities>
   <rescap:Capability Name="runFullTrust" />
-  <uap:Capability Name="documentsLibrary" />
   <DeviceCapability Name="microphone" />
 </Capabilities>
 ```
+
+`documentsLibrary` was declared until 2026-07-24 and has been **removed** — see below.
 
 ---
 
@@ -46,11 +47,11 @@ Center expects — **confirm against Partner Center's current guidance before su
 
 ---
 
-### 2. `documentsLibrary`
+### 2. `documentsLibrary` — REMOVED 2026-07-24
 
 **Namespace**: `uap:`
 
-**Current status**: **declared but redundant. Recommend removing.**
+**Current status**: **no longer declared.**
 
 **What the code does**: presets live in
 `%UserProfile%\Documents\JyGlobalVST\Presets\*.jvst`, created and scanned by:
@@ -63,9 +64,15 @@ which `runFullTrust` already permits. `documentsLibrary` exists for UWP-style br
 and historically pairs with a declared file-type association. Declaring it here adds
 nothing functional and invites over-declaration questions during certification.
 
-**Recommendation**: remove it, rebuild, and confirm preset save/load still works (it
-should — no code path depends on the capability). Left in place for now only because
-removing it is a behavioural change that deserves its own verification pass.
+**Removed on 2026-07-24.** The package was rebuilt and reinstalled; the installed manifest
+now declares only `runFullTrust` and `microphone`, and the app still launches.
+
+> **NOT YET VERIFIED: preset save/load after the removal.** No code path references the
+> capability, and `runFullTrust` covers Documents access, so this is expected to work — but
+> it needs a human to open the app, save a preset to
+> `%UserProfile%\Documents\JyGlobalVST\Presets\`, and load it back. If preset I/O fails
+> after this change, re-add `<uap:Capability Name="documentsLibrary" />` and record here why
+> it turned out to be load-bearing.
 
 ---
 
@@ -117,7 +124,7 @@ value is stored in the package's private hive rather than the user's real one.
 |---|---|---|
 | System audio capture (WASAPI loopback) | `src/audio-engine/routing/wasapi_capture.cpp` | `microphone` (needs verification — may be covered by `runFullTrust`) |
 | VST3 plugin hosting, in-process | `src/audio-engine/vst-host/` | `runFullTrust` |
-| Preset files in Documents | `src/tray-app/presets/preset_folder_*.cpp` | `runFullTrust` (`documentsLibrary` redundant) |
+| Preset files in Documents | `src/tray-app/presets/preset_folder_*.cpp` | `runFullTrust` (`documentsLibrary` removed as redundant) |
 | Settings JSON in `%AppData%` | `src/tray-app/settings/roaming_settings.cpp` | `runFullTrust` |
 | Device GUID in `HKCU` | `src/shared/platform/windows_device.cpp` | `runFullTrust` (no capability needed) |
 
@@ -149,7 +156,7 @@ in listing materials.
 
 ## Before you submit
 
-- [ ] Decide on `documentsLibrary` (recommend: remove) and rebuild
+- [x] `documentsLibrary` removed 2026-07-24 — **still need to confirm preset save/load works**
 - [ ] Verify the `microphone` requirement for loopback in an app container
 - [ ] Confirm `runFullTrust` justification wording against current Partner Center guidance
 - [ ] Resolve the third-party-plugin-loading policy question
