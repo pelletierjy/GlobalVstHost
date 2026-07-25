@@ -14,9 +14,11 @@ obj/
 *.idb
 ui-test/
 
-# MSIX packaging (Store builds - generated artifacts only)
-StorePackaging/Assets/*.png
-!StorePackaging/Assets/.gitkeep
+# NOTE: StorePackaging/Assets/*.png used to be ignored here as "generated
+# artifacts". They are not generated - no script produces them, and the MSIX
+# package cannot be built without them. Ignoring them meant CI checked out an
+# empty Assets folder and every Store package build failed. They are tracked now;
+# do not re-add an ignore rule for them.
 
 # CMake
 CMakeCache.txt

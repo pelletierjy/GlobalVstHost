@@ -128,10 +128,29 @@ function New-PackagePayload
     Copy-Item -Path $ExePath -Destination (Join-Path $PayloadDir 'JyGlobalVST.exe')
 
     # Assets: *.png only, so stray files (.gitkeep) never reach the package
+    $assetsSrc = Join-Path $StoreDir 'Assets'
+    $sourceAssets = @(Get-ChildItem -Path (Join-Path $assetsSrc '*.png') -ErrorAction SilentlyContinue)
+    if ($sourceAssets.Count -eq 0)
+    {
+        # Fail here with something actionable. This previously surfaced further down as
+        # "The property 'Count' cannot be found on this object", which says nothing about
+        # the real problem.
+        Write-Fail @"
+No PNG assets found in $assetsSrc
+
+The MSIX package requires the logo assets (StoreLogo, Square44x44Logo,
+Square150x150Logo). Without them MakeAppx cannot pack a valid package.
+
+If this is a fresh clone or a CI runner, check that the assets are committed -
+they were once excluded by a .gitignore rule that wrongly treated them as
+generated artifacts.
+"@
+    }
+
     $assetsDst = Join-Path $PayloadDir 'Assets'
     New-Item -ItemType Directory -Force -Path $assetsDst | Out-Null
-    Copy-Item -Path (Join-Path $StoreDir 'Assets\*.png') -Destination $assetsDst
-    $assetCount = (Get-ChildItem $assetsDst).Count
+    Copy-Item -Path $sourceAssets.FullName -Destination $assetsDst
+    $assetCount = @(Get-ChildItem $assetsDst).Count
 
     # Manifest, with version and (optionally) identity stamped in
     $xml = Get-Content (Join-Path $StoreDir 'AppxManifest.xml') -Raw
