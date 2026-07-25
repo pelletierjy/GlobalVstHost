@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Global VST Host</title>
+<meta name="description" content="Privacy policy for Global VST Host by JYP Solutions. No data collection, no network activity, no telemetry.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1b1b1f;
+    --muted: #55555f;
+    --rule: #e2e2e8;
+    --accent: #1a4f8a;
+    --panel: #f6f7f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a;
+      --fg: #e8e8ec;
+      --muted: #a2a2ad;
+      --rule: #2d2f34;
+      --accent: #7fb3ee;
+      --panel: #1e2024;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2.5rem 1.25rem 4rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 .35rem; }
+  h2 {
+    font-size: 1.2rem;
+    margin: 2.5rem 0 .75rem;
+    padding-bottom: .35rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .meta { color: var(--muted); font-size: .9rem; margin: 0 0 2rem; }
+  .lede {
+    background: var(--panel);
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.15rem;
+    border-radius: 4px;
+    margin: 0 0 1rem;
+  }
+  .lede p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); }
+  ul { padding-left: 1.35rem; }
+  li { margin: .35rem 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: .875em;
+    background: var(--panel);
+    padding: .12em .4em;
+    border-radius: 3px;
+    overflow-wrap: anywhere;
+  }
+  .table-wrap { overflow-x: auto; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 30rem; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .875rem; }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>Privacy Policy — Global VST Host</h1>
+  <p class="meta">Publisher: JYP Solutions &middot; Last updated: 24 July 2026</p>
+
+  <div class="lede">
+    <p><strong>Global VST Host does not collect, transmit, or share any personal information.</strong>
+    It has no network functionality, no telemetry, no analytics, and no crash reporting.
+    All data it creates stays on your device.</p>
+  </div>
+
+  <h2>Information we collect</h2>
+  <p><strong>None.</strong> No personal information is collected, stored off-device, or transmitted anywhere.</p>
+  <p>There is no account, no sign-in, no user identifier sent to us or to any third party, and no
+  usage or diagnostic reporting.</p>
+
+  <h2>Network activity</h2>
+  <p>Global VST Host performs <strong>no network communication of any kind</strong>. It does not
+  contact our servers, check for updates online, load remote content, or connect to third-party
+  services.</p>
+  <p>The application binary imports no HTTP, TLS, or socket library, so it is not capable of network
+  communication as shipped.</p>
+
+  <h2>Audio processing</h2>
+  <p>Global VST Host captures the audio your computer is already playing, using the Windows WASAPI
+  loopback interface, processes it, and sends it to an audio output device you choose.</p>
+  <p>Two points worth being explicit about:</p>
+  <ul>
+    <li><strong>Audio is processed in memory only and is never recorded, saved, or transmitted.</strong>
+    It exists only for as long as it takes to pass through the processing chain, in real time.</li>
+    <li><strong>The app declares the Windows &ldquo;microphone&rdquo; capability, but it does not
+    listen to your microphone.</strong> Windows requires this permission for audio capture generally,
+    and it is the permission that covers loopback capture of your system&rsquo;s audio
+    <em>output</em>. Windows may therefore show a microphone permission prompt and display the
+    microphone privacy indicator while the app is running. The app captures what your speakers are
+    playing, not what your microphone hears.</li>
+  </ul>
+
+  <h2>Data stored on your device</h2>
+  <p>Global VST Host stores configuration data locally so your settings persist between sessions.
+  None of it leaves your computer.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>What</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>Preferences: audio devices, buffer size, energy saver setting</td><td><code>%AppData%\Roaming\JyGlobalVST\settings.json</code></td></tr>
+        <tr><td>Plugin scan cache, auto-saved effect chain, window position</td><td><code>%LocalAppData%\JyGlobalVST\</code></td></tr>
+        <tr><td>Effect chain presets you save</td><td><code>%UserProfile%\Documents\JyGlobalVST\Presets\*.jvst</code></td></tr>
+        <tr><td>An identifier used to remember your chosen audio device</td><td><code>HKEY_CURRENT_USER\Software\JyGlobalVST\AudioDevice</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The device identifier is generated locally, is meaningless outside your machine, and is never
+  transmitted.</p>
+  <p>Because the app is distributed as an MSIX package, Windows may store some of the above in a
+  per-application location rather than the literal paths shown. This does not change what is stored
+  or who can see it.</p>
+
+  <h2>Third-party VST3 plugins</h2>
+  <p>Global VST Host can load VST3 audio plugins that <strong>you</strong> have already installed on
+  your computer. This is the app&rsquo;s primary purpose.</p>
+  <ul>
+    <li>The app does not download, install, or distribute plugins. It only loads plugins already
+    present on your system, from standard VST3 locations or a folder you select.</li>
+    <li>Plugins run inside the app&rsquo;s process. <strong>A third-party plugin is software from its
+    own publisher, governed by that publisher&rsquo;s own privacy policy and terms — not by this
+    one.</strong> We have no control over and take no responsibility for what a third-party plugin
+    does, including any data it may collect or transmit.</li>
+    <li>If you are concerned about a specific plugin&rsquo;s behaviour, consult its publisher&rsquo;s
+    privacy policy, or do not add it to the chain.</li>
+  </ul>
+
+  <h2>Children&rsquo;s privacy</h2>
+  <p>Global VST Host is a general-purpose audio utility. It collects no information from anyone,
+  including children.</p>
+
+  <h2>Uninstalling and removing your data</h2>
+  <p>Uninstall through Windows Settings &rarr; Apps &rarr; Installed apps. To remove remaining
+  configuration, delete the folders listed under &ldquo;Data stored on your device&rdquo;. Presets you
+  saved in your Documents folder are deliberately left in place so you do not lose your own work;
+  delete that folder if you want them gone.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If the app&rsquo;s data practices change — for example if an online update check is ever added —
+  this policy will be updated before that version is released, and the &ldquo;Last updated&rdquo; date
+  above will change.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy:
+  <a href="mailto:g.vst.host.help@outlook.com">g.vst.host.help@outlook.com</a></p>
+
+  <footer>
+    Global VST Host is published by JYP Solutions.
+  </footer>
+
+</main>
+</body>
+</html>

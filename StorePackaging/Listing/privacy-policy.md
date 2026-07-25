@@ -103,7 +103,7 @@ above will change.
 
 ## Contact
 
-Questions about this policy: **&lt;SUPPORT EMAIL — FILL IN&gt;**
+Questions about this policy: **g.vst.host.help@outlook.com**
 
 ---
 
@@ -120,11 +120,9 @@ Questions about this policy: **&lt;SUPPORT EMAIL — FILL IN&gt;**
   `src/shared/platform/windows_device.cpp`.
 - *Loopback capture*: `src/audio-engine/routing/wasapi_capture.cpp`.
 
-**Two things to fix before publishing:**
+**One thing to watch before publishing:**
 
-1. Fill in the support email. Partner Center requires support contact information, and
-   Store Policy 10.14 requires it to be accurate and current for Company accounts.
-2. `src/tray-app/updates/update_check.cpp` implements an HTTPS update check using WinHTTP.
+1. `src/tray-app/updates/update_check.cpp` implements an HTTPS update check using WinHTTP.
    It currently compiles but is **dead code** — nothing calls it, and the linker strips it,
    which is why the binary has no `winhttp` import. **If anyone wires it up, this policy
    becomes false.** Either delete the file or gate it behind an explicit, documented

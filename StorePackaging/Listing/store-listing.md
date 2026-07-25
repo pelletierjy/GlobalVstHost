@@ -109,12 +109,47 @@ loudness
 
 ## Category
 
-**Recommended:** `Music` (or `Music & audio`, depending on the current category list).
+**There is no category named "Audio."** Verified against Microsoft's published taxonomy
+(see Sources). The full category list has no audio entry at all.
 
-Reasoning: policy 10.1.4 wants the most appropriate category, and this is an audio
-processing tool for listening rather than a general system utility. `Utilities & tools` is a
-defensible second choice if the Music category is dominated by players and streaming apps.
-**Verify the exact category names in Partner Center** — I have not seen the current list.
+**Recommended primary:** `Music`
+Microsoft's own description is *"Apps for listening, recording, creating, or performing
+music, music videos."* **Listening** is the operative word — the headline use case in
+`specs/006-builtin-plugins/spec.md` is watching a movie late at night at consistent volume.
+That is a listening tool, not a production tool.
+
+**Recommended secondary:** `Multimedia design` → subcategory `Music production`
+Secondary category draws from the same list. This is where someone hunting for a plugin host
+would look. Using it as secondary rather than primary is deliberate: the `Multimedia design`
+parent is described as *"tools for creating or editing graphics, art, design"*, so browsers
+there expect DAWs and editors, and the app would look out of place as a primary listing.
+
+`Music` has no subcategories, so there is nothing further to pick for the primary.
+
+**Rejected:** `Utilities + tools` — described as *"apps which assist user in solving problems
+or completing specific tasks"* with examples like file managers and calculators, and its only
+subcategories are `Backup + manage` and `File managers`. Nothing audio-related.
+`Personalization → Ringtones + sounds` is also a poor fit.
+
+One caveat: the taxonomy above is published on the MSI/EXE submission page. The category list
+is Store-wide rather than package-format-specific, but confirm the labels match what the
+packaged-app submission form actually shows.
+
+## Age rating
+
+**You cannot opt out of a rating.** Policy 11.11 requires obtaining one by completing the
+IARC questionnaire during submission. There is no "no age restriction" option.
+
+What you can reasonably expect: given no user-generated content, no communication features,
+no purchases, no gambling and no objectionable content, the questionnaire should return the
+**lowest** rating available (PEGI 3 / ESRB Everyone or equivalent). That is effectively "no
+age restriction" as far as customers are concerned.
+
+Answer the questionnaire honestly yourself — 11.11 makes you responsible for its accuracy,
+and a rating that does not match the app is a rejection cause.
+
+Note also policy 11.1: all listing metadata (description, screenshots, icon) must itself
+merit PEGI 12 / ESRB Everyone 10+ or lower. The draft copy above is well inside that.
 
 ## Screenshots
 
@@ -174,9 +209,12 @@ before you push for visibility.
 
 ### Needs your decision before publishing
 
-- **Support email and support URL.** Required in Partner Center. Also referenced by the
-  privacy policy, which currently has a placeholder.
-- **Category name** — confirm against the live list.
+- ~~**Support email.**~~ Set: `g.vst.host.help@outlook.com`. Policy 10.14 requires support
+  contact information to be *"accurate and current"* for Company accounts, so make sure that
+  mailbox is actually monitored — it is displayed publicly on the Store product page in some
+  regions.
+- ~~**Category**~~ Resolved: primary `Music`, secondary `Multimedia design → Music
+  production`. No "Audio" category exists. See the Category section above.
 - **Audio level meters.** The engine produces per-channel input/output peak levels and they
   reach the UI listener (`meter_listener.cpp:65`), but I could not find a visible
   level-meter component in `main_window.cpp` — only the CPU and latency labels. The
@@ -184,6 +222,15 @@ before you push for visibility.
   and says nothing about level meters. **If there is a visible level/VU meter, tell me and
   I will add it back**; if the plumbing is wired but nothing displays it, that is worth
   knowing independently of the listing.
-- **Age rating.** You must complete the IARC questionnaire (11.11). An audio utility with no
-  user-generated content, no communication, and no purchases should rate low, but answer it
-  yourself — I cannot fill it in for you.
+- **Age rating.** Still yours to complete — see the Age rating section above. The expected
+  outcome is the lowest available rating, but the questionnaire is mandatory and you are
+  responsible for its accuracy.
+
+---
+
+## Sources
+
+- [Microsoft Store Policies version 7.19](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies)
+  — 10.1.1, 10.1.3, 10.1.4, 10.2.4, 10.5.1, 10.14, 11.1, 11.11
+- [Categories and subcategories](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/categories-and-subcategories)
+  — the category taxonomy quoted above
