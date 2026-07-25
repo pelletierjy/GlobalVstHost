@@ -66,7 +66,7 @@ DESIGNED FOR EVERYDAY LISTENING
 
 - Choose any audio output on your system, including ASIO devices
 - Save and load effect chains as preset files
-- A status readout showing processing latency and CPU load
+- Stereo input and output level meters, plus a live latency and CPU readout
 - An energy-saver mode that steps back when there is no audio to process
 - A faulty plugin is bypassed and reported rather than taking the app down with it
 
@@ -185,7 +185,9 @@ before you push for visibility.
 | Faulty plugin bypassed, not fatal | SEH guard in `src/audio-engine/vst-host/plugin_scanner.cpp` and the chain's process path |
 | ASIO output supported | `src/audio-engine/routing/asio_transport.cpp` |
 | Save/load presets as `.jvst` files | `main_window.cpp:2551-2562` — file dialog then `engine_->savePreset(...)` |
-| Latency and CPU readout in the status bar | `main_window.cpp:1892` (`"CPU: — %"`), `1987` — status bar takes status, latency and CPU labels |
+| Stereo in/out level meters (peak + RMS) | `main_window.cpp:2865-2868` — `meter_input_l/r_`, `meter_output_l/r_` fed `setLevels(peak_dB, rms_dB)`; frames arrive via `onMeterFrame` (`main_window.h:114`) |
+| Live latency and CPU readout | `main_window.cpp:2931` formats real values (`"Latency: %.2f ms (in %.2f + out %.2f)"`); CPU label at `1892` |
+| Tray-only, no taskbar window | Verified on the installed package: process runs with `MainWindowHandle = 0` until the tray icon is clicked |
 | Energy saver, on by default | `roaming_settings.h:28` — `bool energy_saver_enabled {true}` |
 | **No network communication** | Shipped `JyGlobalVST.exe` imports no `winhttp`/`wininet`/`ws2_32` — confirmed by `dumpbin /dependents` |
 | x64 only, Windows 10 1909+ | `AppxManifest.xml` `MinVersion=10.0.18363.0`, `ProcessorArchitecture=x64` |
@@ -215,13 +217,8 @@ before you push for visibility.
   regions.
 - ~~**Category**~~ Resolved: primary `Music`, secondary `Multimedia design → Music
   production`. No "Audio" category exists. See the Category section above.
-- **Audio level meters.** The engine produces per-channel input/output peak levels and they
-  reach the UI listener (`meter_listener.cpp:65`), but I could not find a visible
-  level-meter component in `main_window.cpp` — only the CPU and latency labels. The
-  description therefore claims a "status readout showing processing latency and CPU load"
-  and says nothing about level meters. **If there is a visible level/VU meter, tell me and
-  I will add it back**; if the plumbing is wired but nothing displays it, that is worth
-  knowing independently of the listing.
+- ~~**Audio level meters.**~~ Resolved: there are four visible meters (stereo input, stereo
+  output) driven with peak and RMS in dB. Claimed in the description.
 - **Age rating.** Still yours to complete — see the Age rating section above. The expected
   outcome is the lowest available rating, but the questionnaire is mandatory and you are
   responsible for its accuracy.
