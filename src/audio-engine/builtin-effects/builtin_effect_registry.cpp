@@ -2,6 +2,7 @@
 #include "builtin_ids.h"
 #include "nighttime_processor.h"
 #include "eq_processor.h"
+#include "volume_leveler_processor.h"
 
 namespace jyglobalvst::engine {
 
@@ -33,6 +34,17 @@ void BuiltinEffectRegistry::registerBuiltins()
         "Fx",
         []() -> std::unique_ptr<juce::AudioPluginInstance> {
             return std::make_unique<EqProcessor>();
+        }
+    });
+
+    // Volume Leveler effect
+    descriptors_.push_back(Descriptor{
+        builtin::VOLUME_LEVELER_UID,
+        "Volume Leveler",
+        "JyGlobalVST",
+        "Fx",
+        []() -> std::unique_ptr<juce::AudioPluginInstance> {
+            return std::make_unique<VolumeLevelerProcessor>();
         }
     });
 }

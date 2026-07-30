@@ -122,6 +122,8 @@ public:
         addAndMakeVisible(controls_.theme_selector);
         addAndMakeVisible(controls_.start_minimized_label);
         addAndMakeVisible(controls_.start_minimized_button);
+        addAndMakeVisible(controls_.tooltips_label);
+        addAndMakeVisible(controls_.tooltips_button);
     }
 
     ~SettingsTab() override
@@ -130,6 +132,8 @@ public:
         removeChildComponent(controls_.theme_selector);
         removeChildComponent(controls_.start_minimized_label);
         removeChildComponent(controls_.start_minimized_button);
+        removeChildComponent(controls_.tooltips_label);
+        removeChildComponent(controls_.tooltips_button);
     }
 
     void resized() override
@@ -146,6 +150,12 @@ public:
         controls_.start_minimized_label->setBounds(row2.removeFromLeft(110));
         row2.removeFromLeft(8);
         controls_.start_minimized_button->setBounds(row2.removeFromLeft(70));
+
+        b.removeFromTop(12);
+        auto row3 = b.removeFromTop(28);
+        controls_.tooltips_label->setBounds(row3.removeFromLeft(110));
+        row3.removeFromLeft(8);
+        controls_.tooltips_button->setBounds(row3.removeFromLeft(70));
     }
 
 private:

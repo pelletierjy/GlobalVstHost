@@ -60,7 +60,7 @@ TEST_F(US3AutoSaveTest, RestoreRecoversBufferSize)
     TestAudioEngineListener fresh_listener;
     fresh_engine.setListener(&fresh_listener);
 
-    EXPECT_EQ(fresh_engine.bufferSize(), 256);  // default before restore
+    EXPECT_EQ(fresh_engine.bufferSize(), 512);  // default before restore
 
     bool restored = store.restore(&fresh_engine);
     EXPECT_TRUE(restored);

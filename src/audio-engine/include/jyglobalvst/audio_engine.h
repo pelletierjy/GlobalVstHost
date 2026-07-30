@@ -107,8 +107,8 @@ public:
     virtual DeviceResolutionSource currentResolutionSource() const = 0;
 
     // --- Buffer / sample-rate ---------------------------------------------
-    // setBufferSize accepts {128, 256, 512, 1024} in WASAPI mode and
-    // {64, 128, 256, 512, 1024} in ASIO mode. Other values throw.
+    // setBufferSize accepts {512, 1024} in WASAPI mode and
+    // {32, 64, 128, 256, 512, 1024} in ASIO mode. Other values throw.
     virtual void setBufferSize(int samples) = 0;
     virtual int bufferSize() const = 0;
     virtual void setSampleRate(double rate) = 0;

@@ -1168,15 +1168,15 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     // Default buffer size and fallback sample rate — overridden by autosave below if
     // present. The VST chain now auto-follows the output device rate; this fallback is
     // only used when no WASAPI output endpoint is available.
-    buffer_selector_->setSelectedId(256, juce::dontSendNotification);
-    engine_->setBufferSize(256);
+    buffer_selector_->setSelectedId(512, juce::dontSendNotification);
+    engine_->setBufferSize(512);
     engine_->setSampleRate(48000.0);
 
     // Restore last session state (device selections, plugin chain, running state).
     restoreFromAutosave();
     StartupLog("restoreFromAutosave done");
 
-    // If no chain was restored, automatically load EQ and Night-Time plugins in bypass mode.
+    // If no chain was restored, automatically load EQ, Night-Time, and Volume Leveler plugins in bypass mode.
     if (engine_->snapshotChain().slots.empty())
     {
         PluginRef nighttime_ref;
@@ -1187,11 +1187,17 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
         eq_ref.vendor = "JyGlobalVST";
         eq_ref.name = "EQ (Bass Boost)";
 
+        PluginRef vl_ref;
+        vl_ref.vendor = "JyGlobalVST";
+        vl_ref.name = "Volume Leveler";
+
         engine_->addPlugin(nighttime_ref, 0);
         engine_->addPlugin(eq_ref, 1);
+        engine_->addPlugin(vl_ref, 2);
         engine_->setBypass(0, true);
         engine_->setBypass(1, true);
-        StartupLog("Default plugins loaded (EQ and Night-Time in bypass mode)");
+        engine_->setBypass(2, true);
+        StartupLog("Default plugins loaded (EQ, Night-Time, and Volume Leveler in bypass mode)");
     }
 
     // T034: If autosave did not restore endpoint selections, fall back to roaming settings.
@@ -1790,9 +1796,9 @@ void MainWindow::buildUI()
     asio_device_label_ = std::make_unique<juce::Label>(juce::String(), "ASIO Device:");
     asio_pair_label_ = std::make_unique<juce::Label>(juce::String(), "Channels:");
     buffer_label_ = std::make_unique<juce::Label>(juce::String(), "Buffer:");
-    input_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "In rate:");
-    output_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "Out rate:");
-    vst_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "VST rate:");
+    input_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "In sampling rate:");
+    output_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "Out sampling rate:");
+    vst_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "VST sampling rate:");
     vol_label_ = std::make_unique<juce::Label>(juce::String(), "Vol:");
 
     // --- Transport mode selector -------------------------------------------
@@ -1926,6 +1932,15 @@ void MainWindow::buildUI()
     start_minimized_button_->setToggleState(rs.start_minimized_to_tray, juce::dontSendNotification);
     start_minimized_button_->addListener(this);
 
+    // --- Tooltips toggle ---------------------------------------------------
+    tooltips_label_ = std::make_unique<juce::Label>(juce::String(), "Tooltips:");
+    tooltips_button_ = std::make_unique<juce::ToggleButton>("enabled");
+    tooltips_button_->setToggleState(rs.tooltips_enabled, juce::dontSendNotification);
+    tooltips_button_->addListener(this);
+
+    // --- Tooltip window (global) -------------------------------------------
+    tooltip_window_ = std::make_unique<juce::TooltipWindow>(this, 800);
+
     // --- Settings button (Gear icon) ----------------------------------------
     about_button_ = std::make_unique<SettingsButton>();
     about_button_->addListener(this);
@@ -2002,6 +2017,7 @@ void MainWindow::buildUI()
                                              juce::dontSendNotification);
 
     updateControlVisibility();
+    applyTooltips();
 }
 
 void MainWindow::refreshDeviceLists()
@@ -2192,6 +2208,13 @@ void MainWindow::buttonClicked(juce::Button* button)
         rs.start_minimized_to_tray = start_minimized_button_->getToggleState();
         roaming_settings_store_.save(rs);
     }
+    else if (button == tooltips_button_.get())
+    {
+        auto rs = roaming_settings_store_.load();
+        rs.tooltips_enabled = tooltips_button_->getToggleState();
+        roaming_settings_store_.save(rs);
+        applyTooltips();
+    }
 }
 
 void MainWindow::sliderValueChanged(juce::Slider* slider)
@@ -2293,9 +2316,6 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             else  // Asio
             {
                 engine_->setWasapiExclusive(false);
-                // ASIO can handle smaller buffer for lower latency
-                buffer_selector_->setSelectedId(128, juce::dontSendNotification);
-                engine_->setBufferSize(128);
                 refreshDeviceLists();
                 if (!asio_device_names_.empty())
                 {
@@ -2339,7 +2359,11 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                 juce::AlertWindow::showMessageBoxAsync(
                     juce::AlertWindow::InfoIcon,
                     "Device Conflict Resolved",
-                    "Output device automatically disconnected to avoid using the same device for input and output.",
+                    "WASAPI loopback requires two separate audio interfaces:\n"
+                    "one for capture (system audio) and one for playback (processed output).\n\n"
+                    "The output device has been disconnected. The input will be muted automatically.\n\n"
+                    "Please connect a separate playback device such as USB headphones, an external display with audio output, a DAC, or similar.\n\n"
+                    "Alternatively, you can install a virtual audio cable such as VB-Cable from https://vb-audio.com/Cable/ ",
                     "OK");
             }
 
@@ -2377,7 +2401,11 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                 juce::AlertWindow::showMessageBoxAsync(
                     juce::AlertWindow::InfoIcon,
                     "Device Conflict Resolved",
-                    "Input device automatically disconnected to avoid using the same device for input and output.",
+                    "WASAPI loopback requires two separate audio interfaces:\n"
+                    "one for capture (system audio) and one for playback (processed output).\n\n"
+                    "The input device has been disconnected. It will be muted automatically.\n\n"
+                    "Please connect a separate playback device such as USB headphones, an external display with audio output, a DAC, or similar.\n\n"
+                    "Alternatively, you can install a virtual audio cable such as VB-Cable from https://vb-audio.com/Cable/ ",
                     "OK");
             }
 
@@ -2472,6 +2500,43 @@ void MainWindow::applyThemeChange(CustomLookAndFeel::ThemeId id)
         content_root_->repaint();
     }
     repaint();
+}
+
+void MainWindow::applyTooltips()
+{
+    const bool enabled = roaming_settings_store_.load().tooltips_enabled;
+    const juce::String empty;
+
+    transport_mode_selector_->setTooltip(enabled ? "Select audio transport: WASAPI (loopback) or ASIO" : empty);
+    input_selector_->setTooltip(enabled ? "Capture source: system audio loopback or a specific input device" : empty);
+    output_selector_->setTooltip(enabled ? "Playback device: where processed audio is sent" : empty);
+    asio_device_selector_->setTooltip(enabled ? "ASIO hardware driver to use" : empty);
+    asio_pair_selector_->setTooltip(enabled ? "Stereo output channel pair" : empty);
+    buffer_selector_->setTooltip(enabled ? "Audio buffer size in samples (larger = more stable, smaller = lower latency)" : empty);
+    output_rate_selector_->setTooltip(enabled ? "Target sampling rate for the output device" : empty);
+    audio_toggle_->setTooltip(enabled ? "Start or stop audio processing" : empty);
+    volume_slider_->setTooltip(enabled ? "Master output volume" : empty);
+    mute_button_->setTooltip(enabled ? "Mute / unmute the output" : empty);
+    reset_engine_button_->setTooltip(enabled ? "Reset the audio engine and reload the plugin chain" : empty);
+    save_preset_button_->setTooltip(enabled ? "Save the current plugin chain and settings to a file" : empty);
+    load_preset_button_->setTooltip(enabled ? "Load a previously saved preset file" : empty);
+    asio_settings_button_->setTooltip(enabled ? "Open the ASIO driver control panel" : empty);
+    theme_selector_->setTooltip(enabled ? "Choose the application color theme" : empty);
+    start_minimized_button_->setTooltip(enabled ? "Launch directly to the system tray" : empty);
+    tooltips_button_->setTooltip(enabled ? "Show or hide these descriptive tooltips" : empty);
+    about_button_->setTooltip(enabled ? "About, diagnostics, and settings" : empty);
+    energy_saver_button_->setTooltip(enabled ? "Toggle energy saver: auto-suspend when input is silent" : empty);
+    help_button_->setTooltip(enabled ? "Open help documentation" : empty);
+
+    // Refresh existing button tooltips that were set in their constructors.
+    if (enabled)
+    {
+        energy_saver_button_->setEnergyState(engine_->isEnergySaverEnabled(), engine_->isEnergySaverSleeping());
+    }
+    else
+    {
+        energy_saver_button_->setTooltip(empty);
+    }
 }
 
 void MainWindow::handleLoadPlugin()
@@ -2638,6 +2703,8 @@ void MainWindow::handleAbout()
     settings.theme_selector = theme_selector_.get();
     settings.start_minimized_label = start_minimized_label_.get();
     settings.start_minimized_button = start_minimized_button_.get();
+    settings.tooltips_label = tooltips_label_.get();
+    settings.tooltips_button = tooltips_button_.get();
 
     AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings);
 }
@@ -2905,8 +2972,32 @@ void MainWindow::updateControlVisibility()
     asio_pair_label_->setVisible(is_asio);
     asio_settings_button_->setVisible(is_asio);
 
+    rebuildBufferSelector();
+
     if (content_root_ != nullptr)
         content_root_->resized();
+}
+
+void MainWindow::rebuildBufferSelector()
+{
+    const bool is_asio = (current_transport_mode_ == TransportMode::Asio);
+    const int current_id = buffer_selector_->getSelectedId();
+    buffer_selector_->clear(juce::dontSendNotification);
+    if (is_asio)
+    {
+        buffer_selector_->addItem("32", 32);
+        buffer_selector_->addItem("64", 64);
+        buffer_selector_->addItem("128", 128);
+        buffer_selector_->addItem("256", 256);
+    }
+    buffer_selector_->addItem("512", 512);
+    buffer_selector_->addItem("1024", 1024);
+
+    // Re-select the previous value if it is still valid; otherwise default to 512.
+    if (current_id > 0 && buffer_selector_->indexOfItemId(current_id) >= 0)
+        buffer_selector_->setSelectedId(current_id, juce::dontSendNotification);
+    else
+        buffer_selector_->setSelectedId(512, juce::dontSendNotification);
 }
 
 void MainWindow::refreshAsioPairSelector(int maxChannels)

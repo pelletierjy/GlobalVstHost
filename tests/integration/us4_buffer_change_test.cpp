@@ -15,13 +15,7 @@ TEST_F(US4BufferChangeTest, SetBufferSizeUpdatesValue)
 {
     StartEngine();
 
-    EXPECT_EQ(engine()->bufferSize(), 256);  // default
-
-    engine()->setBufferSize(32);
-    EXPECT_EQ(engine()->bufferSize(), 32);
-
-    engine()->setBufferSize(64);
-    EXPECT_EQ(engine()->bufferSize(), 64);
+    EXPECT_EQ(engine()->bufferSize(), 512);  // default
 
     engine()->setBufferSize(512);
     EXPECT_EQ(engine()->bufferSize(), 512);

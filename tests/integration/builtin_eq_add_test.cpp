@@ -15,7 +15,7 @@ TEST(BuiltinEqTest, CatalogListsBothEffects)
         if (entry.ref.vendor == "JyGlobalVST" && entry.file_path.empty())
             builtin_count++;
     }
-    EXPECT_EQ(builtin_count, 2) << "Expected 2 built-in effects (Night-time + EQ)";
+    EXPECT_EQ(builtin_count, 3) << "Expected 3 built-in effects (Night-time + EQ + Volume Leveler)";
 }
 
 TEST(BuiltinEqTest, AddEqToChain)

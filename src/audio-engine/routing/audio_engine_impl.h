@@ -278,7 +278,7 @@ private:
     std::atomic<bool> energy_saver_sleeping_ {false};
     std::thread energy_saver_thread_;
     std::atomic<bool> energy_saver_thread_running_ {false};
-    static constexpr int kEnergySaverIdleMs = 1'000;         // silence before sleeping
+    static constexpr int kEnergySaverIdleMs = 2'000;         // silence before sleeping
     static constexpr float kEnergySaverWakeDb = -50.0f;      // input level counted as "audio"
     void startEnergySaver();
     void stopEnergySaver();
@@ -310,7 +310,7 @@ private:
     shared::EndpointVolumeGuard endpoint_volume_guard_;
     SameDeviceGuard same_device_guard_;
 
-    int desired_buffer_size_ {256};
+    int desired_buffer_size_ {512};
     double desired_sample_rate_ {48000.0};
     int desired_asio_output_pair_ {0};
     EndpointId desired_input_id_;

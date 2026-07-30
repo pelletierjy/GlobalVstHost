@@ -66,8 +66,8 @@ TEST(ServiceMode, InProcessEngineWorksWithoutService)
     EXPECT_FALSE(inputs.empty());
 
     // Buffer size API.
-    engine->setBufferSize(256);
-    EXPECT_EQ(engine->bufferSize(), 256);
+    engine->setBufferSize(512);
+    EXPECT_EQ(engine->bufferSize(), 512);
 
     // Chain should be empty at start.
     auto snapshot = engine->snapshotChain();

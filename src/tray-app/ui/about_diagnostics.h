@@ -39,6 +39,8 @@ struct SettingsControls
     juce::ComboBox* theme_selector {nullptr};
     juce::Label* start_minimized_label {nullptr};
     juce::ToggleButton* start_minimized_button {nullptr};
+    juce::Label* tooltips_label {nullptr};
+    juce::ToggleButton* tooltips_button {nullptr};
 };
 
 class AboutDiagnostics

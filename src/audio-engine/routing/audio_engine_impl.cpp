@@ -852,13 +852,15 @@ DeviceResolutionSource AudioEngineImpl::currentResolutionSource() const
 void AudioEngineImpl::setBufferSize(int samples)
 {
     const bool is_asio = desired_output_transport_kind_ == TransportKind::Asio;
-    constexpr int kAllowedWasapi[] = {32, 64, 128, 256, 512, 1024};
+    constexpr int kAllowedWasapi[] = {512, 1024};
     constexpr int kAllowedAsio[] = {32, 64, 128, 256, 512, 1024};
     const auto* allowed = is_asio ? kAllowedAsio : kAllowedWasapi;
     const size_t count = is_asio ? std::size(kAllowedAsio) : std::size(kAllowedWasapi);
     if (std::find(allowed, allowed + count, samples) == allowed + count)
     {
-        throw std::invalid_argument("buffer size must be one of {32, 64, 128, 256, 512, 1024}");
+        throw std::invalid_argument(is_asio
+                                        ? "buffer size must be one of {32, 64, 128, 256, 512, 1024}"
+                                        : "buffer size must be one of {512, 1024} in WASAPI mode");
     }
     {
         std::lock_guard lk {control_mutex_};

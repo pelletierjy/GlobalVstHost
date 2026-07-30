@@ -26,7 +26,7 @@ RoamingSettings RoamingSettingsStore::load() const
 {
     RoamingSettings s;
     s.schema_version = 1;
-    s.default_buffer_size = 256;
+    s.default_buffer_size = 512;
     s.theme = "system";
     s.update_check_endpoint_url = "https://jyglobalvst.local/update-manifest.json";
 
@@ -98,6 +98,10 @@ RoamingSettings RoamingSettingsStore::load() const
     {
         s.energy_saver_enabled = doc["energy_saver_enabled"].get<bool>();
     }
+    if (doc.contains("tooltips_enabled") && doc["tooltips_enabled"].is_boolean())
+    {
+        s.tooltips_enabled = doc["tooltips_enabled"].get<bool>();
+    }
 
     if (doc.contains("capture_endpoint_id"))
     {
@@ -130,7 +134,7 @@ RoamingSettings RoamingSettingsStore::load() const
     static const char* kKnown[] = {"schema_version", "custom_scan_paths", "disabled_default_paths",
                                     "default_buffer_size", "theme", "default_hardware_device_friendly_name",
                                     "update_check_endpoint_url", "start_minimized_to_tray", "master_volume",
-                                    "energy_saver_enabled",
+                                    "energy_saver_enabled", "tooltips_enabled",
                                     "capture_endpoint_id", "output_endpoint_id", "follow_default_capture"};
     for (auto it = doc.begin(); it != doc.end(); ++it)
     {
@@ -167,6 +171,7 @@ void RoamingSettingsStore::save(const RoamingSettings& settings) const
     doc["start_minimized_to_tray"] = settings.start_minimized_to_tray;
     doc["master_volume"] = settings.master_volume;
     doc["energy_saver_enabled"] = settings.energy_saver_enabled;
+    doc["tooltips_enabled"] = settings.tooltips_enabled;
     doc["capture_endpoint_id"] = settings.capture_endpoint_id
                                      ? nlohmann::json(*settings.capture_endpoint_id)
                                      : nlohmann::json(nullptr);

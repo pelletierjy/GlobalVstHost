@@ -141,6 +141,7 @@ private:
     void refreshDeviceLists();
     void refreshAsioPairSelector(int maxChannels);
     void updateControlVisibility();
+    void rebuildBufferSelector();
     void refreshLatencyAndCpu();
     void refreshMeters();
     void refreshSampleRates();
@@ -159,6 +160,7 @@ private:
     void updateEnergySaverVisual();
     void handleCheckForUpdates();
     void applyThemeChange(CustomLookAndFeel::ThemeId id);
+    void applyTooltips();
     void saveWindowStateIfNeeded();
     bool hasEqPlugin() const;
     bool hasNtPlugin() const;
@@ -192,6 +194,8 @@ private:
     std::unique_ptr<juce::ComboBox> buffer_selector_;
     std::unique_ptr<juce::ComboBox> theme_selector_;
     std::unique_ptr<juce::ToggleButton> start_minimized_button_;
+    std::unique_ptr<juce::ToggleButton> tooltips_button_;
+    std::unique_ptr<juce::TooltipWindow> tooltip_window_;
 
     // Parallel storage for endpoint IDs (JUCE ComboBox has no setItemData).
     std::vector<EndpointId> input_endpoint_ids_;
@@ -243,6 +247,7 @@ private:
     std::unique_ptr<juce::Label> vol_label_;
     std::unique_ptr<juce::Label> theme_label_;
     std::unique_ptr<juce::Label> start_minimized_label_;
+    std::unique_ptr<juce::Label> tooltips_label_;
 
     // Raw pointer into the content tree — owned by HeaderComponent, valid for app lifetime.
     juce::Label* title_label_ {nullptr};
