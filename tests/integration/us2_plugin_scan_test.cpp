@@ -20,7 +20,7 @@ TEST_F(US2PluginScanTest, ScanReturnsEmptyCatalogWhenNoPathsSet)
     StartEngine();
 
     // Before any scan, the catalog must contain no *scanned* (external VST3) entries.
-    // It is never fully empty: the built-in effects (Night-time, EQ) are always
+    // It is never fully empty: the built-in effects (Auto volume leveller / Compressor, EQ, Volume Leveler) are always
     // present — they are registered directly, not discovered by a filesystem scan —
     // and are identifiable by their empty file_path (see BuiltinEffectRegistry).
     const auto catalog = engine()->catalog();
@@ -96,7 +96,7 @@ TEST_F(US2PluginScanTest, CatalogEntriesHaveRequiredFields)
         EXPECT_FALSE(entry.ref.vendor.empty()) << "Every catalog entry must have a vendor";
     }
 
-    // Built-in effects (Night-time, EQ) are registered directly, not scanned from
+    // Built-in effects (Auto volume leveller / Compressor, EQ, Volume Leveler) are registered directly, not scanned from
     // disk, and are identifiable by their deliberately empty file_path (see
     // BuiltinEffectRegistry) — so the file-path requirement is checked only against
     // the injected scanned entry above, not the whole catalog.

@@ -110,6 +110,7 @@ public:
     void onPluginFailed(const InstanceId& id, const std::string& reason) override;
     void onDeviceLost(const EndpointId& lost, const EndpointId& fallback_to) override;
     void onDeviceRestored(const EndpointId& restored) override;
+    void onDeviceListChanged() override;
     void onCpuWarning(float rolling_1s_pct) override;
     void onMeterFrame(const MeterFrame& frame) override;
     void onPresetPartialLoad(const std::vector<MissingPluginInfo>& missing) override;
@@ -195,6 +196,7 @@ private:
     std::unique_ptr<juce::ComboBox> theme_selector_;
     std::unique_ptr<juce::ToggleButton> start_minimized_button_;
     std::unique_ptr<juce::ToggleButton> tooltips_button_;
+    std::unique_ptr<juce::ToggleButton> drift_compensation_button_;
     std::unique_ptr<juce::TooltipWindow> tooltip_window_;
 
     // Parallel storage for endpoint IDs (JUCE ComboBox has no setItemData).
@@ -248,6 +250,7 @@ private:
     std::unique_ptr<juce::Label> theme_label_;
     std::unique_ptr<juce::Label> start_minimized_label_;
     std::unique_ptr<juce::Label> tooltips_label_;
+    std::unique_ptr<juce::Label> drift_compensation_label_;
 
     // Raw pointer into the content tree — owned by HeaderComponent, valid for app lifetime.
     juce::Label* title_label_ {nullptr};

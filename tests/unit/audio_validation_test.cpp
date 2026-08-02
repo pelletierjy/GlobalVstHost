@@ -28,7 +28,7 @@ TEST(AudioValidationTest, EqLatencyIsZero)
 
 TEST(AudioValidationTest, MultiSampleRates)
 {
-    // Test Night-time at different sample rates
+    // Test Auto volume leveller / Compressor at different sample rates
     for (double sr : {44100.0, 48000.0, 96000.0})
     {
         NightTimeProcessor proc;

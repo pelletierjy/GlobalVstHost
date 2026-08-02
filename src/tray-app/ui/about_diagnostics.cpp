@@ -124,6 +124,8 @@ public:
         addAndMakeVisible(controls_.start_minimized_button);
         addAndMakeVisible(controls_.tooltips_label);
         addAndMakeVisible(controls_.tooltips_button);
+        addAndMakeVisible(controls_.drift_compensation_label);
+        addAndMakeVisible(controls_.drift_compensation_button);
     }
 
     ~SettingsTab() override
@@ -134,6 +136,8 @@ public:
         removeChildComponent(controls_.start_minimized_button);
         removeChildComponent(controls_.tooltips_label);
         removeChildComponent(controls_.tooltips_button);
+        removeChildComponent(controls_.drift_compensation_label);
+        removeChildComponent(controls_.drift_compensation_button);
     }
 
     void resized() override
@@ -156,6 +160,12 @@ public:
         controls_.tooltips_label->setBounds(row3.removeFromLeft(110));
         row3.removeFromLeft(8);
         controls_.tooltips_button->setBounds(row3.removeFromLeft(70));
+
+        b.removeFromTop(12);
+        auto row4 = b.removeFromTop(28);
+        controls_.drift_compensation_label->setBounds(row4.removeFromLeft(160));
+        row4.removeFromLeft(8);
+        controls_.drift_compensation_button->setBounds(row4.removeFromLeft(70));
     }
 
 private:

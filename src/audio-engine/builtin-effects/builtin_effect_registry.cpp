@@ -15,10 +15,10 @@ BuiltinEffectRegistry::~BuiltinEffectRegistry() = default;
 
 void BuiltinEffectRegistry::registerBuiltins()
 {
-    // Night-time effect
+    // Auto volume leveller / Compressor effect
     descriptors_.push_back(Descriptor{
         builtin::NIGHTTIME_UID,
-        "Night-time",
+        "Auto volume leveller / Compressor",
         "JyGlobalVST",
         "Fx",
         []() -> std::unique_ptr<juce::AudioPluginInstance> {

@@ -1176,12 +1176,12 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     restoreFromAutosave();
     StartupLog("restoreFromAutosave done");
 
-    // If no chain was restored, automatically load EQ, Night-Time, and Volume Leveler plugins in bypass mode.
+    // If no chain was restored, automatically load EQ, Auto volume leveller / Compressor, and Volume Leveler plugins in bypass mode.
     if (engine_->snapshotChain().slots.empty())
     {
         PluginRef nighttime_ref;
         nighttime_ref.vendor = "JyGlobalVST";
-        nighttime_ref.name = "Night-time";
+        nighttime_ref.name = "Auto volume leveller / Compressor";
 
         PluginRef eq_ref;
         eq_ref.vendor = "JyGlobalVST";
@@ -1197,7 +1197,7 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
         engine_->setBypass(0, true);
         engine_->setBypass(1, true);
         engine_->setBypass(2, true);
-        StartupLog("Default plugins loaded (EQ, Night-Time, and Volume Leveler in bypass mode)");
+        StartupLog("Default plugins loaded (EQ, Auto volume leveller / Compressor, and Volume Leveler in bypass mode)");
     }
 
     // T034: If autosave did not restore endpoint selections, fall back to roaming settings.
@@ -1301,6 +1301,9 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     // Restore the Energy Saver preference and reflect it on the leaf button.
     engine_->setEnergySaverEnabled(rs.energy_saver_enabled);
     updateEnergySaverVisual();
+
+    // Restore the drift-compensation preference.
+    engine_->setDriftCompensationEnabled(rs.drift_compensation_enabled);
 
     // Start a background plugin scan
     status_label_->setText("Scanning plugins...", juce::dontSendNotification);
@@ -1704,13 +1707,33 @@ void MainWindow::showTrayVolumePopup()
     // when the CallOutBox destroys the content on dismissal, avoiding a dangling pointer.
     tray_volume_popup_ = content.get();
 
-    // Anchor the call-out at the current cursor position (over the tray icon).
-    // CallOutBox reposition logic keeps it on-screen, above the taskbar.
-    POINT pt;
-    GetCursorPos(&pt);
+    // Anchor the call-out at the tray icon itself (not just the cursor), converted
+    // from physical to JUCE logical pixels so mixed-DPI multi-monitor setups pick the
+    // correct display.  Shell_NotifyIconGetRect is Vista+ (fine for Win10 1909+).
+    juce::Rectangle<int> anchor;
+    {
+        NOTIFYICONIDENTIFIER nidId = {};
+        nidId.cbSize = sizeof(nidId);
+        nidId.hWnd   = static_cast<HWND>(peer->getNativeHandle());
+        nidId.uID    = kTrayIconId;
+        RECT rc = {};
+        if (SUCCEEDED(Shell_NotifyIconGetRect(&nidId, &rc)))
+        {
+            const juce::Rectangle<int> physical(rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top);
+            anchor = juce::Desktop::getInstance().getDisplays().physicalToLogical(physical);
+        }
+    }
+
+    if (anchor.isEmpty())
+    {
+        // Fallback: cursor in logical coordinates (getMousePosition already accounts
+        // for per-monitor DPI scale, unlike GetCursorPos which is physical).
+        const auto mousePos = juce::Desktop::getMousePosition();
+        anchor = juce::Rectangle<int>(mousePos.x, mousePos.y, 1, 1);
+    }
+
     SetForegroundWindow(static_cast<HWND>(peer->getNativeHandle()));
 
-    const juce::Rectangle<int> anchor(pt.x, pt.y, 1, 1);
     auto& box = juce::CallOutBox::launchAsynchronously(std::move(content), anchor, nullptr);
     box.setDismissalMouseClicksAreAlwaysConsumed(true);
 }
@@ -1719,6 +1742,7 @@ void MainWindow::restoreFromTray()
 {
     setVisible(true);
     toFront(true);
+    refreshDeviceLists();
 }
 
 void MainWindow::quitFromTray()
@@ -1937,6 +1961,12 @@ void MainWindow::buildUI()
     tooltips_button_ = std::make_unique<juce::ToggleButton>("enabled");
     tooltips_button_->setToggleState(rs.tooltips_enabled, juce::dontSendNotification);
     tooltips_button_->addListener(this);
+
+    // --- Drift compensation toggle -----------------------------------------
+    drift_compensation_label_ = std::make_unique<juce::Label>(juce::String(), "Drift compensation:");
+    drift_compensation_button_ = std::make_unique<juce::ToggleButton>("enabled");
+    drift_compensation_button_->setToggleState(rs.drift_compensation_enabled, juce::dontSendNotification);
+    drift_compensation_button_->addListener(this);
 
     // --- Tooltip window (global) -------------------------------------------
     tooltip_window_ = std::make_unique<juce::TooltipWindow>(this, 800);
@@ -2215,6 +2245,16 @@ void MainWindow::buttonClicked(juce::Button* button)
         roaming_settings_store_.save(rs);
         applyTooltips();
     }
+    else if (button == drift_compensation_button_.get())
+    {
+        const bool enabled = drift_compensation_button_->getToggleState();
+        engine_->setDriftCompensationEnabled(enabled);
+        auto rs = roaming_settings_store_.load();
+        rs.drift_compensation_enabled = enabled;
+        roaming_settings_store_.save(rs);
+        status_label_->setText(enabled ? "Drift compensation enabled" : "Drift compensation disabled",
+                               juce::dontSendNotification);
+    }
 }
 
 void MainWindow::sliderValueChanged(juce::Slider* slider)
@@ -2473,7 +2513,7 @@ void MainWindow::applyThemeChange(CustomLookAndFeel::ThemeId id)
 {
     custom_laf_.applyTheme(id);
 
-    // Push the theme palette to the built-in effect editors (EQ, Night-time),
+    // Push the theme palette to the built-in effect editors (EQ, Auto volume leveller / Compressor),
     // which live in the audio-engine layer and cannot see CustomLookAndFeel.
     {
         const auto& src = custom_laf_.colors();
@@ -2521,11 +2561,20 @@ void MainWindow::applyTooltips()
     save_preset_button_->setTooltip(enabled ? "Save the current plugin chain and settings to a file" : empty);
     load_preset_button_->setTooltip(enabled ? "Load a previously saved preset file" : empty);
     asio_settings_button_->setTooltip(enabled ? "Open the ASIO driver control panel" : empty);
-    theme_selector_->setTooltip(enabled ? "Choose the application color theme" : empty);
-    start_minimized_button_->setTooltip(enabled ? "Launch directly to the system tray" : empty);
-    tooltips_button_->setTooltip(enabled ? "Show or hide these descriptive tooltips" : empty);
+    theme_selector_->setTooltip(enabled ? "Choose the application colour theme: light, dark, or match the system setting." : empty);
+    theme_label_->setTooltip(enabled ? "Choose the application colour theme: light, dark, or match the system setting." : empty);
+    start_minimized_button_->setTooltip(enabled ? "When enabled, the app starts directly in the system tray without showing the main window." : empty);
+    start_minimized_label_->setTooltip(enabled ? "When enabled, the app starts directly in the system tray without showing the main window." : empty);
+    tooltips_button_->setTooltip(enabled ? "Show helpful popup descriptions when hovering over controls. Turn this off for a cleaner interface." : empty);
+    tooltips_label_->setTooltip(enabled ? "Show helpful popup descriptions when hovering over controls. Turn this off for a cleaner interface." : empty);
     about_button_->setTooltip(enabled ? "About, diagnostics, and settings" : empty);
-    energy_saver_button_->setTooltip(enabled ? "Toggle energy saver: auto-suspend when input is silent" : empty);
+    energy_saver_button_->setTooltip(enabled ? "Toggle energy saver: auto-suspend the VST chain when input is silent to save CPU." : empty);
+    drift_compensation_button_->setTooltip(enabled ? "Enable adaptive resampling to correct speed drift between the capture source and output device. "
+                                                        "Turn this OFF when both use the same hardware clock (e.g. WASAPI loopback + ASIO on the same USB interface) "
+                                                        "to prevent pitch wobble from the PI controller hunting on jitter." : empty);
+    drift_compensation_label_->setTooltip(enabled ? "Enable adaptive resampling to correct speed drift between the capture source and output device. "
+                                                        "Turn this OFF when both use the same hardware clock (e.g. WASAPI loopback + ASIO on the same USB interface) "
+                                                        "to prevent pitch wobble from the PI controller hunting on jitter." : empty);
     help_button_->setTooltip(enabled ? "Open help documentation" : empty);
 
     // Refresh existing button tooltips that were set in their constructors.
@@ -2705,6 +2754,8 @@ void MainWindow::handleAbout()
     settings.start_minimized_button = start_minimized_button_.get();
     settings.tooltips_label = tooltips_label_.get();
     settings.tooltips_button = tooltips_button_.get();
+    settings.drift_compensation_label = drift_compensation_label_.get();
+    settings.drift_compensation_button = drift_compensation_button_.get();
 
     AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings);
 }
@@ -3086,6 +3137,13 @@ void MainWindow::onDeviceRestored(const EndpointId& restored)
     juce::MessageManager::callAsync([this, restored]() {
         status_label_->setText("Device restored: " + juce::String(restored),
                                juce::dontSendNotification);
+        refreshDeviceLists();
+    });
+}
+
+void MainWindow::onDeviceListChanged()
+{
+    juce::MessageManager::callAsync([this]() {
         refreshDeviceLists();
     });
 }

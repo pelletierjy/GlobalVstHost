@@ -22,6 +22,7 @@ public:
     void onDeviceLost(const EndpointId& lost,
                       const EndpointId& fallback_to) override;
     void onDeviceRestored(const EndpointId& restored) override;
+    void onDeviceListChanged() override;
     void onCpuWarning(float rolling_1s_pct) override;
     void onMeterFrame(const MeterFrame& frame) override;
     void onPresetPartialLoad(

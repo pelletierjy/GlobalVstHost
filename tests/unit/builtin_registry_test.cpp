@@ -15,7 +15,7 @@ TEST(BuiltinRegistryTest, EntriesContainBothEffects)
     bool found_nighttime = false, found_eq = false;
     for (const auto& entry : entries)
     {
-        if (entry.ref.name == "Night-time")
+        if (entry.ref.name == "Auto volume leveller / Compressor")
         {
             found_nighttime = true;
             EXPECT_EQ(entry.ref.vendor, "JyGlobalVST");
@@ -46,12 +46,12 @@ TEST(BuiltinRegistryTest, FindByRefWorks)
 
     PluginRef ref;
     ref.vendor = "JyGlobalVST";
-    ref.name = "Night-time";
+    ref.name = "Auto volume leveller / Compressor";
 
     EXPECT_TRUE(registry.isBuiltin(ref));
     auto entry = registry.findByRef(ref);
     EXPECT_NE(entry, nullptr);
-    EXPECT_EQ(entry->ref.name, "Night-time");
+    EXPECT_EQ(entry->ref.name, "Auto volume leveller / Compressor");
 }
 
 TEST(BuiltinRegistryTest, CreateWorks)

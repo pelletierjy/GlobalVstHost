@@ -27,6 +27,7 @@ struct RoamingSettings
     float master_volume {1.0f};  // Master output gain (0.0–1.0), persisted across sessions.
     bool energy_saver_enabled {true};  // Auto-suspend the engine during silence (on by default).
     bool tooltips_enabled {true};      // Show descriptive tooltips on UI controls.
+    bool drift_compensation_enabled {false};  // PI loop on capture ring fill (off by default for same-device users).
 
     // T013: Driverless audio capture device persistence
     std::optional<std::string> capture_endpoint_id;     // Loopback source endpoint

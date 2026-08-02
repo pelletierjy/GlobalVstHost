@@ -40,6 +40,9 @@ public:
     bool isEnergySaverEnabled() const override;
     bool isEnergySaverSleeping() const override;
 
+    void setDriftCompensationEnabled(bool enabled) override;
+    bool isDriftCompensationEnabled() const override;
+
     std::vector<HardwareOutputInfo> listOutputs() const override;
     void selectOutput(const EndpointId& id) override;
     EndpointId currentOutput() const override;

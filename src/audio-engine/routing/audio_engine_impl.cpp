@@ -618,6 +618,19 @@ bool AudioEngineImpl::isEnergySaverSleeping() const
     return energy_saver_sleeping_.load();
 }
 
+void AudioEngineImpl::setDriftCompensationEnabled(bool enabled)
+{
+    const bool was = drift_compensation_enabled_.exchange(enabled);
+    if (was == enabled)
+        return;
+    LogDebug("setDriftCompensationEnabled(%d)", enabled ? 1 : 0);
+}
+
+bool AudioEngineImpl::isDriftCompensationEnabled() const
+{
+    return drift_compensation_enabled_.load();
+}
+
 void AudioEngineImpl::setEnergySaverSleeping(bool sleeping)
 {
     if (energy_saver_sleeping_.exchange(sleeping) == sleeping)
@@ -1977,11 +1990,6 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     const int samples = std::min(num_samples, work_buffer_.getNumSamples());
     if (wasapi_capture_ != nullptr && capture_ring_buffer_ != nullptr)
     {
-        // Asynchronous, drift-compensated read from the WASAPI-capture ring.
-        // The WASAPI capture clock and the ASIO/output clock are independent, so
-        // we adjust the resampling ratio each block from the ring's fill level to
-        // hold latency steady — a fixed ratio would let the buffer drift to a
-        // rail (over/underrun) within seconds and glitch continuously.
         std::size_t avail = capture_ring_buffer_->available();
         capture_fill_frames_.store(avail, std::memory_order_relaxed);
         // Track the worst-case (lowest) fill since the last diagnostic sample so the
@@ -1996,79 +2004,14 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             }
         }
 
-        // Symmetric under-fill resync: if the ring has starved (source paused or
-        // seeked and stopped delivering), re-enter priming and refill to target
-        // under a brief silence. Recovering the buffer this way keeps the resample
-        // ratio — and pitch — at nominal, instead of the loop dropping the ratio
-        // and audibly slowing the audio for seconds while it crawls back.
-        if (!capture_priming_ &&
-            avail < static_cast<std::size_t>(capture_target_frames_ * kCaptureUnderrunFactor))
+        if (!drift_compensation_enabled_.load(std::memory_order_relaxed))
         {
-            capture_priming_ = true;
-            // Count this re-prime: it produces a silence gap (audible cutout) that is
-            // NOT counted as an xrun, so this is the only signal that it happened.
-            capture_reprime_count_.fetch_add(1, std::memory_order_relaxed);
-            capture_fill_avg_ = static_cast<double>(capture_target_frames_);
-            capture_drift_integral_ = 0.0;
-            capture_smoothed_corr_ = 0.0;
-            capture_corr_.store(0.0, std::memory_order_relaxed);
-        }
-
-        if (capture_priming_ && avail < capture_target_frames_)
-        {
-            // Not enough buffered yet: emit silence and keep filling. This starts
-            // the controller centered and avoids an initial underrun burst.
-            for (int c = 0; c < work_buffer_.getNumChannels(); ++c)
-            {
-                work_buffer_.clear(c, 0, samples);
-            }
-        }
-        else
-        {
-            capture_priming_ = false;
-
-            // Hard resync on gross over-fill (e.g. the ring accumulated hundreds
-            // of ms while the device negotiated at startup). Drop the excess so we
-            // snap to target immediately, rather than draining for seconds at the
-            // correction ceiling — which pitches the audio and winds up the
-            // integrator into an overshoot. Costs one discontinuity at startup.
-            if (avail > static_cast<std::size_t>(capture_target_frames_ * kCaptureResyncFactor))
-            {
-                capture_ring_buffer_->advanceRead(avail - capture_target_frames_);
-                avail = capture_target_frames_;
-                capture_fill_avg_ = static_cast<double>(capture_target_frames_);
-                capture_drift_integral_ = 0.0;
-                capture_smoothed_corr_ = 0.0;
-            }
-
-            // Low-pass the fill so the PI loop tracks the quasi-DC drift and not
-            // the WASAPI packet-arrival sawtooth (which otherwise wobbles pitch).
-            // Coefficients are block-duration-derived (prepareCaptureDriftTuning)
-            // so the time constant is the same at any rate / buffer size.
-            capture_fill_avg_ +=
-                capture_fill_alpha_ * (static_cast<double>(avail) - capture_fill_avg_);
-
-            // PI drift control on the filtered fractional fill error. fill > target
-            // ⇒ consume input faster (ratio up) to drain back toward target. The
-            // integral term converges to the true rate ratio so a persistent
-            // mismatch is fully corrected instead of leaving a standing offset
-            // that eventually walks the buffer to a rail.
-            const double target = static_cast<double>(capture_target_frames_);
-            const double norm_err = (capture_fill_avg_ - target) / target;
-            capture_drift_integral_ += capture_drift_ki_ * norm_err;
-            capture_drift_integral_ =
-                std::clamp(capture_drift_integral_, -kCaptureDriftMaxCorr, kCaptureDriftMaxCorr);
-            double correction = capture_drift_kp_ * norm_err + capture_drift_integral_;
-            correction = std::clamp(correction, -kCaptureDriftMaxCorr, kCaptureDriftMaxCorr);
-            capture_smoothed_corr_ += capture_corr_alpha_ * (correction - capture_smoothed_corr_);
-            const double eff_ratio = capture_nominal_ratio_ * (1.0 + capture_smoothed_corr_);
-            capture_corr_.store(capture_smoothed_corr_, std::memory_order_relaxed);
-
-            // Peek the worst-case input this block could consume; the resampler
-            // advances the read pointer by exactly what it uses (never dropping
-            // the unconsumed remainder — that was a source of periodic glitches).
+            // Fixed-ratio read: no PI loop, no adaptive correction. Used when the
+            // capture and output share the same hardware clock (e.g. same USB device
+            // via WASAPI loopback + ASIO output). Rate conversion still applies if
+            // nominal rates differ, but the ratio never drifts.
             const std::size_t needed =
-                static_cast<std::size_t>(std::ceil(static_cast<double>(samples) * eff_ratio)) + 2;
+                static_cast<std::size_t>(std::ceil(static_cast<double>(samples) * capture_nominal_ratio_)) + 2;
             const std::size_t raw_cap = static_cast<std::size_t>(capture_raw_buffer_.getNumSamples());
             const std::size_t peek_n = std::min({needed, avail, raw_cap});
 
@@ -2083,35 +2026,154 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                 work_buffer_.getNumChannels() > 1 ? work_buffer_.getWritePointer(1) : nullptr};
 
             std::size_t consumed = 0;
-            if (capture_resampling_enabled_)
+            if (capture_resampling_enabled_ && std::abs(capture_nominal_ratio_ - 1.0) > 0.001)
             {
-                capture_resampler_.processAdaptive(eff_ratio, src, dst,
+                capture_resampler_.processAdaptive(capture_nominal_ratio_, src, dst,
                                                    static_cast<std::size_t>(samples), peeked, &consumed);
             }
             else
             {
-                // No resampling: copy directly (rates already matched or no capture resampler)
                 consumed = std::min(peeked, static_cast<std::size_t>(samples));
                 for (int c = 0; c < 2; ++c)
                 {
                     if (dst[c] != nullptr && src[c] != nullptr && consumed > 0)
-                    {
                         std::memcpy(dst[c], src[c], consumed * sizeof(float));
-                    }
-                    // Clear remaining samples to avoid clicks if we didn't consume enough
                     if (dst[c] != nullptr && consumed < static_cast<std::size_t>(samples))
-                    {
                         std::memset(dst[c] + consumed, 0, (samples - consumed) * sizeof(float));
-                    }
                 }
             }
             capture_ring_buffer_->advanceRead(consumed);
 
-            // Genuine underrun (ring nearly empty): the resampler zero-filled the
-            // tail (or we consumed all available in passthrough). Count it.
             if (peeked < needed && capture_resampling_enabled_)
             {
                 xrun_count_.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        else
+        {
+            // Asynchronous, drift-compensated read from the WASAPI-capture ring.
+            // The WASAPI capture clock and the ASIO/output clock are independent, so
+            // we adjust the resampling ratio each block from the ring's fill level to
+            // hold latency steady — a fixed ratio would let the buffer drift to a
+            // rail (over/underrun) within seconds and glitch continuously.
+
+            // Symmetric under-fill resync: if the ring has starved (source paused or
+            // seeked and stopped delivering), re-enter priming and refill to target
+            // under a brief silence. Recovering the buffer this way keeps the resample
+            // ratio — and pitch — at nominal, instead of the loop dropping the ratio
+            // and audibly slowing the audio for seconds while it crawls back.
+            if (!capture_priming_ &&
+                avail < static_cast<std::size_t>(capture_target_frames_ * kCaptureUnderrunFactor))
+            {
+                capture_priming_ = true;
+                // Count this re-prime: it produces a silence gap (audible cutout) that is
+                // NOT counted as an xrun, so this is the only signal that it happened.
+                capture_reprime_count_.fetch_add(1, std::memory_order_relaxed);
+                capture_fill_avg_ = static_cast<double>(capture_target_frames_);
+                capture_drift_integral_ = 0.0;
+                capture_smoothed_corr_ = 0.0;
+                capture_corr_.store(0.0, std::memory_order_relaxed);
+            }
+
+            if (capture_priming_ && avail < capture_target_frames_)
+            {
+                // Not enough buffered yet: emit silence and keep filling. This starts
+                // the controller centered and avoids an initial underrun burst.
+                for (int c = 0; c < work_buffer_.getNumChannels(); ++c)
+                {
+                    work_buffer_.clear(c, 0, samples);
+                }
+            }
+            else
+            {
+                capture_priming_ = false;
+
+                // Hard resync on gross over-fill (e.g. the ring accumulated hundreds
+                // of ms while the device negotiated at startup). Drop the excess so we
+                // snap to target immediately, rather than draining for seconds at the
+                // correction ceiling — which pitches the audio and winds up the
+                // integrator into an overshoot. Costs one discontinuity at startup.
+                if (avail > static_cast<std::size_t>(capture_target_frames_ * kCaptureResyncFactor))
+                {
+                    capture_ring_buffer_->advanceRead(avail - capture_target_frames_);
+                    avail = capture_target_frames_;
+                    capture_fill_avg_ = static_cast<double>(capture_target_frames_);
+                    capture_drift_integral_ = 0.0;
+                    capture_smoothed_corr_ = 0.0;
+                }
+
+                // Low-pass the fill so the PI loop tracks the quasi-DC drift and not
+                // the WASAPI packet-arrival sawtooth (which otherwise wobbles pitch).
+                // Coefficients are block-duration-derived (prepareCaptureDriftTuning)
+                // so the time constant is the same at any rate / buffer size.
+                capture_fill_avg_ +=
+                    capture_fill_alpha_ * (static_cast<double>(avail) - capture_fill_avg_);
+
+                // PI drift control on the filtered fractional fill error. fill > target
+                // ⇒ consume input faster (ratio up) to drain back toward target. The
+                // integral term converges to the true rate ratio so a persistent
+                // mismatch is fully corrected instead of leaving a standing offset
+                // that eventually walks the buffer to a rail.
+                const double target = static_cast<double>(capture_target_frames_);
+                const double norm_err = (capture_fill_avg_ - target) / target;
+                capture_drift_integral_ += capture_drift_ki_ * norm_err;
+                capture_drift_integral_ =
+                    std::clamp(capture_drift_integral_, -kCaptureDriftMaxCorr, kCaptureDriftMaxCorr);
+                double correction = capture_drift_kp_ * norm_err + capture_drift_integral_;
+                correction = std::clamp(correction, -kCaptureDriftMaxCorr, kCaptureDriftMaxCorr);
+                capture_smoothed_corr_ += capture_corr_alpha_ * (correction - capture_smoothed_corr_);
+                const double eff_ratio = capture_nominal_ratio_ * (1.0 + capture_smoothed_corr_);
+                capture_corr_.store(capture_smoothed_corr_, std::memory_order_relaxed);
+
+                // Peek the worst-case input this block could consume; the resampler
+                // advances the read pointer by exactly what it uses (never dropping
+                // the unconsumed remainder — that was a source of periodic glitches).
+                const std::size_t needed =
+                    static_cast<std::size_t>(std::ceil(static_cast<double>(samples) * eff_ratio)) + 2;
+                const std::size_t raw_cap = static_cast<std::size_t>(capture_raw_buffer_.getNumSamples());
+                const std::size_t peek_n = std::min({needed, avail, raw_cap});
+
+                float* raw[2] = {
+                    capture_raw_buffer_.getWritePointer(0),
+                    capture_raw_buffer_.getWritePointer(1)};
+                const std::size_t peeked = capture_ring_buffer_->peek(raw, peek_n);
+
+                const float* src[2] = {raw[0], raw[1]};
+                float* dst[2] = {
+                    work_buffer_.getWritePointer(0),
+                    work_buffer_.getNumChannels() > 1 ? work_buffer_.getWritePointer(1) : nullptr};
+
+                std::size_t consumed = 0;
+                if (capture_resampling_enabled_)
+                {
+                    capture_resampler_.processAdaptive(eff_ratio, src, dst,
+                                                       static_cast<std::size_t>(samples), peeked, &consumed);
+                }
+                else
+                {
+                    // No resampling: copy directly (rates already matched or no capture resampler)
+                    consumed = std::min(peeked, static_cast<std::size_t>(samples));
+                    for (int c = 0; c < 2; ++c)
+                    {
+                        if (dst[c] != nullptr && src[c] != nullptr && consumed > 0)
+                        {
+                            std::memcpy(dst[c], src[c], consumed * sizeof(float));
+                        }
+                        // Clear remaining samples to avoid clicks if we didn't consume enough
+                        if (dst[c] != nullptr && consumed < static_cast<std::size_t>(samples))
+                        {
+                            std::memset(dst[c] + consumed, 0, (samples - consumed) * sizeof(float));
+                        }
+                    }
+                }
+                capture_ring_buffer_->advanceRead(consumed);
+
+                // Genuine underrun (ring nearly empty): the resampler zero-filled the
+                // tail (or we consumed all available in passthrough). Count it.
+                if (peeked < needed && capture_resampling_enabled_)
+                {
+                    xrun_count_.fetch_add(1, std::memory_order_relaxed);
+                }
             }
         }
     }
@@ -2756,6 +2818,11 @@ void AudioEngineImpl::onDeviceStateChanged(const std::string& device_id, DWORD s
             l.onDeviceRestored(device_id);
         });
     }
+
+    // Notify UI that the available device list changed so it can refresh dropdowns.
+    notifyOnUiThread([](IAudioEngineListener& l) {
+        l.onDeviceListChanged();
+    });
 }
 
 void AudioEngineImpl::onDeviceAdded(const std::string& device_id)
@@ -2770,6 +2837,11 @@ void AudioEngineImpl::onDeviceAdded(const std::string& device_id)
             l.onDeviceRestored(device_id);
         });
     }
+
+    // A new endpoint appeared — refresh the UI lists.
+    notifyOnUiThread([](IAudioEngineListener& l) {
+        l.onDeviceListChanged();
+    });
 }
 
 void AudioEngineImpl::onDeviceRemoved(const std::string& device_id)
@@ -2787,10 +2859,8 @@ void AudioEngineImpl::onDeviceRemoved(const std::string& device_id)
             l.onDeviceLost(id, EndpointId{});
         });
         stop();
-        return;
     }
-
-    if (device_id == desired_input_id_ && !follow_default_capture_)
+    else if (device_id == desired_input_id_ && !follow_default_capture_)
     {
         LogDebug("onDeviceRemoved: active capture %s removed, stopping safely", device_id.c_str());
         notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
@@ -2798,6 +2868,11 @@ void AudioEngineImpl::onDeviceRemoved(const std::string& device_id)
         });
         stop();
     }
+
+    // An endpoint disappeared — refresh the UI lists.
+    notifyOnUiThread([](IAudioEngineListener& l) {
+        l.onDeviceListChanged();
+    });
 }
 
 void AudioEngineImpl::onDefaultDeviceChanged(int flow, const std::string& device_id)

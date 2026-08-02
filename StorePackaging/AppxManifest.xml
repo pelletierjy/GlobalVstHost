@@ -7,14 +7,14 @@
   IgnorableNamespaces="uap desktop rescap">
 
   <Identity
-    Name="JyGlobalVST"
-    Publisher="CN=JyGlobalVST, O=JyGlobalVST"
+    Name="JYPSolutions.GlobalVSTHost"
+    Publisher="CN=8132E2DA-CE50-4072-9189-3353C494C0CF"
     ProcessorArchitecture="x64"
-    Version="1.0.1.0" />
+    Version="1.0.2.0" />
 
   <Properties>
-    <DisplayName>JyGlobalVST</DisplayName>
-    <PublisherDisplayName>JyGlobalVST</PublisherDisplayName>
+    <DisplayName>Global VST Host</DisplayName>
+    <PublisherDisplayName>JYP Solutions</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -35,7 +35,7 @@
       Executable="JyGlobalVST.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="JyGlobalVST"
+        DisplayName="Global VST Host"
         Description="System audio VST host and effects processor"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png"

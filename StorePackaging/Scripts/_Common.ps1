@@ -4,10 +4,11 @@
 
 Set-StrictMode -Version Latest
 
-# The placeholder identity checked into AppxManifest.xml. A Store submission MUST
-# replace these with the values Partner Center assigns to the reserved app name.
-$script:PlaceholderPackageName = 'JyGlobalVST'
-$script:PlaceholderPublisher = 'CN=JyGlobalVST, O=JyGlobalVST'
+# The placeholder identity. A Store submission MUST replace these with the values
+# Partner Center assigns to the reserved app name. The checked-in manifest now carries
+# the real identity; these sentinel values catch accidental reversion.
+$script:PlaceholderPackageName = 'PLACEHOLDER.PackageName'
+$script:PlaceholderPublisher = 'CN=PLACEHOLDER'
 
 function Write-Step { param([string]$Message) Write-Host "`n==> $Message" -ForegroundColor Cyan }
 function Write-Ok { param([string]$Message) Write-Host "    [ok] $Message" -ForegroundColor Green }

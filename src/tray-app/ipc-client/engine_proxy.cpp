@@ -208,6 +208,10 @@ void IpcEngineProxy::readLoop()
             {
                 listener_->onDeviceRestored(payload.value("endpoint_id", ""));
             }
+            else if (code == "device.list_changed")
+            {
+                listener_->onDeviceListChanged();
+            }
         }
     }
 }
@@ -288,6 +292,19 @@ bool IpcEngineProxy::isEnergySaverSleeping() const
     if (resp.contains("result") && resp["result"].contains("sleeping"))
         return resp["result"]["sleeping"].get<bool>();
     return false;
+}
+
+void IpcEngineProxy::setDriftCompensationEnabled(bool enabled)
+{
+    sendCommand("engine.set_drift_compensation_enabled", {{"enabled", enabled}});
+}
+
+bool IpcEngineProxy::isDriftCompensationEnabled() const
+{
+    auto resp = const_cast<IpcEngineProxy*>(this)->sendCommand("engine.is_drift_compensation_enabled", {});
+    if (resp.contains("result") && resp["result"].contains("enabled"))
+        return resp["result"]["enabled"].get<bool>();
+    return true;
 }
 
 std::vector<HardwareOutputInfo> IpcEngineProxy::listOutputs() const

@@ -54,6 +54,14 @@ void MeterListener::onDeviceRestored(const EndpointId& restored)
     });
 }
 
+void MeterListener::onDeviceListChanged()
+{
+    juce::MessageManager::callAsync([this]() {
+        if (ui_listener_)
+            ui_listener_->onDeviceListChanged();
+    });
+}
+
 void MeterListener::onCpuWarning(float rolling_1s_pct)
 {
     juce::MessageManager::callAsync([this, rolling_1s_pct]() {

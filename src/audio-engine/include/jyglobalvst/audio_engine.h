@@ -70,6 +70,11 @@ public:
     // `sleeping == true` means processing is currently suspended. Non-pure so
     // existing listeners need not implement it.
     virtual void onEnergySaverStateChanged(bool /*sleeping*/) {}
+
+    // The set of available audio endpoints changed (device plugged, unplugged,
+    // or state changed). The UI should re-query listOutputs/listInputs.
+    // Non-pure for backward compatibility.
+    virtual void onDeviceListChanged() {}
 };
 
 class IAudioEngine
@@ -99,6 +104,17 @@ public:
     virtual bool isEnergySaverEnabled() const = 0;
     // True while the engine is currently in the suspended (sleeping) state.
     virtual bool isEnergySaverSleeping() const = 0;
+
+    // --- Drift Compensation ------------------------------------------------
+    // When enabled (default), the engine continuously adjusts the capture→output
+    // resampling ratio via a PI loop on the ring-buffer fill level. This is
+    // required when the capture and output clocks are independent (e.g. WASAPI
+    // loopback from the motherboard vs. ASIO on a USB interface).
+    // When disabled, the engine reads from the capture ring at a fixed nominal
+    // ratio. Use this only when the capture and output share the same hardware
+    // clock (e.g. WASAPI loopback and ASIO output on the same USB device).
+    virtual void setDriftCompensationEnabled(bool enabled) = 0;
+    virtual bool isDriftCompensationEnabled() const = 0;
 
     // --- Device selection --------------------------------------------------
     virtual std::vector<HardwareOutputInfo> listOutputs() const = 0;
