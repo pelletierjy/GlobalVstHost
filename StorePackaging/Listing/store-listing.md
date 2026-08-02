@@ -27,7 +27,7 @@ or keyword padding in the title, so leave it as-is — do not append "— System
 ## Short description
 
 ```
-Run your system audio through VST3 effects and a built-in night-time leveler and EQ.
+Run your system audio through VST3 effects and a built-in auto volume leveller / compressor and EQ.
 ```
 
 ## Description
@@ -42,7 +42,7 @@ No driver to install. No reboot. No virtual audio cable to configure.
 
 BUILT-IN EFFECTS — NOTHING TO DOWNLOAD
 
-Night-time
+Auto Volume Leveller / Compressor
 A stereo compressor and limiter for late-night listening. Loud action scenes are
 pulled down and quiet dialogue is brought up, so the volume stays consistent and
 comfortable while other people are asleep. No more reaching for the remote every
@@ -95,6 +95,10 @@ REQUIREMENTS AND LIMITATIONS
 - VST3 effect plugins only. VST2 and instrument (VSTi) plugins are not supported
 - Third-party plugins are not included and are not downloaded by this app. You
   supply your own, and each remains subject to its own publisher's licence terms
+- If your PC has only one audio interface and no ASIO support, you need a
+  separate playback device (headphones, monitor speakers, USB DAC, etc.) for
+  processed output. A free virtual audio cable is an easy alternative:
+  https://vb-audio.com/Cable/
 ```
 
 ## Search terms
@@ -194,10 +198,10 @@ recapturing once the app-side fixes land:
    generic device names look better.
 3. In `02`, the EQ editor covers the level meters. Reposition it when recapturing.
 
-**A fourth screenshot of the Night-time editor was deliberately excluded.** The available
+**A fourth screenshot of the Auto Volume Leveller / Compressor editor was deliberately excluded.** The available
 capture shows the caption as `High-dynamic example â□□ before…` — a UTF-8 mojibake bug that
 has since been fixed in `nighttime_editor.cpp`. Publishing it would show a defect the app no
-longer has. **Rebuild, then capture the Night-time editor** — it is the most compelling
+longer has. **Rebuild, then capture the Auto Volume Leveller / Compressor editor** — it is the most compelling
 effect to show, with its before/after waveform graph.
 
 ### The original README screenshot is too small
@@ -218,7 +222,7 @@ Two ways to fix it, in order of preference:
 ### Suggested set
 
 1. Main window, chain of two or three effects, meters showing activity
-2. The Night-time effect's controls
+2. The Auto Volume Leveller / Compressor effect's controls
 3. The EQ with a visible bass boost applied
 4. Input/output device selection
 5. Preset save/load
@@ -247,7 +251,7 @@ generic device names if convenient.
 |---|---|
 | WASAPI loopback capture, no driver | `src/audio-engine/routing/wasapi_capture.cpp:333` sets `AUDCLNT_STREAMFLAGS_LOOPBACK`; no driver or NT service dependency anywhere |
 | Selectable hardware input device | `audio_engine_impl.cpp:2374` — `listInputs()` enumerates `EndpointFlow::Capture` endpoints; `selectInput()` at `798`. Visible in the screenshot as an Input selector |
-| "Night-time" is a stereo compressor/limiter for consistent late-night volume | `src/audio-engine/builtin-effects/nighttime_processor.cpp`; registered as `"Night-time"` in `builtin_effect_registry.cpp`; intent per `specs/006-builtin-plugins/spec.md` US1 |
+| "Auto Volume Leveller / Compressor" is a stereo compressor/limiter for consistent late-night volume | `src/audio-engine/builtin-effects/nighttime_processor.cpp`; registered as `"Auto Volume Leveller / Compressor"` in `builtin_effect_registry.cpp`; intent per `specs/006-builtin-plugins/spec.md` US1 |
 | EQ with multi-band gains and a dedicated bass boost | `src/audio-engine/builtin-effects/eq_processor.cpp` (`setBandGain`, `setBassBoost`, bass shelf at 200 Hz); registered as `"EQ (Bass Boost)"` |
 | Built-ins need no scan or download | Registered in-process at construction; spec 006 US1 AC1 |
 | Loads user-installed VST3 from the standard folder | `src/audio-engine/vst-host/default_scan_paths.cpp` resolves `FOLDERID_ProgramFiles\Common Files\VST3` |

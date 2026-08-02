@@ -224,6 +224,7 @@ private:
     std::unique_ptr<ResetButton> reset_engine_button_;
     std::unique_ptr<juce::Label> latency_label_;
     std::unique_ptr<juce::Label> cpu_label_;
+    std::unique_ptr<juce::Component> cpu_bar_;
     std::unique_ptr<juce::Label> cpu_warning_banner_;
     std::unique_ptr<juce::Label> input_meter_label_;
     std::unique_ptr<juce::Label> output_meter_label_;
@@ -280,7 +281,6 @@ private:
     bool audio_running_ {false};
     bool audio_was_running_before_suspend_ {false};
     int last_chain_revision_ {-1};
-    bool cpu_warning_active_ {false};
     bool preset_override_flag_ {false};
     bool plugin_scan_complete_ {false};
 

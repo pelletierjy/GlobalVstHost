@@ -148,7 +148,7 @@ public:
 
         if (has_nt_)
         {
-            nt_button_.setButtonText("NT");
+            nt_button_.setButtonText("VL");
             nt_button_.setClickingTogglesState(true);
             nt_button_.onClick = [this]()
             {
@@ -897,15 +897,53 @@ private:
     juce::Component* editor_;
 };
 
+// Simple horizontal progress bar for CPU display. Fills with green proportional
+// to the current CPU usage percentage (0 .. 100).
+class CpuBar : public juce::Component
+{
+public:
+    void setValue(float percent)
+    {
+        percent_ = juce::jlimit(0.0f, 100.0f, percent);
+        repaint();
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        auto area = getLocalBounds().toFloat().reduced(0.5f);
+
+        // Background track
+        g.setColour(juce::Colour(0xFF1A2340));
+        g.fillRoundedRectangle(area, 4.0f);
+
+        // Green fill
+        float fill_w = area.getWidth() * (percent_ / 100.0f);
+        if (fill_w > 0.0f)
+        {
+            auto fill = area.withWidth(fill_w);
+            g.setColour(juce::Colour(0xFF66BB6A));
+            g.fillRoundedRectangle(fill, 4.0f);
+        }
+
+        // Border
+        g.setColour(juce::Colour(0xFF1E2A4A));
+        g.drawRoundedRectangle(area, 4.0f, 1.0f);
+    }
+
+private:
+    float percent_ = 0.0f;
+};
+
 class StatusBarComponent : public juce::Component
 {
 public:
-    StatusBarComponent(juce::Label* status, juce::Label* latency, juce::Label* cpu)
-        : status_(status), latency_(latency), cpu_(cpu)
+    StatusBarComponent(juce::Label* status, juce::Label* latency, juce::Label* cpu_label, juce::Component* cpu_bar)
+        : status_(status), latency_(latency), cpu_label_(cpu_label), cpu_bar_(cpu_bar)
     {
         addAndMakeVisible(status_);
         addAndMakeVisible(latency_);
-        addAndMakeVisible(cpu_);
+        addAndMakeVisible(cpu_label_);
+        addAndMakeVisible(cpu_bar_);
     }
 
     void resized() override
@@ -918,14 +956,17 @@ public:
         fb.items.add(juce::FlexItem().withWidth(8));
         fb.items.add(juce::FlexItem(*latency_).withMinWidth(270).withWidth(270));
         fb.items.add(juce::FlexItem().withWidth(8));
-        fb.items.add(juce::FlexItem(*cpu_).withMinWidth(180).withWidth(180));
+        fb.items.add(juce::FlexItem(*cpu_label_).withMinWidth(30).withWidth(30));
+        fb.items.add(juce::FlexItem().withWidth(4));
+        fb.items.add(juce::FlexItem(*cpu_bar_).withMinWidth(140).withWidth(140));
         fb.performLayout(b);
     }
 
 private:
     juce::Label* status_;
     juce::Label* latency_;
-    juce::Label* cpu_;
+    juce::Label* cpu_label_;
+    juce::Component* cpu_bar_;
 };
 
 } // namespace
@@ -1921,7 +1962,8 @@ void MainWindow::buildUI()
 
     // --- Latency / CPU -----------------------------------------------------
     latency_label_ = std::make_unique<juce::Label>(juce::String{}, "Latency: — ms");
-    cpu_label_ = std::make_unique<juce::Label>(juce::String{}, "CPU: — %");
+    cpu_label_ = std::make_unique<juce::Label>(juce::String{}, "CPU");
+    cpu_bar_ = std::make_unique<CpuBar>();
 
     // --- Meters ------------------------------------------------------------
     meter_input_label_ = std::make_unique<juce::Label>(juce::String{}, "In");
@@ -2031,7 +2073,7 @@ void MainWindow::buildUI()
     auto* chain_panel = new ChainEditorPanel(chain_editor_.get());
 
     auto* status_bar = new StatusBarComponent(
-        status_label_.get(), latency_label_.get(), cpu_label_.get());
+        status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get());
 
     auto* content = new MainContentComponent(
         header, top_area, chain_panel, plugin_panel, status_bar);
@@ -2532,8 +2574,8 @@ void MainWindow::applyThemeChange(CustomLookAndFeel::ThemeId id)
     if (title_label_ != nullptr)
         title_label_->setColour(juce::Label::textColourId, custom_laf_.colors().accentCyan);
     status_label_->setColour(juce::Label::textColourId, custom_laf_.colors().textDim);
-    if (!cpu_warning_active_)
-        cpu_label_->setColour(juce::Label::textColourId, custom_laf_.colors().textPrimary);
+    if (cpu_label_ != nullptr)
+        cpu_label_->setColour(juce::Label::textColourId, custom_laf_.colors().textDim);
     if (content_root_ != nullptr)
     {
         content_root_->sendLookAndFeelChange();
@@ -2743,7 +2785,7 @@ void MainWindow::handleAbout()
     snap.latency = engine_->latencyProfile();
     snap.cpu = engine_->cpuStats();
 
-    juce::String version = "1.0.0";
+    juce::String version = "1.0.1";
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 
@@ -2757,7 +2799,8 @@ void MainWindow::handleAbout()
     settings.drift_compensation_label = drift_compensation_label_.get();
     settings.drift_compensation_button = drift_compensation_button_.get();
 
-    AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings);
+    AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings,
+                           &custom_laf_);
 }
 
 void MainWindow::handleHelp()
@@ -3078,19 +3121,7 @@ void MainWindow::refreshLatencyAndCpu()
                                                      latency.output_ms),
                             juce::dontSendNotification);
 
-    juce::String cpu_text = juce::String::formatted("CPU: %.1f %% (peak %.1f %%)",
-                                                      cpu.rolling_1s_pct,
-                                                      cpu.instantaneous_pct);
-    if (cpu.warning_active || cpu_warning_active_)
-    {
-        cpu_text += " ⚠ HIGH";
-        cpu_label_->setColour(juce::Label::textColourId, juce::Colour(0xFFFFA726));
-    }
-    else
-    {
-        cpu_label_->setColour(juce::Label::textColourId, custom_laf_.colors().textPrimary);
-    }
-    cpu_label_->setText(cpu_text, juce::dontSendNotification);
+    static_cast<CpuBar*>(cpu_bar_.get())->setValue(cpu.rolling_1s_pct);
 }
 
 // =========================================================================
@@ -3151,7 +3182,6 @@ void MainWindow::onDeviceListChanged()
 void MainWindow::onCpuWarning(float rolling_1s_pct)
 {
     juce::MessageManager::callAsync([this, rolling_1s_pct]() {
-        cpu_warning_active_ = true;
         status_label_->setText(juce::String::formatted("CPU warning: %.1f %% — consider larger buffer",
                                                         rolling_1s_pct),
                                juce::dontSendNotification);

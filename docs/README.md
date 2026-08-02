@@ -1,86 +1,57 @@
-<img width="989" height="786" alt="image" src="https://github.com/user-attachments/assets/004b2c91-d0ed-4472-b3bf-5e9d9efdedd4" />
+# Global VST Host
 
-# GlobalVST
-
-Low-latency Windows audio processor that routes system audio through a chain of VST3 plugins and outputs to your hardware device.
+Route Windows system audio through VST3 effects and built-in processors — no driver, no virtual device, no reboot.
 
 ## What it does
 
-GlobalVST appears as a virtual audio output in Windows Sound settings. Select it as your default playback device, load VST3 plugins (EQ, room correction, limiters, etc.), and hear processed audio on your speakers or headphones with under 10 ms round-trip latency.
+Captures your PC's system audio via WASAPI loopback, runs it through an ordered chain of effects, and plays the result to any output device you choose. Useful immediately even without third-party plugins, thanks to two built-in effects:
+
+- **Auto Volume Leveller / Compressor** — stereo compressor/limiter for consistent low-volume listening.
+- **EQ + Bass Boost** — 10-band graphic EQ with a dedicated bass boost.
 
 ## Requirements
 
 - Windows 10 (1909+) or Windows 11, x64
-- At least one VST3 plugin installed
-- One functioning audio output device (built-in, USB DAC, or HDMI)
+- One functioning audio output device
+- VST3 plugins are optional; the built-ins work on their own
 
-## First-run setup
+## Quick start
 
-1. Install GlobalVST from the MSI (single UAC prompt, no reboot).
-2. Open **Windows Settings → System → Sound → Output** and select **GlobalVST Virtual Output**.
-3. Launch GlobalVST from the system tray.
-4. In the app, pick your **hardware output** from the Output dropdown.
-5. Click **Scan Plugins** to discover installed VST3 plugins.
-6. Drag a plugin into the chain or use **Load Plugin…** to browse for a `.vst3` file.
-7. Click **Start Audio**. All system audio now flows through the plugin chain.
+1. Launch the app. It lives in the system tray; click the tray icon to open the window.
+2. Select your **output device**.
+3. Click **Scan Plugins** to discover installed VST3 plugins.
+4. Add effects to the chain (built-ins or VST3) and adjust them.
+5. Click **Start Audio**. System audio now flows through the chain.
 
-## Managing the plugin chain
+## Managing the chain
 
-- **Add**: drag from the scanned list or use Load Plugin.
-- **Reorder**: drag slots up/down. Audio continues without dropout.
-- **Bypass**: toggle the checkbox on a slot to A/B the effect.
-- **Remove**: click the × on a slot.
-- **Edit plugin GUI**: double-click a slot or press Enter while it is focused.
+- **Add** — drag from the scanned list or use **Load Plugin…**.
+- **Reorder** — move slots up/down. Audio continues without dropout.
+- **Bypass** — toggle a slot's checkbox to A/B the effect.
+- **Remove** — click the × on a slot.
+- **Edit** — double-click a slot to open the plugin's own interface.
 
 ## Presets
 
-- **Save Preset**: writes the current chain + settings to `%UserProfile%\Documents\GlobalVST\Presets\<name>.jvst`.
-- **Load Preset**: restores a saved chain instantly.
-- If a preset references a plugin that is no longer installed, a greyed-out **placeholder** appears. You can re-point it to a relocated plugin or remove it.
+- **Save Preset** — writes the current chain to `%UserProfile%\Documents\JyGlobalVST\Presets\<name>.jvst`.
+- **Load Preset** — restores a saved chain instantly.
+- Missing plugins appear as grey placeholders; re-point or remove them.
 
 ## Buffer size
 
-Choose from **32 / 64 / 128 / 256 / 512 / 1024** samples in the Buffer dropdown.
-- Lower = lower latency, higher CPU load.
-- Higher = more CPU headroom, slightly more latency.
-- Default is 256 (good for most systems).
-
-## Hardware output selection
-
-GlobalVST resolves your output device in this priority:
-1. Exact endpoint ID from last session (machine-specific).
-2. Friendly name match from roaming settings (follows you across PCs).
-3. Current Windows default output.
-
-If you unplug a USB DAC while audio is playing, GlobalVST automatically falls back to the Windows default device and restores your preferred device when it reconnects.
+Choose from **32 / 64 / 128 / 256 / 512 / 1024** samples. Lower = lower latency, higher CPU. Default is 256.
 
 ## Monitoring
 
-- **Latency readout**: shows estimated round-trip milliseconds.
-- **CPU meter**: shows audio-thread CPU usage. If it exceeds 5%, a warning banner suggests increasing the buffer size.
-- **Level meters**: input and output peak/RMS (US4 — TBD).
-
-## Sleep / wake
-
-GlobalVST automatically reinitializes the audio path when Windows sleeps and wakes. No manual restart is required.
-
-## Troubleshooting
-
-| Problem | Solution |
-|---|---|
-| No audio after starting | Confirm GlobalVST is selected as Windows default output. Check that an output device is selected in the app. |
-| High CPU warning | Increase buffer size to 512 or 1024. Remove heavy plugins. |
-| Plugin fails to load | Ensure the `.vst3` file is 64-bit. Try rescanning plugins. |
-| Crackles or dropouts | Increase buffer size. Close other audio apps. Check that sample rates match between virtual device and hardware output. |
-| Auto-save lost chain | Auto-save is stored in `%LocalAppData%\GlobalVST\autosave.json`. If corrupted, GlobalVST starts blank per design. |
+- **Latency** — estimated round-trip milliseconds.
+- **CPU** — audio-thread usage. A warning appears if it stays high.
+- **Level meters** — stereo input and output peak/RMS.
 
 ## Privacy
 
-- No persistent logging. No telemetry. No crash reports. No background network activity.
-- The only network call is an explicit **Check for updates…** from the About menu (not implemented in testable-dev).
-- Presets live in your Documents folder; settings roam with your profile.
+No network communication, no telemetry, no crash reports, no persistent logging. Presets and settings stay on your machine.
 
-## Build (developers)
+## Build
 
 ```powershell
 cmake -B build -A x64
@@ -88,9 +59,7 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Requires Visual Studio 2022 or later with C++20 support.
-
-> **ASIO support:** ASIO is mandatory and always built. The Steinberg ASIO SDK is auto-detected at `third_party/asiosdk` (override with `-DJYGLOBALVST_ASIO_SDK_PATH=...`); configuration fails if it cannot be found.
+Requires Visual Studio 2022 or later with C++20. The Steinberg ASIO SDK must be present at `third_party/asiosdk`.
 
 ## License
 

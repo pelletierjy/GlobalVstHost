@@ -26,7 +26,7 @@ HOW TO TEST IT WITHOUT INSTALLING ANY PLUGINS
 No third-party plugins are needed. Two effects are built into the app and appear
 in the effect list immediately, with no scanning, download, or file selection:
 
-  1. "Night-time"      - a stereo compressor/limiter that evens out loud and
+  1. "Auto Volume Leveller / Compressor"      - a stereo compressor/limiter that evens out loud and
                          quiet passages so volume stays consistent at low
                          listening levels.
   2. "EQ (Bass Boost)" - a multi-band equalizer with a dedicated bass boost.
@@ -40,7 +40,7 @@ Suggested 2-minute test:
      speakers or headphones).
   4. Add "EQ (Bass Boost)" to the chain and raise the Bass Boost amount. The
      audio you are already playing audibly gains low end in real time.
-  5. Add "Night-time" and play content with both loud and quiet passages. Loud
+  5. Add "Auto Volume Leveller / Compressor" and play content with both loud and quiet passages. Loud
      parts are pulled down and quiet parts brought up.
   6. Toggle each effect's bypass button. Audio returns to unprocessed
      immediately, with no dropout.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GlobalVSTHost — User Guide</title>
+<title>Global VST Host — User Guide</title>
 <style>
   :root {
     --bg: #0A0E1A;
@@ -84,7 +84,7 @@
   <header>
     <div class="logo">JY</div>
     <div>
-      <h1>GlobalVSTHost</h1>
+      <h1>Global VST Host</h1>
       <p>User Guide</p>
     </div>
   </header>
@@ -94,20 +94,19 @@
     <ul>
       <li><a href="#overview">Overview</a></li>
       <li><a href="#getting-started">Getting Started</a></li>
-      <li><a href="#devices">Audio Devices &amp; Transport</a></li>
+      <li><a href="#devices">Audio Devices</a></li>
       <li><a href="#chain">The Plugin Chain</a></li>
       <li><a href="#builtin">Built-In Effects</a></li>
       <li><a href="#volume">Master Volume</a></li>
       <li><a href="#presets">Presets</a></li>
-      <li><a href="#themes">Themes</a></li>
-      <li><a href="#tray">System Tray</a></li>
+      <li><a href="#tray">System Tray &amp; Power</a></li>
       <li><a href="#troubleshooting">Troubleshooting</a></li>
     </ul>
   </nav>
 
   <section id="overview">
     <h2>Overview</h2>
-    <p>GlobalVSTHost captures your Windows system audio, routes it through an ordered
+    <p>Global VST Host captures your Windows system audio, routes it through an ordered
        chain of VST3 plugins, and plays the processed result out to a hardware output
        device. This lets you apply effects — EQ, dynamics, spatial processing, and more —
        to <em>everything</em> your PC plays, regardless of which application produced it.</p>
@@ -124,13 +123,10 @@
       <li>Press <strong>Start Audio</strong> to begin capturing and routing system audio.</li>
       <li>Add plugins to the chain and adjust them while audio plays.</li>
     </ol>
-    <div class="note">Because the app captures system audio via loopback, make sure the
-      Windows output you are capturing from is not the same physical device you route to,
-      or use a separate output to avoid a feedback loop.</div>
   </section>
 
   <section id="devices">
-    <h2>Audio Devices &amp; Transport</h2>
+    <h2>Audio Devices</h2>
     <p>The device panel lets you select where audio is captured from and where it is sent.</p>
     <h3>Transport modes</h3>
     <table>
@@ -141,7 +137,10 @@
     </table>
     <p>The buffer size setting trades latency against stability — smaller buffers give
        lower latency but are more sensitive to CPU spikes.</p>
-    <div class="note">The engine automatically follows the output device's sample rate.</div>
+    <div class="note"><strong>Drift compensation</strong> adapts resampling when the capture
+      source and output device run from different clocks. Turn it off when both share the
+      same hardware clock (e.g. WASAPI loopback + ASIO on the same USB interface) to avoid
+      pitch wobble.</div>
   </section>
 
   <section id="chain">
@@ -161,7 +160,7 @@
 
   <section id="builtin">
     <h2>Built-In Effects</h2>
-    <p>GlobalVSTHost ships with built-in effects that appear alongside your VST3 plugins
+    <p>Global VST Host ships with built-in effects that appear alongside your VST3 plugins
        and can be added to the chain like any other effect.</p>
 
     <h3>EQ + Bass Boost</h3>
@@ -169,7 +168,7 @@
        slider to cut or boost that frequency range; use the bass-boost slider for extra
        low-end. <strong>Flat/Reset</strong> returns all bands to 0 dB.</p>
 
-    <h3>Night-time</h3>
+    <h3>Auto Volume Leveller / Compressor</h3>
     <p>A dynamics processor that evens out loud and quiet passages so you can listen at
        low volume without missing detail or disturbing others. Choose a preset
        (Light, Medium, Strong, Extreme) — stronger presets compress the dynamic range
@@ -204,21 +203,15 @@
       you repoint that slot to a different plugin.</div>
   </section>
 
-  <section id="themes">
-    <h2>Themes</h2>
-    <p>Use the theme selector to change the app's color scheme. Available themes include
-       Neon Blue, Neon Purple, Neon Green, Neon Orange, Neon Red, and Monochrome. The
-       selected theme is remembered between sessions and is also applied to the built-in
-       effect editors.</p>
-  </section>
-
   <section id="tray">
-    <h2>System Tray</h2>
-    <p>GlobalVSTHost lives in the Windows system tray. Closing the window keeps the app
+    <h2>System Tray &amp; Power</h2>
+    <p>Global VST Host lives in the Windows system tray. Closing the window keeps the app
        running in the background so audio processing continues. Right-click the tray icon
        for quick actions.</p>
     <p>Enable <strong>Start minimized to tray</strong> to have the app launch directly to
        the tray without showing the window.</p>
+    <p><strong>Energy saver</strong> automatically steps the engine back when no audio is
+       playing, reducing CPU usage. It is on by default.</p>
   </section>
 
   <section id="troubleshooting">
@@ -242,8 +235,7 @@
   </section>
 
   <footer>
-    GlobalVSTHost — Windows system-wide VST3 host. This guide describes the features
-    available in the application window.
+    Global VST Host — Windows system-wide VST3 host.
   </footer>
 </div>
 </body>

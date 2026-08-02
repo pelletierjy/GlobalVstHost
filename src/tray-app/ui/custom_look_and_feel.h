@@ -234,7 +234,7 @@ private:
         {
             drawQuestionIcon(g, bounds, textColour);
         }
-        else if (text == "EQ" || text == "NT")
+        else if (text == "EQ" || text == "NT" || text == "VL")
         {
             // Text state buttons: green when active (toggled on), grey when off —
             // same language as the power/leaf icons, no cyan frame.
@@ -263,7 +263,7 @@ private:
     {
         return t == "ON" || t == "OFF"
             || t == "SPEAKER_ON" || t == "SPEAKER_OFF"
-            || t == "EQ" || t == "NT";
+            || t == "EQ" || t == "NT" || t == "VL";
     }
 
     // Shared stroke for all vector icons: rounded caps + joints and a common

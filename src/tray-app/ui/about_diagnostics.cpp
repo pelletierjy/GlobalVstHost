@@ -57,7 +57,7 @@ juce::String buildDiagnosticsText(EngineHostMode mode,
 class AboutTab : public juce::Component
 {
 public:
-    explicit AboutTab(const juce::String& diagnostics)
+    AboutTab(const juce::String& diagnostics, const ThemeColors& cols)
     {
         auto icon = juce::ImageCache::getFromMemory(
             jyglobalvst::BinaryData::app_icon_png,
@@ -75,16 +75,16 @@ public:
         titleFont.setHeight(20.0f);
         titleFont.setBold(true);
         title_label_->setFont(titleFont);
-        title_label_->setColour(juce::Label::textColourId, kAccentCyan);
+        title_label_->setColour(juce::Label::textColourId, cols.accentCyan);
         addAndMakeVisible(title_label_.get());
 
         text_editor_ = std::make_unique<juce::TextEditor>();
         text_editor_->setMultiLine(true);
         text_editor_->setReadOnly(true);
         text_editor_->setText(diagnostics);
-        text_editor_->setColour(juce::TextEditor::backgroundColourId, kBgPanel);
-        text_editor_->setColour(juce::TextEditor::textColourId, kTextPrimary);
-        text_editor_->setColour(juce::TextEditor::outlineColourId, kBgPanelBorder);
+        text_editor_->setColour(juce::TextEditor::backgroundColourId, cols.bgPanel);
+        text_editor_->setColour(juce::TextEditor::textColourId, cols.textPrimary);
+        text_editor_->setColour(juce::TextEditor::outlineColourId, cols.bgPanelBorder);
         addAndMakeVisible(text_editor_.get());
     }
 
@@ -176,11 +176,18 @@ class AboutDialogContent : public juce::Component
                           , public juce::Button::Listener
 {
 public:
-    AboutDialogContent(const juce::String& diagnostics, const SettingsControls& settings)
+    AboutDialogContent(const juce::String& diagnostics, const SettingsControls& settings,
+                       CustomLookAndFeel* laf)
     {
+        if (laf != nullptr)
+            setLookAndFeel(laf);
+
+        const auto& cols = (laf != nullptr) ? laf->colors() : ThemeColors{};
+        const auto bg = (laf != nullptr) ? cols.bgDeep : kBgDeep;
+
         tabs_ = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
-        tabs_->addTab("About", kBgDeep, new AboutTab(diagnostics), true);
-        tabs_->addTab("Settings", kBgDeep, new SettingsTab(settings), true);
+        tabs_->addTab("About", bg, new AboutTab(diagnostics, cols), true);
+        tabs_->addTab("Settings", bg, new SettingsTab(settings), true);
         addAndMakeVisible(tabs_.get());
 
         ok_button_ = std::make_unique<juce::TextButton>("OK");
@@ -219,16 +226,19 @@ void AboutDiagnostics::show(juce::Component* parent,
                             EngineHostMode mode,
                             const juce::String& version,
                             const DiagnosticSnapshot& snap,
-                            const SettingsControls& settings)
+                            const SettingsControls& settings,
+                            CustomLookAndFeel* laf)
 {
     auto content = std::make_unique<AboutDialogContent>(
-        buildDiagnosticsText(mode, version, snap), settings);
+        buildDiagnosticsText(mode, version, snap), settings, laf);
+
+    const auto& cols = (laf != nullptr) ? laf->colors() : ThemeColors{};
 
     juce::DialogWindow::LaunchOptions options;
     options.dialogTitle = "About / Diagnostics";
     options.content.set(content.release(), true);
     options.componentToCentreAround = parent;
-    options.dialogBackgroundColour = kBgDeep;
+    options.dialogBackgroundColour = (laf != nullptr) ? cols.bgDeep : kBgDeep;
     options.escapeKeyTriggersCloseButton = true;
     options.useNativeTitleBar = true;
     options.resizable = false;

@@ -17,6 +17,9 @@ enum class EngineHostMode
     WindowsService,
 };
 
+// Forward declaration so we don't pull in the full header here.
+class CustomLookAndFeel;
+
 struct DiagnosticSnapshot
 {
     juce::String current_output_friendly_name;
@@ -52,7 +55,8 @@ public:
                      EngineHostMode mode,
                      const juce::String& version,
                      const DiagnosticSnapshot& snap,
-                     const SettingsControls& settings);
+                     const SettingsControls& settings,
+                     CustomLookAndFeel* laf);
 };
 
 }  // namespace jyglobalvst::tray

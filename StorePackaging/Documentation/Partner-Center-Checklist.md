@@ -17,7 +17,7 @@ Use this checklist to prepare all materials for Microsoft Partner Center submiss
 > description, search terms, certification notes, and three 1920x1080 screenshots.
 >
 > **Recommended before submitting, not blocking:** capture a fourth screenshot of the
-> Night-time editor (needs a rebuild — the old capture showed a since-fixed mojibake bug),
+> Auto Volume Leveller / Compressor editor (needs a rebuild — the old capture showed a since-fixed mojibake bug),
 > walk the six-step test in Listing/certification-notes.md against the installed package, and
 > confirm preset save/load still works now that `documentsLibrary` has been removed.
 >

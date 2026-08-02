@@ -178,15 +178,13 @@ void NightTimeEditor::DynamicsGraph::paint(juce::Graphics& g)
     const float atk = smoothing(s.attack_ms);
     const float rel = smoothing(s.release_ms);
 
-    juce::Path before_path;
-    juce::Path after_path;
+    // First pass: simulate dynamics and measure peak levels.
+    float peak_before = 0.f;
+    float peak_after = 0.f;
     float gain = 1.f;
-
     for (int i = 0; i < N; ++i)
     {
         const float t = static_cast<float>(i) / static_cast<float>(N - 1);
-        const float x = plot.getX() + t * plot.getWidth();
-
         const float env = exampleEnvelope(t);
         const float carrier = std::sin(t * juce::MathConstants<float>::twoPi * 26.f);
         const float before = env * carrier;
@@ -200,8 +198,40 @@ void NightTimeEditor::DynamicsGraph::paint(juce::Graphics& g)
         float after = before * gain * trim_linear;
         after = juce::jlimit(-ceiling_linear, ceiling_linear, after);
 
+        peak_before = std::max(peak_before, std::abs(before));
+        peak_after = std::max(peak_after, std::abs(after));
+    }
+
+    // Visual makeup: scale the 'after' curve so its tallest peak matches the
+    // 'before' curve, making the compression effect easier to see while keeping
+    // the relative dynamics intact.
+    float visual_scale = 1.f;
+    if (peak_after > 1e-6f)
+        visual_scale = std::min(5.f, peak_before / peak_after);
+
+    // Second pass: build the paths using the scaled after values.
+    juce::Path before_path;
+    juce::Path after_path;
+    gain = 1.f;
+    for (int i = 0; i < N; ++i)
+    {
+        const float t = static_cast<float>(i) / static_cast<float>(N - 1);
+        const float x = plot.getX() + t * plot.getWidth();
+
+        const float env = exampleEnvelope(t);
+        const float carrier = std::sin(t * juce::MathConstants<float>::twoPi * 26.f);
+        const float before = env * carrier;
+
+        float desired = (env > 1e-4f) ? target_linear / env : 1.f;
+        desired = juce::jlimit(0.1f, max_gain_linear, desired);
+        const float coeff = (desired > gain) ? atk : rel;
+        gain = coeff * gain + (1.f - coeff) * desired;
+
+        float after = before * gain * trim_linear;
+        after = juce::jlimit(-ceiling_linear, ceiling_linear, after);
+
         const float y_before = midY - before * halfH;
-        const float y_after = midY - after * halfH;
+        const float y_after = midY - after * halfH * visual_scale;
 
         if (i == 0)
         {
