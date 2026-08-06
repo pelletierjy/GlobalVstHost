@@ -7,14 +7,14 @@
 
 namespace jyglobalvst::engine {
 
-class VolumeLevelerProcessor;
+class CompressorProcessor;
 
-class VolumeLevelerEditor : public juce::AudioProcessorEditor,
+class CompressorEditor : public juce::AudioProcessorEditor,
                             public juce::Slider::Listener
 {
 public:
-    explicit VolumeLevelerEditor(VolumeLevelerProcessor& processor);
-    ~VolumeLevelerEditor() override;
+    explicit CompressorEditor(CompressorProcessor& processor);
+    ~CompressorEditor() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -22,7 +22,7 @@ public:
     void sliderValueChanged(juce::Slider* slider) override;
 
 private:
-    VolumeLevelerProcessor& processor_;
+    CompressorProcessor& processor_;
 
     struct ParamControl
     {

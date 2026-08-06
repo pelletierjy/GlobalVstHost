@@ -27,7 +27,7 @@ constexpr std::array<uint8_t, 16> EQ_UID_SEED = {
     'J', 'Y', 'G', 'L', '-', 'E', 'Q', '-', 'B', 'A', 'N', 'D', '0', '0', '1', '0'
 };
 
-constexpr std::array<uint8_t, 16> VOLUME_LEVELER_UID_SEED = {
+constexpr std::array<uint8_t, 16> COMPRESSOR_UID_SEED = {
     'J', 'Y', 'G', 'L', '-', 'V', 'O', 'L', '-', 'L', 'V', 'L', 'R', '0', '0', '\0'
 };
 
@@ -42,7 +42,7 @@ constexpr PluginUid EQ_UID = PluginUid{
     0x42, 0x41, 0x4e, 0x44, 0x30, 0x30, 0x31, 0x30   // BAND0010
 };
 
-constexpr PluginUid VOLUME_LEVELER_UID = PluginUid{
+constexpr PluginUid COMPRESSOR_UID = PluginUid{
     0x4a, 0x59, 0x47, 0x4c, 0x2d, 0x56, 0x4f, 0x4c,  // JYGL-VOL
     0x2d, 0x4c, 0x56, 0x4c, 0x52, 0x30, 0x30, 0x00   // -LVLR00\0
 };
@@ -50,10 +50,10 @@ constexpr PluginUid VOLUME_LEVELER_UID = PluginUid{
 // Compile-time validation: UID stability and uniqueness.
 static_assert(NIGHTTIME_UID_SEED.size() == 16, "NIGHTTIME_UID_SEED must be exactly 16 bytes");
 static_assert(EQ_UID_SEED.size() == 16, "EQ_UID_SEED must be exactly 16 bytes");
-static_assert(VOLUME_LEVELER_UID_SEED.size() == 16, "VOLUME_LEVELER_UID_SEED must be exactly 16 bytes");
+static_assert(COMPRESSOR_UID_SEED.size() == 16, "COMPRESSOR_UID_SEED must be exactly 16 bytes");
 static_assert(NIGHTTIME_UID != EQ_UID, "Built-in UIDs must be distinct");
-static_assert(NIGHTTIME_UID != VOLUME_LEVELER_UID, "Built-in UIDs must be distinct");
-static_assert(EQ_UID != VOLUME_LEVELER_UID, "Built-in UIDs must be distinct");
+static_assert(NIGHTTIME_UID != COMPRESSOR_UID, "Built-in UIDs must be distinct");
+static_assert(EQ_UID != COMPRESSOR_UID, "Built-in UIDs must be distinct");
 
 // ============================================================================
 // NIGHT-TIME PROCESSOR PARAMETER IDs
@@ -121,10 +121,10 @@ namespace eq {
 }
 
 // ============================================================================
-// VOLUME LEVELER PROCESSOR PARAMETER IDs
+// COMPRESSOR PROCESSOR PARAMETER IDs
 // ============================================================================
 
-namespace volume_leveler {
+namespace compressor {
     constexpr int PARAM_THRESHOLD = 0;   // float dB
     constexpr int PARAM_RATIO = 1;       // float 1.0 … 20.0
     constexpr int PARAM_ATTACK = 2;      // float ms

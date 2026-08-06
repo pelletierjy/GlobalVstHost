@@ -241,12 +241,12 @@ private:
     // Read-only input/capture sample-rate readout.
     std::unique_ptr<juce::Label> input_rate_caption_;
     std::unique_ptr<juce::Label> input_rate_value_;
-    // Output sample-rate selector; the VST chain auto-follows the negotiated rate,
-    // which is shown read-only below.
+    // Output sample-rate readout (hardware-negotiated, read-only).
     std::unique_ptr<juce::Label> output_rate_caption_;
-    std::unique_ptr<juce::ComboBox> output_rate_selector_;
+    std::unique_ptr<juce::Label> output_rate_value_;
+    // VST sample-rate selector — user-selected rate for the plugin chain.
     std::unique_ptr<juce::Label> vst_rate_caption_;
-    std::unique_ptr<juce::Label> vst_rate_value_;
+    std::unique_ptr<juce::ComboBox> vst_rate_selector_;
     std::unique_ptr<juce::Label> vol_label_;
     std::unique_ptr<juce::Label> theme_label_;
     std::unique_ptr<juce::Label> start_minimized_label_;

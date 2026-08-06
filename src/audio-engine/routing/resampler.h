@@ -42,6 +42,14 @@ public:
     std::size_t process(const float* const* src_channels, float* const* dst_channels,
                         std::size_t src_frames, std::size_t* consumed) noexcept;
 
+    // Fixed-ratio variant that produces exactly `num_out` output frames from
+    // at most `src_frames` input frames. Uses JUCE's safe overload so no
+    // out-of-bounds reads occur if the interpolator needs slightly more input
+    // than available. Sets *consumed to the input frames actually used.
+    std::size_t process(const float* const* src_channels, float* const* dst_channels,
+                        std::size_t num_out, std::size_t src_frames,
+                        std::size_t* consumed) noexcept;
+
     // Adaptive (asynchronous) variant for clock-drift compensation. Produces
     // exactly `num_out` output frames using the CALLER-SUPPLIED `ratio` for this
     // call (input samples consumed per output sample), reading at most

@@ -12,7 +12,7 @@ namespace jyglobalvst::shared::json::validators {
 
 namespace {
 
-constexpr std::array<int, 5> kAllowedSampleRates {44100, 48000, 96000, 176400, 192000};
+constexpr std::array<int, 6> kAllowedSampleRates {44100, 48000, 88200, 96000, 176400, 192000};
 constexpr std::array<int, 6> kAllowedBufferSizes {32, 64, 128, 256, 512, 1024};
 
 constexpr std::array<const char*, 8> kAllowedTopLevel {

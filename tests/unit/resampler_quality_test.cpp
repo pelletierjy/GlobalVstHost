@@ -138,6 +138,28 @@ TEST_F(ResamplerQualityTest, MultiChannelResampling)
     EXPECT_LE(out_frames, input_ch0.size() + 64);
 }
 
+TEST_F(ResamplerQualityTest, FixedOutputCount)
+{
+    // Test the process() overload that produces exactly `num_out` samples.
+    // Upsample 48 kHz → 96 kHz (ratio = 0.5).
+    WindowedSincResampler resampler;
+    resampler.prepare(0.5, 2048, 1);
+
+    auto input = generateSineWave(440.0f, 48000, 0.1f);
+    std::vector<float> output(2048);
+
+    float* src[] = {input.data()};
+    float* dst[] = {output.data()};
+
+    const std::size_t requested_out = 256;
+    std::size_t consumed = 0;
+    const auto out_frames = resampler.process(src, dst, requested_out, input.size(), &consumed);
+
+    EXPECT_EQ(out_frames, requested_out);
+    EXPECT_GT(consumed, 0);
+    EXPECT_LE(consumed, input.size());
+}
+
 TEST_F(ResamplerQualityTest, All5StandardSampleRates)
 {
     // Test resampling transitions between all 5 standard sample rates.

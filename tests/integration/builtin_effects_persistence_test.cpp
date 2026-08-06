@@ -9,7 +9,7 @@ using namespace jyglobalvst::engine;
 
 namespace {
 
-// Sets non-default state on the two built-in effects at slots 0 (Auto volume leveller / Compressor)
+// Sets non-default state on the two built-in effects at slots 0 (Volume Leveler)
 // and 1 (EQ). Values are chosen to differ from every constructor default.
 void setNonDefaultState(AudioEngineImpl& engine)
 {
@@ -46,7 +46,7 @@ void addBuiltins(AudioEngineImpl& engine)
 {
     PluginRef nt_ref;
     nt_ref.vendor = "JyGlobalVST";
-    nt_ref.name = "Auto volume leveller / Compressor";
+    nt_ref.name = "Volume Leveler";
     engine.addPlugin(nt_ref, 0);
 
     PluginRef eq_ref;
@@ -73,7 +73,7 @@ TEST(BuiltinEffectsPersistenceTest, PresetRoundTrip)
 
         auto snapshot = engine2.snapshotChain();
         EXPECT_EQ(snapshot.slots.size(), 2);
-        EXPECT_EQ(snapshot.slots[0].ref.name, "Auto volume leveller / Compressor");
+        EXPECT_EQ(snapshot.slots[0].ref.name, "Volume Leveler");
         EXPECT_EQ(snapshot.slots[1].ref.name, "EQ (Bass Boost)");
     }
 
@@ -89,7 +89,7 @@ TEST(BuiltinEffectsPersistenceTest, AutosaveRestores)
 
         PluginRef ref;
         ref.vendor = "JyGlobalVST";
-        ref.name = "Auto volume leveller / Compressor";
+        ref.name = "Volume Leveler";
         engine.addPlugin(ref, 0);
 
         engine.savePreset(autosave_path, "Autosave");
@@ -101,7 +101,7 @@ TEST(BuiltinEffectsPersistenceTest, AutosaveRestores)
 
         auto snapshot = engine2.snapshotChain();
         EXPECT_EQ(snapshot.slots.size(), 1);
-        EXPECT_EQ(snapshot.slots[0].ref.name, "Auto volume leveller / Compressor");
+        EXPECT_EQ(snapshot.slots[0].ref.name, "Volume Leveler");
     }
 
     std::filesystem::remove(autosave_path);

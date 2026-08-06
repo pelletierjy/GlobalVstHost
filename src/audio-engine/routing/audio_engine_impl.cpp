@@ -387,32 +387,21 @@ void AudioEngineImpl::start()
         // Pure WASAPI mode: JUCE does not drive the callback.
         // Prepare work buffer and plugin chain manually.
         //
-        // Auto-follow the output device: run the VST chain at the output endpoint's
-        // native (Windows shared-mode) rate so the chain->output resampler drops out
-        // entirely. Fall back to the user-requested rate only when there is no
-        // WASAPI output (e.g. capture-only) or its rate is unknown.
-        // For mixed mode (WASAPI capture + ASIO output), use the actual negotiated ASIO rate.
+        // The VST chain now runs at the user-selected desired_sample_rate_ rather
+        // than auto-following the output device. Rate adapters at both boundaries
+        // (capture and output) go into bypass when their in/out rates match.
         double chain_rate = desired_sample_rate_;
         if (mixed_mode_active_.load(std::memory_order_acquire))
         {
-            // ASIO mixed mode: use the actual negotiated ASIO sample rate.
-            double asio_rate = asio_transport_->getNegotiatedSampleRate();
-            if (asio_rate > 0.0)
-            {
-                chain_rate = asio_rate;
-                LogDebug("Mixed mode: ASIO negotiated %.0f Hz, using as chain_rate", asio_rate);
-            }
-            else
-            {
-                LogDebug("Mixed mode: ASIO rate unknown (%.0f), falling back to desired_sample_rate (%.0f)",
-                         asio_rate, desired_sample_rate_);
-            }
+            // Mixed WASAPI capture + ASIO output: the VST chain still runs at the
+            // user-selected rate. Output resampling in the JUCE callback handles
+            // any mismatch with the ASIO device rate.
+            LogDebug("Mixed mode: chain_rate = desired_sample_rate_ = %.0f Hz", chain_rate);
         }
         else if (wasapi_output_ != nullptr && output_wasapi_rate_ > 0.0)
         {
-            // Pure WASAPI mode: use the actual WASAPI output rate.
-            chain_rate = output_wasapi_rate_;
-            LogDebug("Pure WASAPI mode: output negotiated %.0f Hz, using as chain_rate", output_wasapi_rate_);
+            LogDebug("Pure WASAPI mode: chain_rate = desired_sample_rate_ = %.0f Hz, output_wasapi_rate_ = %.0f Hz",
+                     chain_rate, output_wasapi_rate_);
         }
         work_buffer_.setSize(2, desired_buffer_size_, false, false, true);
         plugin_chain_->prepareToPlay(chain_rate, desired_buffer_size_);
@@ -467,9 +456,8 @@ void AudioEngineImpl::start()
             capture_priming_ = false;
         }
 
-        // Set up output-side resampler (T010) only if the chain rate differs from the
-        // output device rate. With auto-follow the chain runs at output_wasapi_rate_,
-        // so this is normally disabled (ratio 1.0) and the resampler drops out.
+        // Set up output-side resampler (T010) whenever the chain rate differs from
+        // the output device rate. When they match the resampler drops out (bypass).
         if (wasapi_output_ != nullptr && output_wasapi_rate_ > 0.0 && output_wasapi_rate_ != chain_rate)
         {
             output_resampling_enabled_ = true;
@@ -1548,6 +1536,19 @@ void AudioEngineImpl::loadPreset(const std::filesystem::path& path)
         }
     }
 
+    // Restore sample rate from preset if present.
+    if (doc.contains("target_sample_rate") && !doc["target_sample_rate"].is_null())
+    {
+        if (doc["target_sample_rate"].is_number_integer())
+        {
+            int sr = doc["target_sample_rate"].get<int>();
+            if (sr == 44100 || sr == 48000 || sr == 88200 || sr == 96000 || sr == 176400 || sr == 192000)
+            {
+                setSampleRate(static_cast<double>(sr));
+            }
+        }
+    }
+
     // Restore endpoints if present.
     if (doc.contains("input_endpoint_id"))
     {
@@ -1987,6 +1988,22 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     }
 
     // 2. Acquire input samples.
+    // When the VST chain runs at a different rate than the JUCE device, compute
+    // the VST-equivalent block size.  This only happens in mixed ASIO mode where
+    // WASAPI capture feeds the input (the capture resampler already handles rate
+    // conversion); pure ASIO / JUCE-WASAPI modes follow the device rate.
+    const double vst_rate = static_cast<double>(negotiated_sample_rate_.load());
+    const bool independent_vst_rate = (juce_device_rate_ > 0.0 &&
+                                       wasapi_capture_ != nullptr &&
+                                       std::abs(vst_rate - juce_device_rate_) > 0.1);
+    int vst_samples = num_samples;
+    if (independent_vst_rate)
+    {
+        const double rate_ratio = vst_rate / juce_device_rate_;
+        vst_samples = static_cast<int>(std::ceil(static_cast<double>(num_samples) * rate_ratio));
+        vst_samples = std::min(vst_samples, work_buffer_.getNumSamples());
+    }
+
     const int samples = std::min(num_samples, work_buffer_.getNumSamples());
     if (wasapi_capture_ != nullptr && capture_ring_buffer_ != nullptr)
     {
@@ -2011,7 +2028,7 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             // via WASAPI loopback + ASIO output). Rate conversion still applies if
             // nominal rates differ, but the ratio never drifts.
             const std::size_t needed =
-                static_cast<std::size_t>(std::ceil(static_cast<double>(samples) * capture_nominal_ratio_)) + 2;
+                static_cast<std::size_t>(std::ceil(static_cast<double>(vst_samples) * capture_nominal_ratio_)) + 2;
             const std::size_t raw_cap = static_cast<std::size_t>(capture_raw_buffer_.getNumSamples());
             const std::size_t peek_n = std::min({needed, avail, raw_cap});
 
@@ -2029,17 +2046,17 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             if (capture_resampling_enabled_ && std::abs(capture_nominal_ratio_ - 1.0) > 0.001)
             {
                 capture_resampler_.processAdaptive(capture_nominal_ratio_, src, dst,
-                                                   static_cast<std::size_t>(samples), peeked, &consumed);
+                                                   static_cast<std::size_t>(vst_samples), peeked, &consumed);
             }
             else
             {
-                consumed = std::min(peeked, static_cast<std::size_t>(samples));
+                consumed = std::min(peeked, static_cast<std::size_t>(vst_samples));
                 for (int c = 0; c < 2; ++c)
                 {
                     if (dst[c] != nullptr && src[c] != nullptr && consumed > 0)
                         std::memcpy(dst[c], src[c], consumed * sizeof(float));
-                    if (dst[c] != nullptr && consumed < static_cast<std::size_t>(samples))
-                        std::memset(dst[c] + consumed, 0, (samples - consumed) * sizeof(float));
+                    if (dst[c] != nullptr && consumed < static_cast<std::size_t>(vst_samples))
+                        std::memset(dst[c] + consumed, 0, (vst_samples - consumed) * sizeof(float));
                 }
             }
             capture_ring_buffer_->advanceRead(consumed);
@@ -2081,7 +2098,7 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                 // the controller centered and avoids an initial underrun burst.
                 for (int c = 0; c < work_buffer_.getNumChannels(); ++c)
                 {
-                    work_buffer_.clear(c, 0, samples);
+                    work_buffer_.clear(c, 0, vst_samples);
                 }
             }
             else
@@ -2129,7 +2146,7 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                 // advances the read pointer by exactly what it uses (never dropping
                 // the unconsumed remainder — that was a source of periodic glitches).
                 const std::size_t needed =
-                    static_cast<std::size_t>(std::ceil(static_cast<double>(samples) * eff_ratio)) + 2;
+                    static_cast<std::size_t>(std::ceil(static_cast<double>(vst_samples) * eff_ratio)) + 2;
                 const std::size_t raw_cap = static_cast<std::size_t>(capture_raw_buffer_.getNumSamples());
                 const std::size_t peek_n = std::min({needed, avail, raw_cap});
 
@@ -2147,12 +2164,12 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                 if (capture_resampling_enabled_)
                 {
                     capture_resampler_.processAdaptive(eff_ratio, src, dst,
-                                                       static_cast<std::size_t>(samples), peeked, &consumed);
+                                                       static_cast<std::size_t>(vst_samples), peeked, &consumed);
                 }
                 else
                 {
                     // No resampling: copy directly (rates already matched or no capture resampler)
-                    consumed = std::min(peeked, static_cast<std::size_t>(samples));
+                    consumed = std::min(peeked, static_cast<std::size_t>(vst_samples));
                     for (int c = 0; c < 2; ++c)
                     {
                         if (dst[c] != nullptr && src[c] != nullptr && consumed > 0)
@@ -2160,9 +2177,9 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                             std::memcpy(dst[c], src[c], consumed * sizeof(float));
                         }
                         // Clear remaining samples to avoid clicks if we didn't consume enough
-                        if (dst[c] != nullptr && consumed < static_cast<std::size_t>(samples))
+                        if (dst[c] != nullptr && consumed < static_cast<std::size_t>(vst_samples))
                         {
-                            std::memset(dst[c] + consumed, 0, (samples - consumed) * sizeof(float));
+                            std::memset(dst[c] + consumed, 0, (vst_samples - consumed) * sizeof(float));
                         }
                     }
                 }
@@ -2204,15 +2221,15 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     // 2a. Compute input peak / RMS (channels 0 and 1).
     if (do_meter)
     {
-        if (work_buffer_.getNumChannels() > 0 && samples > 0)
+        if (work_buffer_.getNumChannels() > 0 && vst_samples > 0)
         {
-            meter_input_peak_l_.store(work_buffer_.getMagnitude(0, 0, samples));
-            meter_input_rms_l_.store(work_buffer_.getRMSLevel(0, 0, samples));
+            meter_input_peak_l_.store(work_buffer_.getMagnitude(0, 0, vst_samples));
+            meter_input_rms_l_.store(work_buffer_.getRMSLevel(0, 0, vst_samples));
         }
-        if (work_buffer_.getNumChannels() > 1 && samples > 0)
+        if (work_buffer_.getNumChannels() > 1 && vst_samples > 0)
         {
-            meter_input_peak_r_.store(work_buffer_.getMagnitude(1, 0, samples));
-            meter_input_rms_r_.store(work_buffer_.getRMSLevel(1, 0, samples));
+            meter_input_peak_r_.store(work_buffer_.getMagnitude(1, 0, vst_samples));
+            meter_input_rms_r_.store(work_buffer_.getRMSLevel(1, 0, vst_samples));
         }
     }
 
@@ -2238,27 +2255,71 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             for (int c = 0; c < work_buffer_.getNumChannels(); ++c)
             {
                 float* ptr = work_buffer_.getWritePointer(c);
-                for (int s = 0; s < samples; ++s)
+                for (int s = 0; s < vst_samples; ++s)
                     ptr[s] *= gain;
             }
         }
     }
 
-    // 4. Copy work buffer → output. The copy runs every block; the meter scan is gated.
-    const int out_channels = std::min(num_output_channels, work_buffer_.getNumChannels());
-    for (int c = 0; c < out_channels; ++c)
+    // 4. Copy work buffer → output.  In JUCE-callback mode with an independent VST
+    //    rate, resample the chain output back to the device rate before copying.
+    if (wasapi_output_ == nullptr)
     {
-        if (output_channel_data[c] != nullptr)
+        if (independent_vst_rate && output_resampling_enabled_ && output_raw_buffer_.getNumSamples() > 0)
         {
-            std::memcpy(output_channel_data[c], work_buffer_.getReadPointer(c),
-                        static_cast<std::size_t>(samples) * sizeof(float));
+            const float* src_ptrs[2] = {
+                work_buffer_.getReadPointer(0),
+                work_buffer_.getNumChannels() > 1 ? work_buffer_.getReadPointer(1) : nullptr
+            };
+            float* dst_ptrs[2] = {
+                output_raw_buffer_.getWritePointer(0),
+                output_raw_buffer_.getNumChannels() > 1 ? output_raw_buffer_.getWritePointer(1) : nullptr
+            };
+            std::size_t consumed = 0;
+            const std::size_t resampled = output_resampler_.process(
+                src_ptrs, dst_ptrs,
+                static_cast<std::size_t>(num_samples),
+                static_cast<std::size_t>(vst_samples),
+                &consumed);
+            const int out_channels = std::min(num_output_channels, static_cast<int>(output_raw_buffer_.getNumChannels()));
+            for (int c = 0; c < out_channels; ++c)
+            {
+                if (output_channel_data[c] != nullptr && dst_ptrs[c] != nullptr)
+                {
+                    std::memcpy(output_channel_data[c], dst_ptrs[c], resampled * sizeof(float));
+                    if (static_cast<int>(resampled) < num_samples)
+                    {
+                        std::memset(output_channel_data[c] + resampled, 0,
+                                    (num_samples - static_cast<int>(resampled)) * sizeof(float));
+                    }
+                }
+            }
+            for (int c = out_channels; c < num_output_channels; ++c)
+            {
+                if (output_channel_data[c] != nullptr)
+                {
+                    std::memset(output_channel_data[c], 0, static_cast<std::size_t>(num_samples) * sizeof(float));
+                }
+            }
         }
-    }
-    for (int c = out_channels; c < num_output_channels; ++c)
-    {
-        if (output_channel_data[c] != nullptr)
+        else
         {
-            std::memset(output_channel_data[c], 0, static_cast<std::size_t>(samples) * sizeof(float));
+            const int out_channels = std::min(num_output_channels, work_buffer_.getNumChannels());
+            for (int c = 0; c < out_channels; ++c)
+            {
+                if (output_channel_data[c] != nullptr)
+                {
+                    std::memcpy(output_channel_data[c], work_buffer_.getReadPointer(c),
+                                static_cast<std::size_t>(num_samples) * sizeof(float));
+                }
+            }
+            for (int c = out_channels; c < num_output_channels; ++c)
+            {
+                if (output_channel_data[c] != nullptr)
+                {
+                    std::memset(output_channel_data[c], 0, static_cast<std::size_t>(num_samples) * sizeof(float));
+                }
+            }
         }
     }
 
@@ -2277,7 +2338,7 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                 output_raw_buffer_.getNumChannels() > 1 ? output_raw_buffer_.getWritePointer(1) : nullptr
             };
             const std::size_t resampled = output_resampler_.process(
-                src_ptrs, dst_ptrs, static_cast<std::size_t>(samples));
+                src_ptrs, dst_ptrs, static_cast<std::size_t>(vst_samples));
             const std::size_t written = output_ring_buffer_->tryWrite(
                 const_cast<const float**>(dst_ptrs), resampled);
             (void)written;
@@ -2285,22 +2346,23 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
         else
         {
             const std::size_t written = output_ring_buffer_->tryWrite(
-                src_ptrs, static_cast<std::size_t>(samples));
+                src_ptrs, static_cast<std::size_t>(vst_samples));
             (void)written;
         }
     }
 
-    if (do_meter && samples > 0)
+    if (do_meter && vst_samples > 0)
     {
-        if (out_channels > 0 && output_channel_data[0] != nullptr)
+        const int out_channels = std::min(num_output_channels, work_buffer_.getNumChannels());
+        if (out_channels > 0 && (wasapi_output_ != nullptr || output_channel_data[0] != nullptr))
         {
-            meter_output_peak_l_.store(work_buffer_.getMagnitude(0, 0, samples));
-            meter_output_rms_l_.store(work_buffer_.getRMSLevel(0, 0, samples));
+            meter_output_peak_l_.store(work_buffer_.getMagnitude(0, 0, vst_samples));
+            meter_output_rms_l_.store(work_buffer_.getRMSLevel(0, 0, vst_samples));
         }
-        if (out_channels > 1 && output_channel_data[1] != nullptr)
+        if (out_channels > 1 && (wasapi_output_ != nullptr || output_channel_data[1] != nullptr))
         {
-            meter_output_peak_r_.store(work_buffer_.getMagnitude(1, 0, samples));
-            meter_output_rms_r_.store(work_buffer_.getRMSLevel(1, 0, samples));
+            meter_output_peak_r_.store(work_buffer_.getMagnitude(1, 0, vst_samples));
+            meter_output_rms_r_.store(work_buffer_.getRMSLevel(1, 0, vst_samples));
         }
     }
 
@@ -2346,25 +2408,54 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         negotiated_sample_rate_.store(static_cast<int>(device->getCurrentSampleRate()));
         const int channels = std::max(2, device->getActiveOutputChannels().countNumberOfSetBits());
         const int block = device->getCurrentBufferSizeSamples();
-        LogDebug("audioDeviceAboutToStart() sr=%d ch=%d block=%d", negotiated_sample_rate_.load(), channels, block);
-        work_buffer_.setSize(channels, block, false, false, true);
-        plugin_chain_->prepareToPlay(device->getCurrentSampleRate(), block);
+        const double device_rate = device->getCurrentSampleRate();
+        juce_device_rate_ = device_rate;
+
+        // Independent VST rate is only supported when WASAPI capture is active
+        // (mixed ASIO mode).  In pure ASIO / JUCE-managed WASAPI the chain follows
+        // the device rate because there is no input resampler on the JUCE path.
+        const bool can_use_independent_vst_rate = (wasapi_capture_ != nullptr);
+        const double vst_rate = can_use_independent_vst_rate ? desired_sample_rate_ : device_rate;
+
+        LogDebug("audioDeviceAboutToStart() device_sr=%.0f vst_sr=%.0f ch=%d block=%d independent=%d",
+                 device_rate, vst_rate, channels, block,
+                 can_use_independent_vst_rate ? 1 : 0);
+
+        // If the VST rate differs from the device rate, size the work buffer for
+        // the largest VST-equivalent block and set up an output resampler.
+        if (can_use_independent_vst_rate && std::abs(vst_rate - device_rate) > 0.1)
+        {
+            const double rate_ratio = vst_rate / device_rate;
+            const int max_vst_block = static_cast<int>(std::ceil(static_cast<double>(block) * rate_ratio));
+            work_buffer_.setSize(channels, max_vst_block, false, false, true);
+            plugin_chain_->prepareToPlay(vst_rate, max_vst_block);
+
+            output_resampling_enabled_ = true;
+            const double output_ratio = vst_rate / device_rate;  // input/output for resampler
+            const int output_raw_max = block + 8;
+            output_resampler_.prepare(output_ratio, static_cast<std::size_t>(output_raw_max), channels);
+            output_raw_buffer_.setSize(channels, output_raw_max, false, true, true);
+        }
+        else
+        {
+            work_buffer_.setSize(channels, block, false, false, true);
+            plugin_chain_->prepareToPlay(device_rate, block);
+            output_resampling_enabled_ = false;
+            output_raw_buffer_.setSize(0, 0);
+        }
+        negotiated_sample_rate_.store(static_cast<int>(vst_rate));
         LogDebug("audioDeviceAboutToStart() prepareToPlay done");
 
-        // Set up the drift-compensating capture-side resampler. In mixed mode we
-        // ALWAYS resample — even at matched sample rates — because the effective
-        // ratio must continuously deviate from nominal to track the difference
-        // between the free-running WASAPI capture clock and the ASIO clock.
-        // In pure JUCE callback mode, resample if input and output rates differ.
-        const double asio_rate = device->getCurrentSampleRate();
-        const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : asio_rate;
+        // Set up the drift-compensating capture-side resampler. The chain now runs
+        // at the user-selected vst_rate, so the capture ratio is wasapi_rate / vst_rate.
+        const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : vst_rate;
         capture_resampling_enabled_ =
-            (mixed_mode_active_.load() || std::abs(wasapi_rate - asio_rate) > 0.1) &&
-            wasapi_rate > 0.0 && asio_rate > 0.0;
+            (mixed_mode_active_.load() || std::abs(wasapi_rate - device_rate) > 0.1) &&
+            wasapi_rate > 0.0 && vst_rate > 0.0;
 
         if (capture_resampling_enabled_)
         {
-            capture_nominal_ratio_ = wasapi_rate / asio_rate;  // input frames per output frame
+            capture_nominal_ratio_ = wasapi_rate / vst_rate;  // input frames per output frame
             capture_smoothed_corr_ = 0.0;
             capture_drift_integral_ = 0.0;
             capture_priming_ = true;
@@ -2372,11 +2463,13 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
             capture_fill_min_frames_.store(SIZE_MAX, std::memory_order_relaxed);
             xrun_count_.store(0, std::memory_order_relaxed);
 
-            // Worst-case input consumed per callback = block * nominal * (1 + max
-            // correction), plus sinc-kernel headroom. The raw peek buffer must
-            // never be the limiting factor, so size for the max-correction case.
+            // Worst-case input consumed per callback = block * (wasapi_rate / device_rate) * (1 + max
+            // correction), plus sinc-kernel headroom.  This is independent of the VST
+            // rate because the device always delivers `block` frames at `device_rate`;
+            // the VST-equivalent block size cancels out in the ratio.
+            const double input_per_device_block = wasapi_rate / device_rate;
             const int raw_max = static_cast<int>(std::ceil(
-                                    static_cast<double>(block) * capture_nominal_ratio_ *
+                                    static_cast<double>(block) * input_per_device_block *
                                     (1.0 + kCaptureDriftMaxCorr))) +
                                 8;
             capture_resampler_.prepare(capture_nominal_ratio_, static_cast<std::size_t>(raw_max), 2);
@@ -2394,10 +2487,10 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
             }
             capture_target_frames_ = target;
             capture_fill_avg_ = static_cast<double>(target);
-            prepareCaptureDriftTuning(asio_rate, block, capture_target_frames_);
+            prepareCaptureDriftTuning(vst_rate, block, capture_target_frames_);
 
-            LogDebug("audioDeviceAboutToStart() drift-SRC: wasapi=%.0f asio=%.0f ratio=%.6f target=%zu frames",
-                     wasapi_rate, asio_rate, capture_nominal_ratio_, capture_target_frames_);
+            LogDebug("audioDeviceAboutToStart() drift-SRC: wasapi=%.0f vst=%.0f ratio=%.6f target=%zu frames",
+                     wasapi_rate, vst_rate, capture_nominal_ratio_, capture_target_frames_);
         }
         else
         {

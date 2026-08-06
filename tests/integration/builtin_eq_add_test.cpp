@@ -15,7 +15,7 @@ TEST(BuiltinEqTest, CatalogListsBothEffects)
         if (entry.ref.vendor == "JyGlobalVST" && entry.file_path.empty())
             builtin_count++;
     }
-    EXPECT_EQ(builtin_count, 3) << "Expected 3 built-in effects (Auto volume leveller / Compressor + EQ + Volume Leveler)";
+    EXPECT_EQ(builtin_count, 3) << "Expected 3 built-in effects (Volume Leveler + EQ + Compressor)";
 }
 
 TEST(BuiltinEqTest, AddEqToChain)
@@ -40,7 +40,7 @@ TEST(BuiltinEffectsTest, BothEffectsInChain)
 
     PluginRef nt_ref;
     nt_ref.vendor = "JyGlobalVST";
-    nt_ref.name = "Auto volume leveller / Compressor";
+    nt_ref.name = "Volume Leveler";
     engine.addPlugin(nt_ref, 0);
 
     PluginRef eq_ref;

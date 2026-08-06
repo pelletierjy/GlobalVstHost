@@ -1,34 +1,34 @@
-#include "volume_leveler_processor.h"
-#include "volume_leveler_editor.h"
+#include "compressor_processor.h"
+#include "compressor_editor.h"
 #include "builtin_ids.h"
 #include <cmath>
 #include <nlohmann/json.hpp>
 
 namespace jyglobalvst::engine {
 
-VolumeLevelerProcessor::VolumeLevelerProcessor()
-    : threshold_db_(builtin::volume_leveler::THRESHOLD_DEFAULT_DB)
-    , ratio_(builtin::volume_leveler::RATIO_DEFAULT)
-    , attack_ms_(builtin::volume_leveler::ATTACK_DEFAULT_MS)
-    , release_ms_(builtin::volume_leveler::RELEASE_DEFAULT_MS)
-    , makeup_db_(builtin::volume_leveler::MAKEUP_DEFAULT_DB)
+CompressorProcessor::CompressorProcessor()
+    : threshold_db_(builtin::compressor::THRESHOLD_DEFAULT_DB)
+    , ratio_(builtin::compressor::RATIO_DEFAULT)
+    , attack_ms_(builtin::compressor::ATTACK_DEFAULT_MS)
+    , release_ms_(builtin::compressor::RELEASE_DEFAULT_MS)
+    , makeup_db_(builtin::compressor::MAKEUP_DEFAULT_DB)
 {
 }
 
-VolumeLevelerProcessor::~VolumeLevelerProcessor() = default;
+CompressorProcessor::~CompressorProcessor() = default;
 
-void VolumeLevelerProcessor::prepareToPlay(double sample_rate, int /*samples_per_block*/)
+void CompressorProcessor::prepareToPlay(double sample_rate, int /*samples_per_block*/)
 {
     sample_rate_ = sample_rate;
     envelope_ = 0.0f;
     updateCoefficients();
 }
 
-void VolumeLevelerProcessor::releaseResources()
+void CompressorProcessor::releaseResources()
 {
 }
 
-void VolumeLevelerProcessor::updateCoefficients()
+void CompressorProcessor::updateCoefficients()
 {
     const float attack_ms = attack_ms_.load(std::memory_order_relaxed);
     const float release_ms = release_ms_.load(std::memory_order_relaxed);
@@ -36,7 +36,7 @@ void VolumeLevelerProcessor::updateCoefficients()
     release_coeff_ = std::exp(-1.0f / (release_ms * static_cast<float>(sample_rate_) / 1000.0f));
 }
 
-void VolumeLevelerProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void CompressorProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     auto num_samples = buffer.getNumSamples();
     auto num_channels = buffer.getNumChannels();
@@ -48,7 +48,7 @@ void VolumeLevelerProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     applyCompression(buffer.getWritePointer(0), buffer.getWritePointer(1), num_samples);
 }
 
-void VolumeLevelerProcessor::applyCompression(float* left, float* right, int num_samples) noexcept
+void CompressorProcessor::applyCompression(float* left, float* right, int num_samples) noexcept
 {
     const float threshold_db = threshold_db_.load(std::memory_order_relaxed);
     const float ratio = ratio_.load(std::memory_order_relaxed);
@@ -87,7 +87,7 @@ void VolumeLevelerProcessor::applyCompression(float* left, float* right, int num
     }
 }
 
-void VolumeLevelerProcessor::getStateInformation(juce::MemoryBlock& dest)
+void CompressorProcessor::getStateInformation(juce::MemoryBlock& dest)
 {
     nlohmann::json doc;
     doc["threshold_db"] = getThresholdDb();
@@ -100,7 +100,7 @@ void VolumeLevelerProcessor::getStateInformation(juce::MemoryBlock& dest)
     dest.append(s.data(), s.size());
 }
 
-void VolumeLevelerProcessor::setStateInformation(const void* data, int size)
+void CompressorProcessor::setStateInformation(const void* data, int size)
 {
     try
     {
@@ -123,15 +123,15 @@ void VolumeLevelerProcessor::setStateInformation(const void* data, int size)
     }
 }
 
-juce::AudioProcessorEditor* VolumeLevelerProcessor::createEditor()
+juce::AudioProcessorEditor* CompressorProcessor::createEditor()
 {
-    return new VolumeLevelerEditor(*this);
+    return new CompressorEditor(*this);
 }
 
-void VolumeLevelerProcessor::fillInPluginDescription(juce::PluginDescription& description) const
+void CompressorProcessor::fillInPluginDescription(juce::PluginDescription& description) const
 {
-    description.name = "Volume Leveler";
-    description.descriptiveName = "Volume Leveler (Compressor)";
+    description.name = "Compressor";
+    description.descriptiveName = "Compressor";
     description.pluginFormatName = "Built-in";
     description.category = "Fx";
     description.manufacturerName = "JyGlobalVST";

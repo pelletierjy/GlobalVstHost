@@ -1,10 +1,10 @@
-#include "volume_leveler_editor.h"
-#include "volume_leveler_processor.h"
+#include "compressor_editor.h"
+#include "compressor_processor.h"
 #include "builtin_theme.h"
 
 namespace jyglobalvst::engine {
 
-VolumeLevelerEditor::VolumeLevelerEditor(VolumeLevelerProcessor& processor)
+CompressorEditor::CompressorEditor(CompressorProcessor& processor)
     : juce::AudioProcessorEditor(processor), processor_(processor)
 {
     setupParamControl(threshold_, "Threshold", -60.0, 0.0, -20.0, " dB");
@@ -25,9 +25,9 @@ VolumeLevelerEditor::VolumeLevelerEditor(VolumeLevelerProcessor& processor)
     setSize(320, 240);
 }
 
-VolumeLevelerEditor::~VolumeLevelerEditor() = default;
+CompressorEditor::~CompressorEditor() = default;
 
-void VolumeLevelerEditor::setupParamControl(ParamControl& ctrl,
+void CompressorEditor::setupParamControl(ParamControl& ctrl,
                                             const juce::String& name,
                                             double min,
                                             double max,
@@ -51,12 +51,12 @@ void VolumeLevelerEditor::setupParamControl(ParamControl& ctrl,
     addAndMakeVisible(ctrl.value_label.get());
 }
 
-void VolumeLevelerEditor::paint(juce::Graphics& g)
+void CompressorEditor::paint(juce::Graphics& g)
 {
     g.fillAll(engine::builtinThemeColors().background);
 }
 
-void VolumeLevelerEditor::resized()
+void CompressorEditor::resized()
 {
     auto b = getLocalBounds().reduced(16);
     b.removeFromTop(8);  // title gap
@@ -76,7 +76,7 @@ void VolumeLevelerEditor::resized()
     row(makeup_);
 }
 
-void VolumeLevelerEditor::sliderValueChanged(juce::Slider* slider)
+void CompressorEditor::sliderValueChanged(juce::Slider* slider)
 {
     if (slider == threshold_.slider.get())
         processor_.setThresholdDb(static_cast<float>(slider->getValue()));
@@ -92,7 +92,7 @@ void VolumeLevelerEditor::sliderValueChanged(juce::Slider* slider)
     updateValueLabels();
 }
 
-void VolumeLevelerEditor::updateValueLabels()
+void CompressorEditor::updateValueLabels()
 {
     threshold_.value_label->setText(juce::String(threshold_.slider->getValue(), 1) + " dB",
                                     juce::dontSendNotification);
@@ -106,7 +106,7 @@ void VolumeLevelerEditor::updateValueLabels()
                                 juce::dontSendNotification);
 }
 
-void VolumeLevelerEditor::applyThemeColors()
+void CompressorEditor::applyThemeColors()
 {
     const auto& c = engine::builtinThemeColors();
     for (ParamControl* ctrl : { &threshold_, &ratio_, &attack_, &release_, &makeup_ })

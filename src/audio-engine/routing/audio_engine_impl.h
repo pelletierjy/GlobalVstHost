@@ -217,6 +217,11 @@ private:
     bool output_resampling_enabled_ {false};
     double output_wasapi_rate_ {0.0};
 
+    // JUCE-callback device rate, stored in audioDeviceAboutToStart so the callback
+    // can compute the VST-equivalent block size when the chain runs at a different
+    // rate than the hardware.
+    double juce_device_rate_ {0.0};
+
     // Clock-drift compensation (asynchronous SRC) for the WASAPI-capture →
     // ASIO-output bridge. The WASAPI and ASIO clocks are independent, so a fixed
     // resampling ratio lets the ring buffer walk to a rail (over/underrun) within

@@ -14,14 +14,14 @@ TEST(BuiltinNightTimeTest, CatalogListsNightTime)
     bool found = false;
     for (const auto& entry : catalog)
     {
-        if (entry.ref.name == "Auto volume leveller / Compressor" && entry.ref.vendor == "JyGlobalVST")
+        if (entry.ref.name == "Volume Leveler" && entry.ref.vendor == "JyGlobalVST")
         {
             found = true;
             EXPECT_EQ(entry.file_path, "");  // Built-ins have empty file_path
             break;
         }
     }
-    EXPECT_TRUE(found) << "Auto volume leveller / Compressor not found in catalog";
+    EXPECT_TRUE(found) << "Volume Leveler not found in catalog";
 }
 
 TEST(BuiltinNightTimeTest, AddNightTimeToChain)
@@ -30,14 +30,14 @@ TEST(BuiltinNightTimeTest, AddNightTimeToChain)
 
     PluginRef ref;
     ref.vendor = "JyGlobalVST";
-    ref.name = "Auto volume leveller / Compressor";
+    ref.name = "Volume Leveler";
 
     auto id = engine.addPlugin(ref, 0);
-    EXPECT_FALSE(id.isNull()) << "Failed to add Auto volume leveller / Compressor to chain";
+    EXPECT_FALSE(id.isNull()) << "Failed to add Volume Leveler to chain";
 
     auto snapshot = engine.snapshotChain();
     EXPECT_EQ(snapshot.slots.size(), 1);
-    EXPECT_EQ(snapshot.slots[0].ref.name, "Auto volume leveller / Compressor");
+    EXPECT_EQ(snapshot.slots[0].ref.name, "Volume Leveler");
 }
 
 TEST(BuiltinNightTimeTest, PresetRoundTrip)
@@ -46,7 +46,7 @@ TEST(BuiltinNightTimeTest, PresetRoundTrip)
 
     PluginRef ref;
     ref.vendor = "JyGlobalVST";
-    ref.name = "Auto volume leveller / Compressor";
+    ref.name = "Volume Leveler";
     engine.addPlugin(ref, 0);
 
     auto preset_path = std::filesystem::temp_directory_path() / "test_nighttime.jvst";
@@ -57,7 +57,7 @@ TEST(BuiltinNightTimeTest, PresetRoundTrip)
 
     auto snapshot = engine2.snapshotChain();
     EXPECT_EQ(snapshot.slots.size(), 1);
-    EXPECT_EQ(snapshot.slots[0].ref.name, "Auto volume leveller / Compressor");
+    EXPECT_EQ(snapshot.slots[0].ref.name, "Volume Leveler");
 
     std::filesystem::remove(preset_path);
 }
