@@ -105,17 +105,6 @@ public:
     // True while the engine is currently in the suspended (sleeping) state.
     virtual bool isEnergySaverSleeping() const = 0;
 
-    // --- Drift Compensation ------------------------------------------------
-    // When enabled (default), the engine continuously adjusts the capture→output
-    // resampling ratio via a PI loop on the ring-buffer fill level. This is
-    // required when the capture and output clocks are independent (e.g. WASAPI
-    // loopback from the motherboard vs. ASIO on a USB interface).
-    // When disabled, the engine reads from the capture ring at a fixed nominal
-    // ratio. Use this only when the capture and output share the same hardware
-    // clock (e.g. WASAPI loopback and ASIO output on the same USB device).
-    virtual void setDriftCompensationEnabled(bool enabled) = 0;
-    virtual bool isDriftCompensationEnabled() const = 0;
-
     // --- Device selection --------------------------------------------------
     virtual std::vector<HardwareOutputInfo> listOutputs() const = 0;
     virtual void selectOutput(const EndpointId& id) = 0;
@@ -199,6 +188,10 @@ public:
     virtual LatencyProfile latencyProfile() const = 0;
     virtual CpuStats cpuStats() const = 0;
     virtual MeterFrame latestMeterFrame() const = 0;
+
+    // Per-plugin output metering (US4 extension).
+    virtual std::vector<float> pluginOutputPeaks() const = 0;
+    virtual std::vector<float> pluginOutputRms() const = 0;
 };
 
 // Factory. The concrete implementation lives in src/audio-engine/routing/.

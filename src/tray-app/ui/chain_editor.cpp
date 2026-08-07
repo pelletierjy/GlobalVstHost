@@ -25,6 +25,13 @@ void LogDebug(const char* fmt, ...)
     OutputDebugStringA("\n");
 }
 
+float linearToDb(float linear)
+{
+    if (linear <= 0.0f)
+        return -120.0f;
+    return 20.0f * std::log10(linear);
+}
+
 }  // namespace
 
 // =========================================================================
@@ -67,6 +74,13 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
     remove_button_->addListener(this);
     addAndMakeVisible(remove_button_.get());
 
+    // Per-plugin output meter: only for actual (non-failed) plugin slots.
+    if (slot_.kind == PluginSlotKind::Plugin && !slot_.is_failed)
+    {
+        meter_ = std::make_unique<HorizontalMeterPanel>();
+        addAndMakeVisible(meter_.get());
+    }
+
     if (slot_.kind == PluginSlotKind::Placeholder)
     {
         LogDebug("ChainSlotRow::ctor: Disabling buttons for Placeholder at position %d", position);
@@ -95,6 +109,14 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
 bool ChainSlotRow::isDraggable() const noexcept
 {
     return slot_.kind != PluginSlotKind::Placeholder && !slot_.is_failed;
+}
+
+void ChainSlotRow::setMeterLevels(float peakDb, float rmsDb)
+{
+    if (meter_ != nullptr)
+    {
+        meter_->setLevels(peakDb, rmsDb);
+    }
 }
 
 void ChainSlotRow::buttonClicked(juce::Button* button)
@@ -191,12 +213,24 @@ void ChainSlotRow::resized()
     fb.alignItems = juce::FlexBox::AlignItems::stretch;
     fb.items.add(juce::FlexItem(*name_label_).withFlex(3.0f));
     fb.items.add(juce::FlexItem().withWidth(8));
+    if (meter_ != nullptr)
+    {
+        fb.items.add(juce::FlexItem(*meter_).withMinWidth(80).withWidth(80));
+        fb.items.add(juce::FlexItem().withWidth(8));
+    }
     fb.items.add(juce::FlexItem(*bypass_button_).withMinWidth(72).withWidth(72));
     fb.items.add(juce::FlexItem().withWidth(8));
     fb.items.add(juce::FlexItem(*editor_button_).withMinWidth(60).withWidth(60));
     fb.items.add(juce::FlexItem().withWidth(8));
     fb.items.add(juce::FlexItem(*remove_button_).withMinWidth(60).withWidth(60));
     fb.performLayout(b);
+
+    // Keep the horizontal meter vertically centred within the row (max 16 px tall).
+    if (meter_ != nullptr)
+    {
+        auto mb = meter_->getBounds();
+        meter_->setBounds(mb.withSizeKeepingCentre(mb.getWidth(), 16));
+    }
 }
 
 bool ChainSlotRow::keyPressed(const juce::KeyPress& key)
@@ -408,6 +442,17 @@ void ChainEditor::resized()
         add_plugin_button_->setBounds(0, static_cast<int>(rows_.size()) * kRowHeight, w, kRowHeight);
     int total_height = (static_cast<int>(rows_.size()) + 1) * kRowHeight;
     content_->setSize(w, std::max(total_height, 100));
+}
+
+void ChainEditor::setPluginMeterLevels(const std::vector<float>& peaks,
+                                        const std::vector<float>& rms)
+{
+    const int count = static_cast<int>(std::min(peaks.size(), rms.size()));
+    const int rows = static_cast<int>(rows_.size());
+    for (int i = 0; i < count && i < rows; ++i)
+    {
+        rows_[i]->setMeterLevels(linearToDb(peaks[i]), linearToDb(rms[i]));
+    }
 }
 
 void ChainEditor::buttonClicked(juce::Button* button)

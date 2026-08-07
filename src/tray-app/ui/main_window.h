@@ -196,7 +196,6 @@ private:
     std::unique_ptr<juce::ComboBox> theme_selector_;
     std::unique_ptr<juce::ToggleButton> start_minimized_button_;
     std::unique_ptr<juce::ToggleButton> tooltips_button_;
-    std::unique_ptr<juce::ToggleButton> drift_compensation_button_;
     std::unique_ptr<juce::TooltipWindow> tooltip_window_;
 
     // Parallel storage for endpoint IDs (JUCE ComboBox has no setItemData).
@@ -251,7 +250,6 @@ private:
     std::unique_ptr<juce::Label> theme_label_;
     std::unique_ptr<juce::Label> start_minimized_label_;
     std::unique_ptr<juce::Label> tooltips_label_;
-    std::unique_ptr<juce::Label> drift_compensation_label_;
 
     // Raw pointer into the content tree — owned by HeaderComponent, valid for app lifetime.
     juce::Label* title_label_ {nullptr};

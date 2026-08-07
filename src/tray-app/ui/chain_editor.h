@@ -8,6 +8,7 @@
 #pragma once
 
 #include "jyglobalvst/audio_engine.h"
+#include "horizontal_meter_panel.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -42,6 +43,9 @@ public:
 
     int position() const noexcept { return position_; }
 
+    // Update the per-plugin output meter (peak / RMS in dB).
+    void setMeterLevels(float peakDb, float rmsDb);
+
     // Invoked when the user drops a dragged row, requesting a reorder.
     // Arguments are (from_position, to_position) for IAudioEngine::moveSlot.
     std::function<void(int from, int to)> onReorderRequest;
@@ -60,6 +64,7 @@ private:
     std::unique_ptr<juce::TextButton> remove_button_;
     std::unique_ptr<juce::TextButton> editor_button_;
     std::unique_ptr<juce::Label> name_label_;
+    std::unique_ptr<HorizontalMeterPanel> meter_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChainSlotRow)
 };
@@ -74,6 +79,10 @@ public:
 
     void refreshFromEngine();
     void resized() override;
+
+    // Push per-plugin meter levels into the visible rows.
+    void setPluginMeterLevels(const std::vector<float>& peaks,
+                              const std::vector<float>& rms);
 
     void buttonClicked(juce::Button* button) override;
 

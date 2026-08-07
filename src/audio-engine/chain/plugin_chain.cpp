@@ -47,6 +47,10 @@ PluginChain::PluginChain()
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     active_slots_.store(&slots_a_, std::memory_order_relaxed);
+    for (auto& a : slot_output_peak_)
+        a.store(0.0f, std::memory_order_relaxed);
+    for (auto& a : slot_output_rms_)
+        a.store(0.0f, std::memory_order_relaxed);
 }
 
 PluginChain::~PluginChain() = default;
@@ -268,6 +272,31 @@ std::shared_ptr<PlaceholderInstance> PluginChain::getSlotPlaceholder(int positio
     return (*slots)[position].placeholder;
 }
 
+void PluginChain::readSlotOutputLevels(std::vector<float>& peaks,
+                                       std::vector<float>& rms) const
+{
+    const auto* slots = activeSlots();
+    if (!slots)
+    {
+        peaks.clear();
+        rms.clear();
+        return;
+    }
+    const int n = static_cast<int>(slots->size());
+    peaks.resize(n);
+    rms.resize(n);
+    for (int i = 0; i < n && i < kMaxMeteredSlots; ++i)
+    {
+        peaks[i] = slot_output_peak_[i].load(std::memory_order_relaxed);
+        rms[i] = slot_output_rms_[i].load(std::memory_order_relaxed);
+    }
+    for (int i = kMaxMeteredSlots; i < n; ++i)
+    {
+        peaks[i] = 0.0f;
+        rms[i] = 0.0f;
+    }
+}
+
 void PluginChain::prepareToPlay(double sample_rate, int samples_per_block)
 {
     OutputDebugStringA("[PluginChain] prepareToPlay: starting\n");
@@ -341,7 +370,14 @@ void PluginChain::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
         return;
     }
 
+    // Clear metering for all slots up front; active slots will overwrite.
+    for (auto& a : slot_output_peak_)
+        a.store(0.0f, std::memory_order_relaxed);
+    for (auto& a : slot_output_rms_)
+        a.store(0.0f, std::memory_order_relaxed);
+
     juce::MidiBuffer empty_midi;
+    int slot_index = 0;
     for (auto& slot : *slots)
     {
         // Placeholders are audio-transparent (skipped).
@@ -349,6 +385,7 @@ void PluginChain::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
             || slot.is_bypassed.load(std::memory_order_relaxed)
             || slot.is_failed.load(std::memory_order_relaxed))
         {
+            ++slot_index;
             continue;
         }
 
@@ -368,7 +405,18 @@ void PluginChain::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
         {
             // Reset the transient counter on any successful call.
             slot.failure_count.store(0, std::memory_order_relaxed);
+
+            // Capture post-plugin output level for UI metering.
+            if (slot_index < kMaxMeteredSlots)
+            {
+                const int n = buffer.getNumSamples();
+                slot_output_peak_[slot_index].store(buffer.getMagnitude(0, n),
+                                                     std::memory_order_relaxed);
+                slot_output_rms_[slot_index].store(buffer.getRMSLevel(0, n),
+                                                    std::memory_order_relaxed);
+            }
         }
+        ++slot_index;
     }
 
     juce::ignoreUnused(midi);

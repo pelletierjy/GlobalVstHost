@@ -24,6 +24,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <atomic>
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -119,6 +120,11 @@ public:
     int revision() const noexcept { return revision_.load(); }
     void bumpRevision() noexcept { revision_.fetch_add(1, std::memory_order_relaxed); }
 
+    // Per-slot output metering (audio-thread writes, UI-thread reads).
+    static constexpr int kMaxMeteredSlots = 32;
+    void readSlotOutputLevels(std::vector<float>& peaks,
+                              std::vector<float>& rms) const;
+
     // --- AudioProcessor interface ----------------------------------------
     void prepareToPlay(double sample_rate, int samples_per_block) override;
     void releaseResources() override;
@@ -161,6 +167,10 @@ private:
 
     std::atomic<int> revision_ {0};
     std::atomic<std::uint64_t> next_instance_id_ {1};
+
+    // Per-slot output levels written by the audio thread during processBlock.
+    std::array<std::atomic<float>, kMaxMeteredSlots> slot_output_peak_;
+    std::array<std::atomic<float>, kMaxMeteredSlots> slot_output_rms_;
 
     double sample_rate_ {48000.0};
     int samples_per_block_ {256};

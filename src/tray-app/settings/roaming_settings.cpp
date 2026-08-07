@@ -102,10 +102,6 @@ RoamingSettings RoamingSettingsStore::load() const
     {
         s.tooltips_enabled = doc["tooltips_enabled"].get<bool>();
     }
-    if (doc.contains("drift_compensation_enabled") && doc["drift_compensation_enabled"].is_boolean())
-    {
-        s.drift_compensation_enabled = doc["drift_compensation_enabled"].get<bool>();
-    }
 
     if (doc.contains("capture_endpoint_id"))
     {
@@ -138,7 +134,7 @@ RoamingSettings RoamingSettingsStore::load() const
     static const char* kKnown[] = {"schema_version", "custom_scan_paths", "disabled_default_paths",
                                     "default_buffer_size", "theme", "default_hardware_device_friendly_name",
                                     "update_check_endpoint_url", "start_minimized_to_tray", "master_volume",
-                                    "energy_saver_enabled", "tooltips_enabled", "drift_compensation_enabled",
+                                    "energy_saver_enabled", "tooltips_enabled",
                                     "capture_endpoint_id", "output_endpoint_id", "follow_default_capture"};
     for (auto it = doc.begin(); it != doc.end(); ++it)
     {
@@ -176,7 +172,6 @@ void RoamingSettingsStore::save(const RoamingSettings& settings) const
     doc["master_volume"] = settings.master_volume;
     doc["energy_saver_enabled"] = settings.energy_saver_enabled;
     doc["tooltips_enabled"] = settings.tooltips_enabled;
-    doc["drift_compensation_enabled"] = settings.drift_compensation_enabled;
     doc["capture_endpoint_id"] = settings.capture_endpoint_id
                                      ? nlohmann::json(*settings.capture_endpoint_id)
                                      : nlohmann::json(nullptr);

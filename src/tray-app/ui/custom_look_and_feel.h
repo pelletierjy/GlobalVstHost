@@ -234,6 +234,10 @@ private:
         {
             drawQuestionIcon(g, bounds, textColour);
         }
+        else if (text == "+")
+        {
+            drawPlusIcon(g, bounds, textColour);
+        }
         else if (text == "EQ" || text == "NT" || text == "VL")
         {
             // Text state buttons: green when active (toggled on), grey when off —
@@ -428,6 +432,33 @@ private:
         glyph.setBold(true);
         g.setFont(glyph);
         g.drawText("?", bounds.toNearestInt(), juce::Justification::centred, false);
+    }
+
+    // Plus icon inside a circular badge — same outline+fill family as the trash,
+    // pencil, power and question icons.
+    void drawPlusIcon(juce::Graphics& g, juce::Rectangle<float> bounds,
+                      juce::Colour colour) const
+    {
+        const auto c = bounds.getCentre();
+        const float s = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+        const float r = s * 0.55f;
+
+        g.setColour(colour.withAlpha(kIconFillAlpha));
+        g.fillEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
+
+        juce::Path ring;
+        ring.addEllipse(c.x - r, c.y - r, r * 2.0f, r * 2.0f);
+        g.setColour(colour);
+        g.strokePath(ring, iconStroke());
+
+        const float arm = r * 0.50f;
+
+        juce::Path cross;
+        cross.startNewSubPath(c.x - arm, c.y);
+        cross.lineTo(c.x + arm, c.y);
+        cross.startNewSubPath(c.x, c.y - arm);
+        cross.lineTo(c.x, c.y + arm);
+        g.strokePath(cross, iconStroke(2.0f));
     }
 
     // Coloured like the rest of the state icons: green when active (unmuted),

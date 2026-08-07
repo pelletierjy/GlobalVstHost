@@ -294,19 +294,6 @@ bool IpcEngineProxy::isEnergySaverSleeping() const
     return false;
 }
 
-void IpcEngineProxy::setDriftCompensationEnabled(bool enabled)
-{
-    sendCommand("engine.set_drift_compensation_enabled", {{"enabled", enabled}});
-}
-
-bool IpcEngineProxy::isDriftCompensationEnabled() const
-{
-    auto resp = const_cast<IpcEngineProxy*>(this)->sendCommand("engine.is_drift_compensation_enabled", {});
-    if (resp.contains("result") && resp["result"].contains("enabled"))
-        return resp["result"]["enabled"].get<bool>();
-    return true;
-}
-
 std::vector<HardwareOutputInfo> IpcEngineProxy::listOutputs() const
 {
     auto resp = const_cast<IpcEngineProxy*>(this)->sendCommand("device.list_outputs", {});
@@ -532,6 +519,16 @@ CpuStats IpcEngineProxy::cpuStats() const
 }
 
 MeterFrame IpcEngineProxy::latestMeterFrame() const
+{
+    return {};
+}
+
+std::vector<float> IpcEngineProxy::pluginOutputPeaks() const
+{
+    return {};
+}
+
+std::vector<float> IpcEngineProxy::pluginOutputRms() const
 {
     return {};
 }

@@ -44,8 +44,6 @@ struct SettingsControls
     juce::ToggleButton* start_minimized_button {nullptr};
     juce::Label* tooltips_label {nullptr};
     juce::ToggleButton* tooltips_button {nullptr};
-    juce::Label* drift_compensation_label {nullptr};
-    juce::ToggleButton* drift_compensation_button {nullptr};
 };
 
 class AboutDiagnostics
