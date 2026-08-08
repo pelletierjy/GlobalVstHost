@@ -106,6 +106,9 @@ struct HardwareOutputInfo
     bool is_default {false};
     bool is_present {true};
     TransportKind transport_kind {TransportKind::Wasapi};
+    // True when this input source is a render endpoint captured in loopback mode
+    // (system audio). False for real capture devices (microphone, line-in, etc.).
+    bool is_loopback {false};
 };
 
 struct PluginRef

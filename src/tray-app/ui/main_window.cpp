@@ -326,9 +326,17 @@ LRESULT CALLBACK mainWindowSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-juce::String endpointDisplayName(const HardwareOutputInfo& info)
+juce::String endpointDisplayName(const HardwareOutputInfo& info, bool for_input)
 {
-    juce::String s = juce::String(info.friendly_name);
+    juce::String s;
+    if (for_input)
+    {
+        if (info.is_loopback)
+            s += "System: ";
+        else
+            s += "Input: ";
+    }
+    s += juce::String(info.friendly_name);
     if (info.transport_kind == TransportKind::Asio)
     {
         s += " (ASIO)";
@@ -2124,7 +2132,7 @@ void MainWindow::refreshDeviceLists()
 
     for (const auto& in : inputs)
     {
-        input_selector_->addItem(endpointDisplayName(in), input_idx);
+        input_selector_->addItem(endpointDisplayName(in, true), input_idx);
         input_endpoint_ids_.push_back(in.endpoint_id);
         if (in.endpoint_id == current_input)
         {
@@ -2162,7 +2170,7 @@ void MainWindow::refreshDeviceLists()
     {
         if (out.transport_kind != TransportKind::Wasapi)
             continue;
-        output_selector_->addItem(endpointDisplayName(out), output_idx);
+        output_selector_->addItem(endpointDisplayName(out, false), output_idx);
         output_endpoint_ids_.push_back(out.endpoint_id);
         if (out.endpoint_id == current_output)
         {
@@ -2956,9 +2964,18 @@ void MainWindow::restoreFromAutosave()
             juce::MessageManager::callAsync([this]() {
                 StartupLog("callAsync: starting audio");
                 engine_->start();
-                audio_running_ = true;
-                audio_toggle_->setPowerState(true);
-                status_label_->setText("Session restored - audio running", juce::dontSendNotification);
+                if (engine_->isRunning())
+                {
+                    audio_running_ = true;
+                    audio_toggle_->setPowerState(true);
+                    status_label_->setText("Session restored - audio running", juce::dontSendNotification);
+                }
+                else
+                {
+                    audio_running_ = false;
+                    audio_toggle_->setPowerState(false);
+                    status_label_->setText("Session restored - failed to start audio", juce::dontSendNotification);
+                }
             });
         }
         else

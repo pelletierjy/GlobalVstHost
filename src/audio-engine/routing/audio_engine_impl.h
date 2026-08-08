@@ -277,6 +277,7 @@ private:
     TransportKind desired_output_transport_kind_ {TransportKind::Wasapi};
     TransportKind desired_input_transport_kind_ {TransportKind::Wasapi};
     TransportKind last_active_output_transport_kind_ {TransportKind::Wasapi};
+    bool desired_input_is_loopback_ {true};  // true for loopback (render), false for real capture
     bool wasapi_exclusive_ {false};
     bool follow_default_capture_ {false};  // T026: true when input follows system default render endpoint
     DeviceResolutionSource resolution_source_ {DeviceResolutionSource::WindowsDefaultFallback};

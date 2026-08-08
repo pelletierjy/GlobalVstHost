@@ -410,9 +410,9 @@ void PluginChain::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
             if (slot_index < kMaxMeteredSlots)
             {
                 const int n = buffer.getNumSamples();
-                slot_output_peak_[slot_index].store(buffer.getMagnitude(0, n),
+                slot_output_peak_[slot_index].store(buffer.getMagnitude(0, 0, n),
                                                      std::memory_order_relaxed);
-                slot_output_rms_[slot_index].store(buffer.getRMSLevel(0, n),
+                slot_output_rms_[slot_index].store(buffer.getRMSLevel(0, 0, n),
                                                     std::memory_order_relaxed);
             }
         }

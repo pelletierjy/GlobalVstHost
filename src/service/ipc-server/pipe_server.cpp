@@ -92,7 +92,8 @@ nlohmann::json deviceListToJson(const std::vector<HardwareOutputInfo>& devices)
             {"endpoint_id", d.endpoint_id},
             {"friendly_name", d.friendly_name},
             {"is_default", d.is_default},
-            {"is_present", d.is_present}});
+            {"is_present", d.is_present},
+            {"is_loopback", d.is_loopback}});
     }
     return arr;
 }

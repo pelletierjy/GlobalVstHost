@@ -307,6 +307,7 @@ std::vector<HardwareOutputInfo> IpcEngineProxy::listOutputs() const
             info.friendly_name = j.value("friendly_name", "");
             info.is_default = j.value("is_default", false);
             info.is_present = j.value("is_present", true);
+            info.is_loopback = j.value("is_loopback", false);
             out.push_back(info);
         }
     }

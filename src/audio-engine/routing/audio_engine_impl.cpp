@@ -231,163 +231,184 @@ AudioEngineImpl::~AudioEngineImpl()
 void AudioEngineImpl::start()
 {
     LogDebug("start() called");
-    std::lock_guard lk {control_mutex_};
-    if (running_.load())
+    try
     {
-        LogDebug("start() already running, returning");
-        return;
-    }
-
-    mixed_mode_active_.store(false, std::memory_order_release);
-    bool wasapi_loopback_mode = false;
-
-    if (desired_output_transport_kind_ == TransportKind::Asio &&
-        desired_input_transport_kind_ == TransportKind::Wasapi &&
-        !desired_input_id_.empty())
-    {
-        mixed_mode_active_.store(true, std::memory_order_release);
-    }
-    else if (desired_output_transport_kind_ == TransportKind::Wasapi &&
-             desired_input_transport_kind_ == TransportKind::Wasapi &&
-             !desired_input_id_.empty())
-    {
-        wasapi_loopback_mode = true;
-    }
-
-    // T025: Hard-block start if resolved capture and output are the same device.
-    if (!desired_input_id_.empty() && !desired_output_id_.empty())
-    {
-        const EndpointId conflict = same_device_guard_.checkConflict(desired_input_id_, desired_output_id_);
-        if (!conflict.empty())
+        std::lock_guard lk {control_mutex_};
+        if (running_.load())
         {
-            notifyOnUiThread([conflict](IAudioEngineListener& l) {
-                l.onSameDeviceConflict(conflict);
-            });
-            LogDebug("start() refused: same-device conflict on %s", conflict.c_str());
+            LogDebug("start() already running, returning");
             return;
         }
-    }
 
-    LogDebug("start() transport setup: mixed_mode=%d, output_kind=%d (Wasapi=0), input_kind=%d (Wasapi=0), input_id='%s', wasapi_loopback=%d",
-             mixed_mode_active_.load(std::memory_order_acquire) ? 1 : 0,
-             static_cast<int>(desired_output_transport_kind_),
-             static_cast<int>(desired_input_transport_kind_),
-             desired_input_id_.c_str(),
-             wasapi_loopback_mode ? 1 : 0);
+        mixed_mode_active_.store(false, std::memory_order_release);
+        bool wasapi_loopback_mode = false;
 
-    if (mixed_mode_active_.load(std::memory_order_acquire))
-    {
-        openWasapiCapture();
-        applyAsioTransport();
-    }
-    else if (desired_output_transport_kind_ == TransportKind::Asio)
-    {
-        applyAsioTransport();
-    }
-    else if (wasapi_loopback_mode)
-    {
-        LogDebug("Using pure WASAPI loopback mode");
-        openWasapiCapture();
-        LogDebug("start(): wasapi_capture_ %s, capture_ring_buffer_ %s, rate=%.0f",
-                 wasapi_capture_ ? "ok" : "null",
-                 capture_ring_buffer_ ? "ok" : "null",
-                 capture_wasapi_rate_);
-        openWasapiOutput();
-        LogDebug("start(): wasapi_output_ %s, output_ring_buffer_ %s, rate=%.0f",
-                 wasapi_output_ ? "ok" : "null",
-                 output_ring_buffer_ ? "ok" : "null",
-                 output_wasapi_rate_);
-    }
-    else
-    {
-        applyDeviceSelection();
-    }
-
-    // T019: Protect loopback capture endpoint from feedback by muting/restoring
-    if (!desired_input_id_.empty())
-    {
-        endpoint_volume_guard_.activate(desired_input_id_);
-        if (!endpoint_volume_guard_.mute())
+        if (desired_output_transport_kind_ == TransportKind::Asio &&
+            desired_input_transport_kind_ == TransportKind::Wasapi &&
+            !desired_input_id_.empty())
         {
-            // Fallback: muting not available, notify UI to select different output
-            notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
-                l.onCaptureMuteFallbackRequired(id);
-            });
+            mixed_mode_active_.store(true, std::memory_order_release);
         }
-    }
-
-    if (wasapi_loopback_mode)
-    {
-        // Pure WASAPI mode: JUCE does not drive the callback.
-        // Prepare work buffer and plugin chain manually.
-        // The chain runs at the output device's negotiated rate so no output-side
-        // resampler is needed. Capture is resampled only when its rate differs.
-        double chain_rate = desired_sample_rate_;
-        if (wasapi_output_ != nullptr && output_wasapi_rate_ > 0.0)
+        else if (desired_output_transport_kind_ == TransportKind::Wasapi &&
+                 desired_input_transport_kind_ == TransportKind::Wasapi &&
+                 !desired_input_id_.empty())
         {
-            chain_rate = output_wasapi_rate_;
-            LogDebug("Pure WASAPI mode: chain_rate = output_wasapi_rate_ = %.0f Hz", chain_rate);
+            wasapi_loopback_mode = true;
         }
-        else if (mixed_mode_active_.load(std::memory_order_acquire))
-        {
-            LogDebug("Mixed mode: chain_rate = desired_sample_rate_ = %.0f Hz", chain_rate);
-        }
-        work_buffer_.setSize(2, desired_buffer_size_, false, false, true);
-        plugin_chain_->prepareToPlay(chain_rate, desired_buffer_size_);
-        negotiated_sample_rate_.store(static_cast<int>(chain_rate));
 
-        // Set up capture-side resampler when capture rate differs from chain rate.
-        const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : chain_rate;
-        capture_resampling_enabled_ = wasapi_rate > 0.0 && chain_rate > 0.0 &&
-                                      std::abs(wasapi_rate - chain_rate) > 0.1;
-        LogDebug("Capture resampling setup: capture_wasapi_rate_=%.0f, chain_rate=%.0f, wasapi_rate=%.0f, enabled=%d",
-                 capture_wasapi_rate_, chain_rate, wasapi_rate, capture_resampling_enabled_ ? 1 : 0);
-        if (capture_resampling_enabled_)
+        // T025: Hard-block start if resolved capture and output are the same device.
+        if (!desired_input_id_.empty() && !desired_output_id_.empty())
         {
-            capture_nominal_ratio_ = wasapi_rate / chain_rate;
-            LogDebug("Resampler ratio: %.4f (input/output rate ratio for %d->%d Hz)",
-                     capture_nominal_ratio_, static_cast<int>(wasapi_rate), static_cast<int>(chain_rate));
+            const EndpointId conflict = same_device_guard_.checkConflict(desired_input_id_, desired_output_id_);
+            if (!conflict.empty())
+            {
+                notifyOnUiThread([conflict](IAudioEngineListener& l) {
+                    l.onSameDeviceConflict(conflict);
+                });
+                LogDebug("start() refused: same-device conflict on %s", conflict.c_str());
+                return;
+            }
+        }
+
+        LogDebug("start() transport setup: mixed_mode=%d, output_kind=%d (Wasapi=0), input_kind=%d (Wasapi=0), input_id='%s', wasapi_loopback=%d, input_is_loopback=%d",
+                 mixed_mode_active_.load(std::memory_order_acquire) ? 1 : 0,
+                 static_cast<int>(desired_output_transport_kind_),
+                 static_cast<int>(desired_input_transport_kind_),
+                 desired_input_id_.c_str(),
+                 wasapi_loopback_mode ? 1 : 0,
+                 desired_input_is_loopback_ ? 1 : 0);
+
+        if (mixed_mode_active_.load(std::memory_order_acquire))
+        {
+            openWasapiCapture();
+            applyAsioTransport();
+        }
+        else if (desired_output_transport_kind_ == TransportKind::Asio)
+        {
+            applyAsioTransport();
+        }
+        else if (wasapi_loopback_mode)
+        {
+            LogDebug("Using pure WASAPI loopback mode");
+            openWasapiCapture();
+            LogDebug("start(): wasapi_capture_ %s, capture_ring_buffer_ %s, rate=%.0f",
+                     wasapi_capture_ ? "ok" : "null",
+                     capture_ring_buffer_ ? "ok" : "null",
+                     capture_wasapi_rate_);
+            openWasapiOutput();
+            LogDebug("start(): wasapi_output_ %s, output_ring_buffer_ %s, rate=%.0f",
+                     wasapi_output_ ? "ok" : "null",
+                     output_ring_buffer_ ? "ok" : "null",
+                     output_wasapi_rate_);
+        }
+        else
+        {
+            applyDeviceSelection();
+        }
+
+        // T019: Protect loopback capture endpoint from feedback by muting/restoring.
+        // Skip muting for real capture devices (microphone, line-in) — the user wants
+        // to hear the input, not prevent feedback from a render endpoint.
+        if (!desired_input_id_.empty() && desired_input_is_loopback_)
+        {
+            endpoint_volume_guard_.activate(desired_input_id_);
+            if (!endpoint_volume_guard_.mute())
+            {
+                // Fallback: muting not available, notify UI to select different output
+                notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
+                    l.onCaptureMuteFallbackRequired(id);
+                });
+            }
+        }
+
+        if (wasapi_loopback_mode)
+        {
+            // Pure WASAPI mode: JUCE does not drive the callback.
+            // Prepare work buffer and plugin chain manually.
+            // The chain runs at the output device's negotiated rate so no output-side
+            // resampler is needed. Capture is resampled only when its rate differs.
+            double chain_rate = desired_sample_rate_;
+            if (wasapi_output_ != nullptr && output_wasapi_rate_ > 0.0)
+            {
+                chain_rate = output_wasapi_rate_;
+                LogDebug("Pure WASAPI mode: chain_rate = output_wasapi_rate_ = %.0f Hz", chain_rate);
+            }
+            else if (mixed_mode_active_.load(std::memory_order_acquire))
+            {
+                LogDebug("Mixed mode: chain_rate = desired_sample_rate_ = %.0f Hz", chain_rate);
+            }
+            work_buffer_.setSize(2, desired_buffer_size_, false, false, true);
+            plugin_chain_->prepareToPlay(chain_rate, desired_buffer_size_);
+            negotiated_sample_rate_.store(static_cast<int>(chain_rate));
+
+            // Set up capture-side resampler when capture rate differs from chain rate.
+            const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : chain_rate;
+            capture_resampling_enabled_ = wasapi_rate > 0.0 && chain_rate > 0.0 &&
+                                          std::abs(wasapi_rate - chain_rate) > 0.1;
+            LogDebug("Capture resampling setup: capture_wasapi_rate_=%.0f, chain_rate=%.0f, wasapi_rate=%.0f, enabled=%d",
+                     capture_wasapi_rate_, chain_rate, wasapi_rate, capture_resampling_enabled_ ? 1 : 0);
+
+            // Always compute the ratio and size the raw scratch buffer — even when
+            // resampling is disabled (ratio == 1.0) — so the callback can peek from
+            // the capture ring into a valid buffer. Setting size (0, 0) caused silence
+            // whenever capture and output rates matched.
+            capture_nominal_ratio_ = (chain_rate > 0.0) ? (wasapi_rate / chain_rate) : 1.0;
             xrun_count_.store(0, std::memory_order_relaxed);
 
             const int raw_max = static_cast<int>(std::ceil(
                                     static_cast<double>(desired_buffer_size_) * capture_nominal_ratio_)) + 8;
-            capture_resampler_.prepare(capture_nominal_ratio_, static_cast<std::size_t>(raw_max), 2);
             capture_raw_buffer_.setSize(2, raw_max, false, true, true);
+            if (capture_resampling_enabled_)
+            {
+                LogDebug("Resampler ratio: %.4f (input/output rate ratio for %d->%d Hz)",
+                         capture_nominal_ratio_, static_cast<int>(wasapi_rate), static_cast<int>(chain_rate));
+                capture_resampler_.prepare(capture_nominal_ratio_, static_cast<std::size_t>(raw_max), 2);
+            }
+
+            // No output-side resampler — chain rate matches output device rate.
+
+            startEngineThread();
         }
         else
         {
-            capture_raw_buffer_.setSize(0, 0);
-        }
-
-        // No output-side resampler — chain rate matches output device rate.
-
-        startEngineThread();
-    }
-    else
-    {
-        device_manager_.addAudioCallback(this);
-        // JUCE's addAudioCallback calls audioDeviceAboutToStart only when
-        // currentAudioDevice != null. After a WASAPI→ASIO device-type switch the
-        // device may still be null at that point, leaving work_buffer_ at size 0.
-        // Call it explicitly only in that case to avoid calling prepareToPlay twice,
-        // which corrupts the internal state of some plugins (e.g. ARC X).
-        if (work_buffer_.getNumSamples() == 0)
-        {
-            if (auto* device = device_manager_.getCurrentAudioDevice())
+            device_manager_.addAudioCallback(this);
+            // JUCE's addAudioCallback calls audioDeviceAboutToStart only when
+            // currentAudioDevice != null. After a WASAPI→ASIO device-type switch the
+            // device may still be null at that point, leaving work_buffer_ at size 0.
+            // Call it explicitly only in that case to avoid calling prepareToPlay twice,
+            // which corrupts the internal state of some plugins (e.g. ARC X).
+            if (work_buffer_.getNumSamples() == 0)
             {
-                audioDeviceAboutToStart(device);
+                if (auto* device = device_manager_.getCurrentAudioDevice())
+                {
+                    audioDeviceAboutToStart(device);
+                }
             }
         }
-    }
 
-    watchdog_->start(&endpoint_enum_);
-    running_.store(true);
-    last_active_output_transport_kind_ = desired_output_transport_kind_;
-    if (mixed_mode_active_.load(std::memory_order_acquire) || wasapi_loopback_mode)
-    {
+        watchdog_->start(&endpoint_enum_);
+        running_.store(true);
+        last_active_output_transport_kind_ = desired_output_transport_kind_;
+        if (mixed_mode_active_.load(std::memory_order_acquire) || wasapi_loopback_mode)
+        {
+        }
+        startEnergySaver();
+        LogDebug("start() completed");
     }
-    startEnergySaver();
-    LogDebug("start() completed");
+    catch (const std::exception& e)
+    {
+        LogDebug("start() EXCEPTION: %s", e.what());
+        notifyOnUiThread([msg = std::string(e.what())](IAudioEngineListener& l) {
+            l.onDeviceLost(msg, EndpointId{});
+        });
+    }
+    catch (...)
+    {
+        LogDebug("start() UNKNOWN EXCEPTION");
+        notifyOnUiThread([](IAudioEngineListener& l) {
+            l.onDeviceLost("unknown", EndpointId{});
+        });
+    }
 }
 
 void AudioEngineImpl::stop()
@@ -585,8 +606,8 @@ std::vector<HardwareOutputInfo> AudioEngineImpl::listOutputs() const
 
 std::vector<HardwareOutputInfo> AudioEngineImpl::listInputs() const
 {
-    // T015: List render endpoints for loopback capture.
-    // In testable-dev, "input sources" are render endpoints captured in loopback mode.
+    // List both loopback sources (render endpoints) and real capture devices
+    // (microphone, line-in, etc.) so the user can choose either as the input.
     std::vector<HardwareOutputInfo> out;
     for (const auto& d : endpoint_enum_.list(shared::EndpointFlow::Render))
     {
@@ -595,6 +616,17 @@ std::vector<HardwareOutputInfo> AudioEngineImpl::listInputs() const
         info.friendly_name = d.friendly_name;
         info.is_default = d.is_default;
         info.is_present = d.is_present;
+        info.is_loopback = true;
+        out.push_back(std::move(info));
+    }
+    for (const auto& d : endpoint_enum_.list(shared::EndpointFlow::Capture))
+    {
+        HardwareOutputInfo info;
+        info.endpoint_id = d.endpoint_id;
+        info.friendly_name = d.friendly_name;
+        info.is_default = d.is_default;
+        info.is_present = d.is_present;
+        info.is_loopback = false;
         out.push_back(std::move(info));
     }
     return out;
@@ -676,6 +708,22 @@ void AudioEngineImpl::selectInput(const EndpointId& id)
         }
         desired_input_id_ = id;
         desired_input_transport_kind_ = TransportKind::Wasapi;
+
+        // Determine whether this endpoint is a loopback source (render) or a real
+        // capture device by checking which list it appears in.
+        bool is_loopback = false;
+        const auto render_list = endpoint_enum_.list(shared::EndpointFlow::Render);
+        for (const auto& d : render_list)
+        {
+            if (d.endpoint_id == id)
+            {
+                is_loopback = true;
+                break;
+            }
+        }
+        desired_input_is_loopback_ = is_loopback;
+        LogDebug("selectInput(): id='%s', is_loopback=%d, render_list_size=%zu",
+                 id.c_str(), is_loopback ? 1 : 0, render_list.size());
 
         // Update mixed-mode flag.
         mixed_mode_active_.store(
@@ -2096,22 +2144,21 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         capture_resampling_enabled_ = wasapi_rate > 0.0 && device_rate > 0.0 &&
                                       std::abs(wasapi_rate - device_rate) > 0.1;
 
+        // Always compute the ratio and size the raw scratch buffer — even when
+        // resampling is disabled (ratio == 1.0) — so the callback can peek from
+        // the capture ring into a valid buffer.
+        capture_nominal_ratio_ = (device_rate > 0.0) ? (wasapi_rate / device_rate) : 1.0;
+        xrun_count_.store(0, std::memory_order_relaxed);
+
+        const int raw_max = static_cast<int>(std::ceil(
+                                static_cast<double>(block) * capture_nominal_ratio_)) + 8;
+        capture_raw_buffer_.setSize(2, raw_max, false, true, true);
         if (capture_resampling_enabled_)
         {
-            capture_nominal_ratio_ = wasapi_rate / device_rate;
-            xrun_count_.store(0, std::memory_order_relaxed);
-
-            const int raw_max = static_cast<int>(std::ceil(
-                                    static_cast<double>(block) * capture_nominal_ratio_)) + 8;
             capture_resampler_.prepare(capture_nominal_ratio_, static_cast<std::size_t>(raw_max), 2);
-            capture_raw_buffer_.setSize(2, raw_max, false, true, true);
 
             LogDebug("audioDeviceAboutToStart() capture SRC: wasapi=%.0f device=%.0f ratio=%.6f",
                      wasapi_rate, device_rate, capture_nominal_ratio_);
-        }
-        else
-        {
-            capture_raw_buffer_.setSize(0, 0);
         }
     }
     LogDebug("audioDeviceAboutToStart() completed");
@@ -2304,6 +2351,7 @@ void AudioEngineImpl::openWasapiCapture()
 {
     if (desired_input_id_.empty())
     {
+        LogDebug("openWasapiCapture(): desired_input_id_ is empty, returning");
         return;
     }
 
@@ -2317,11 +2365,14 @@ void AudioEngineImpl::openWasapiCapture()
         2);
 
     wasapi_capture_ = std::make_unique<WasapiCapture>();
-    // T016: Open in loopback mode to capture from render endpoints (testable-dev).
+    // Open in loopback mode for render endpoints, real capture mode for microphones/line-in.
+    const bool loopback = desired_input_is_loopback_;
+    LogDebug("openWasapiCapture(): opening id='%s', loopback=%d", desired_input_id_.c_str(), loopback ? 1 : 0);
     if (!wasapi_capture_->open(desired_input_id_, desired_sample_rate_,
-                                 capture_ring_buffer_.get(), true))  // loopback=true
+                                 capture_ring_buffer_.get(), loopback))
     {
         // T012: Notify UI that loopback capture initialization failed.
+        LogDebug("openWasapiCapture(): WasapiCapture::open() FAILED for id='%s'", desired_input_id_.c_str());
         notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
             l.onDeviceLost(id, EndpointId{});
         });
@@ -2331,17 +2382,21 @@ void AudioEngineImpl::openWasapiCapture()
     }
 
     capture_wasapi_rate_ = wasapi_capture_->negotiatedSampleRate();
+    LogDebug("openWasapiCapture(): open() OK, rate=%.0f", capture_wasapi_rate_);
 
     if (!wasapi_capture_->start())
     {
         // T012: Notify UI that capture stream failed to start.
+        LogDebug("openWasapiCapture(): WasapiCapture::start() FAILED for id='%s'", desired_input_id_.c_str());
         notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
             l.onDeviceLost(id, EndpointId{});
         });
         wasapi_capture_->close();
         wasapi_capture_.reset();
         capture_ring_buffer_.reset();
+        return;
     }
+    LogDebug("openWasapiCapture(): start() OK");
 }
 
 void AudioEngineImpl::closeWasapiCapture()
@@ -2353,6 +2408,7 @@ void AudioEngineImpl::closeWasapiCapture()
         wasapi_capture_.reset();
     }
     capture_ring_buffer_.reset();
+    capture_wasapi_rate_ = 0.0;
 }
 
 void AudioEngineImpl::openWasapiOutput()
