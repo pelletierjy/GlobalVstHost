@@ -40,9 +40,6 @@ public:
     bool isEnergySaverEnabled() const override;
     bool isEnergySaverSleeping() const override;
 
-    void setDriftCompensationEnabled(bool enabled) override;
-    bool isDriftCompensationEnabled() const override;
-
     std::vector<HardwareOutputInfo> listOutputs() const override;
     void selectOutput(const EndpointId& id) override;
     EndpointId currentOutput() const override;
@@ -91,6 +88,8 @@ public:
     LatencyProfile latencyProfile() const override;
     CpuStats cpuStats() const override;
     MeterFrame latestMeterFrame() const override;
+    std::vector<float> pluginOutputPeaks() const override;
+    std::vector<float> pluginOutputRms() const override;
 
 private:
     void readLoop();

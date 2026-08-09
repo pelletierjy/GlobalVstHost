@@ -138,14 +138,25 @@ AsioSessionReport ASIOTransport::open(juce::AudioDeviceManager* manager,
     juce::String err = manager->setAudioDeviceSetup(setup, true);
 
     // Many ASIO drivers are locked to the sample rate / buffer size configured in
-    // their own control panel and reject a mismatched explicit request. Rather
-    // than fail the whole ASIO open (which silently drops the user to WASAPI),
-    // retry accepting the driver's own settings: sampleRate/bufferSize == 0 make
-    // JUCE use the device's current/default values. The channel masks are kept.
-    // The engine reads back the negotiated rate below and adopts it as the chain
-    // rate, so accepting the driver's native rate is safe.
+    // their own control panel and reject a mismatched explicit request. Retry
+    // granularly so a valid buffer-size change isn't lost just because the
+    // sample-rate is locked, and vice-versa.
     if (err.isNotEmpty())
     {
+        // Retry 1: keep requested buffer size, accept driver's sample rate.
+        setup.sampleRate = 0.0;
+        err = manager->setAudioDeviceSetup(setup, true);
+    }
+    if (err.isNotEmpty())
+    {
+        // Retry 2: keep requested sample rate, accept driver's buffer size.
+        setup.sampleRate = config_.sample_rate > 0.0 ? config_.sample_rate : 48000.0;
+        setup.bufferSize = 0;
+        err = manager->setAudioDeviceSetup(setup, true);
+    }
+    if (err.isNotEmpty())
+    {
+        // Retry 3: accept both driver defaults.
         setup.sampleRate = 0.0;
         setup.bufferSize = 0;
         err = manager->setAudioDeviceSetup(setup, true);

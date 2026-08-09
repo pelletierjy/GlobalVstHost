@@ -216,8 +216,8 @@ TEST_F(JsonValidatorTest, PresetValidatorBufferSizeConstraints)
 
 TEST_F(JsonValidatorTest, PresetValidatorSupportedSampleRates)
 {
-    // Supported rates: 44100, 48000, 96000, 176400, 192000
-    const int supported[] = {44100, 48000, 96000, 176400, 192000};
+    // Supported rates: 44100, 48000, 88200, 96000, 176400, 192000
+    const int supported[] = {44100, 48000, 88200, 96000, 176400, 192000};
 
     for (int sr : supported)
     {

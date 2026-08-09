@@ -8,11 +8,11 @@
 
 namespace jyglobalvst::engine {
 
-class VolumeLevelerProcessor : public juce::AudioPluginInstance
+class CompressorProcessor : public juce::AudioPluginInstance
 {
 public:
-    VolumeLevelerProcessor();
-    ~VolumeLevelerProcessor() override;
+    CompressorProcessor();
+    ~CompressorProcessor() override;
 
     void prepareToPlay(double sample_rate, int samples_per_block) override;
     void releaseResources() override;
@@ -23,7 +23,7 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
 
-    const juce::String getName() const override { return "Volume Leveler"; }
+    const juce::String getName() const override { return "Compressor"; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -41,45 +41,45 @@ public:
 
     int getLatencySamples() const { return 0; }
 
-    static constexpr int kNumParams = builtin::volume_leveler::NUM_PARAMETERS;
+    static constexpr int kNumParams = builtin::compressor::NUM_PARAMETERS;
 
     float getThresholdDb() const { return threshold_db_.load(std::memory_order_relaxed); }
     void setThresholdDb(float db)
     {
-        threshold_db_.store(std::max(builtin::volume_leveler::THRESHOLD_MIN_DB,
-                                     std::min(builtin::volume_leveler::THRESHOLD_MAX_DB, db)),
+        threshold_db_.store(std::max(builtin::compressor::THRESHOLD_MIN_DB,
+                                     std::min(builtin::compressor::THRESHOLD_MAX_DB, db)),
                             std::memory_order_relaxed);
     }
 
     float getRatio() const { return ratio_.load(std::memory_order_relaxed); }
     void setRatio(float r)
     {
-        ratio_.store(std::max(builtin::volume_leveler::RATIO_MIN,
-                              std::min(builtin::volume_leveler::RATIO_MAX, r)),
+        ratio_.store(std::max(builtin::compressor::RATIO_MIN,
+                              std::min(builtin::compressor::RATIO_MAX, r)),
                      std::memory_order_relaxed);
     }
 
     float getAttackMs() const { return attack_ms_.load(std::memory_order_relaxed); }
     void setAttackMs(float ms)
     {
-        attack_ms_.store(std::max(builtin::volume_leveler::ATTACK_MIN_MS,
-                                  std::min(builtin::volume_leveler::ATTACK_MAX_MS, ms)),
+        attack_ms_.store(std::max(builtin::compressor::ATTACK_MIN_MS,
+                                  std::min(builtin::compressor::ATTACK_MAX_MS, ms)),
                          std::memory_order_relaxed);
     }
 
     float getReleaseMs() const { return release_ms_.load(std::memory_order_relaxed); }
     void setReleaseMs(float ms)
     {
-        release_ms_.store(std::max(builtin::volume_leveler::RELEASE_MIN_MS,
-                                   std::min(builtin::volume_leveler::RELEASE_MAX_MS, ms)),
+        release_ms_.store(std::max(builtin::compressor::RELEASE_MIN_MS,
+                                   std::min(builtin::compressor::RELEASE_MAX_MS, ms)),
                           std::memory_order_relaxed);
     }
 
     float getMakeupDb() const { return makeup_db_.load(std::memory_order_relaxed); }
     void setMakeupDb(float db)
     {
-        makeup_db_.store(std::max(builtin::volume_leveler::MAKEUP_MIN_DB,
-                                  std::min(builtin::volume_leveler::MAKEUP_MAX_DB, db)),
+        makeup_db_.store(std::max(builtin::compressor::MAKEUP_MIN_DB,
+                                  std::min(builtin::compressor::MAKEUP_MAX_DB, db)),
                          std::memory_order_relaxed);
     }
 

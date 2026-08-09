@@ -8,7 +8,7 @@
 
 // REALTIME CONSTRAINTS HEADER
 // ============================================================================
-// Auto volume leveller / Compressor: loudness-driven AGC + peak limiter. All DSP state preallocated
+// Volume Leveler: loudness-driven AGC + peak limiter. All DSP state preallocated
 // in prepareToPlay. Parameter changes read atomically. No allocation, locking,
 // or I/O in processBlock.
 // ============================================================================
@@ -31,7 +31,7 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
 
-    const juce::String getName() const override { return "Auto volume leveller / Compressor"; }
+    const juce::String getName() const override { return "Volume Leveler"; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }

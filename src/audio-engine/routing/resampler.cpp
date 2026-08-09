@@ -83,6 +83,35 @@ std::size_t WindowedSincResampler::process(const float* const* src_channels, flo
     return static_cast<std::size_t>(num_out);
 }
 
+std::size_t WindowedSincResampler::process(const float* const* src_channels, float* const* dst_channels,
+                                           std::size_t num_out, std::size_t src_frames,
+                                           std::size_t* consumed) noexcept
+{
+    *consumed = 0;
+    if (per_channel_.isEmpty() || num_out == 0)
+    {
+        return 0;
+    }
+
+    int total_consumed = 0;
+    for (int c = 0; c < per_channel_.size(); ++c)
+    {
+        if (dst_channels[c] == nullptr || src_channels[c] == nullptr)
+        {
+            continue;
+        }
+        const int u = per_channel_[c]->process(ratio_, src_channels[c], dst_channels[c],
+                                                static_cast<int>(num_out),
+                                                static_cast<int>(src_frames), 0);
+        if (c == 0)
+        {
+            total_consumed = u;
+        }
+    }
+    *consumed = static_cast<std::size_t>(total_consumed);
+    return num_out;
+}
+
 std::size_t WindowedSincResampler::processAdaptive(double ratio, const float* const* src_channels,
                                                    float* const* dst_channels, std::size_t num_out,
                                                    std::size_t available_in,

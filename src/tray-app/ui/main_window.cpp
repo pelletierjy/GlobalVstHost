@@ -326,9 +326,17 @@ LRESULT CALLBACK mainWindowSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-juce::String endpointDisplayName(const HardwareOutputInfo& info)
+juce::String endpointDisplayName(const HardwareOutputInfo& info, bool for_input)
 {
-    juce::String s = juce::String(info.friendly_name);
+    juce::String s;
+    if (for_input)
+    {
+        if (info.is_loopback)
+            s += "System: ";
+        else
+            s += "Input: ";
+    }
+    s += juce::String(info.friendly_name);
     if (info.transport_kind == TransportKind::Asio)
     {
         s += " (ASIO)";
@@ -497,8 +505,8 @@ public:
                 juce::Label* input_rate_caption, juce::Label* input_rate_value,
                 juce::Label* output_label, juce::ComboBox* output,
                 juce::Label* buffer_label, juce::ComboBox* buffer,
-                juce::Label* output_rate_caption, juce::ComboBox* output_rate_selector,
-                juce::Label* vst_rate_caption, juce::Label* vst_rate_value,
+                juce::Label* output_rate_caption, juce::Label* output_rate_value,
+                juce::Label* vst_rate_caption, juce::ComboBox* vst_rate_selector,
                 juce::Label* asio_device_label, juce::ComboBox* asio_device,
                 juce::Label* asio_pair_label, juce::ComboBox* asio_pair,
                 juce::TextButton* asio_settings)
@@ -507,8 +515,8 @@ public:
           input_rate_caption_(input_rate_caption), input_rate_value_(input_rate_value),
           output_label_(output_label), output_(output),
           buffer_label_(buffer_label), buffer_(buffer),
-          output_rate_caption_(output_rate_caption), output_rate_selector_(output_rate_selector),
-          vst_rate_caption_(vst_rate_caption), vst_rate_value_(vst_rate_value),
+          output_rate_caption_(output_rate_caption), output_rate_value_(output_rate_value),
+          vst_rate_caption_(vst_rate_caption), vst_rate_selector_(vst_rate_selector),
           asio_device_label_(asio_device_label), asio_device_(asio_device),
           asio_pair_label_(asio_pair_label), asio_pair_(asio_pair),
           asio_settings_(asio_settings)
@@ -525,9 +533,9 @@ public:
         addAndMakeVisible(buffer_label_);
         addAndMakeVisible(buffer_);
         addAndMakeVisible(output_rate_caption_);
-        addAndMakeVisible(output_rate_selector_);
+        addAndMakeVisible(output_rate_value_);
         addAndMakeVisible(vst_rate_caption_);
-        addAndMakeVisible(vst_rate_value_);
+        addAndMakeVisible(vst_rate_selector_);
         addAndMakeVisible(asio_device_label_);
         addAndMakeVisible(asio_device_);
         addAndMakeVisible(asio_pair_label_);
@@ -597,7 +605,7 @@ public:
         juce::FlexBox fb_input;
         fb_input.flexDirection = juce::FlexBox::Direction::row;
         fb_input.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_input.items.add(juce::FlexItem(*input_label_).withMinWidth(45).withWidth(45));
+        fb_input.items.add(juce::FlexItem(*input_label_).withMinWidth(130).withWidth(130));
         fb_input.items.add(juce::FlexItem().withWidth(4));
         fb_input.items.add(juce::FlexItem(*input_).withFlex(1));
         fb_input.performLayout(row_input);
@@ -605,7 +613,7 @@ public:
         juce::FlexBox fb_in_rate;
         fb_in_rate.flexDirection = juce::FlexBox::Direction::row;
         fb_in_rate.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_in_rate.items.add(juce::FlexItem(*input_rate_caption_).withMinWidth(55).withWidth(55));
+        fb_in_rate.items.add(juce::FlexItem(*input_rate_caption_).withMinWidth(140).withWidth(140));
         fb_in_rate.items.add(juce::FlexItem().withWidth(4));
         fb_in_rate.items.add(juce::FlexItem(*input_rate_value_).withFlex(1));
         fb_in_rate.performLayout(row_input_rate);
@@ -622,7 +630,7 @@ public:
         juce::FlexBox fb_out_w;
         fb_out_w.flexDirection = juce::FlexBox::Direction::row;
         fb_out_w.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_out_w.items.add(juce::FlexItem(*output_label_).withMinWidth(45).withWidth(45));
+        fb_out_w.items.add(juce::FlexItem(*output_label_).withMinWidth(120).withWidth(120));
         fb_out_w.items.add(juce::FlexItem().withWidth(4));
         fb_out_w.items.add(juce::FlexItem(*output_).withFlex(1));
         fb_out_w.performLayout(row_output);
@@ -646,9 +654,9 @@ public:
         juce::FlexBox fb_out_rate;
         fb_out_rate.flexDirection = juce::FlexBox::Direction::row;
         fb_out_rate.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_out_rate.items.add(juce::FlexItem(*output_rate_caption_).withMinWidth(55).withWidth(55));
+        fb_out_rate.items.add(juce::FlexItem(*output_rate_caption_).withMinWidth(130).withWidth(130));
         fb_out_rate.items.add(juce::FlexItem().withWidth(4));
-        fb_out_rate.items.add(juce::FlexItem(*output_rate_selector_).withFlex(1));
+        fb_out_rate.items.add(juce::FlexItem(*output_rate_value_).withFlex(1));
         fb_out_rate.performLayout(row_output_rate);
 
         juce::FlexBox fb_vst_rate;
@@ -656,7 +664,7 @@ public:
         fb_vst_rate.alignItems = juce::FlexBox::AlignItems::stretch;
         fb_vst_rate.items.add(juce::FlexItem(*vst_rate_caption_).withMinWidth(55).withWidth(55));
         fb_vst_rate.items.add(juce::FlexItem().withWidth(4));
-        fb_vst_rate.items.add(juce::FlexItem(*vst_rate_value_).withFlex(1));
+        fb_vst_rate.items.add(juce::FlexItem(*vst_rate_selector_).withFlex(1));
         fb_vst_rate.performLayout(row_vst_rate);
 
         // ASIO channel pair + settings (hidden in WASAPI mode).
@@ -685,9 +693,9 @@ private:
     juce::Label* buffer_label_;
     juce::ComboBox* buffer_;
     juce::Label* output_rate_caption_;
-    juce::ComboBox* output_rate_selector_;
+    juce::Label* output_rate_value_;
     juce::Label* vst_rate_caption_;
-    juce::Label* vst_rate_value_;
+    juce::ComboBox* vst_rate_selector_;
     juce::Label* asio_device_label_;
     juce::ComboBox* asio_device_;
     juce::Label* asio_pair_label_;
@@ -774,7 +782,7 @@ public:
         fb.items.add(juce::FlexItem(*volume_).withFlex(1));
         fb.performLayout(b);
 
-        // Labels: "In" spans in_l+in_r, "Out" spans out_l+out_r, "Vol" over volume
+        // Labels: "Cap" spans in_l+in_r, "Out" spans out_l+out_r, "Vol" over volume
         auto makeLabel = [&](juce::Component* a, juce::Component* b_comp) {
             return a->getBounds().getUnion(b_comp->getBounds())
                        .withY(labelRow.getY()).withHeight(kLabelH);
@@ -1217,12 +1225,12 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     restoreFromAutosave();
     StartupLog("restoreFromAutosave done");
 
-    // If no chain was restored, automatically load EQ, Auto volume leveller / Compressor, and Volume Leveler plugins in bypass mode.
+    // If no chain was restored, automatically load EQ, Volume Leveler, and Compressor plugins in bypass mode.
     if (engine_->snapshotChain().slots.empty())
     {
         PluginRef nighttime_ref;
         nighttime_ref.vendor = "JyGlobalVST";
-        nighttime_ref.name = "Auto volume leveller / Compressor";
+        nighttime_ref.name = "Volume Leveler";
 
         PluginRef eq_ref;
         eq_ref.vendor = "JyGlobalVST";
@@ -1230,7 +1238,7 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
 
         PluginRef vl_ref;
         vl_ref.vendor = "JyGlobalVST";
-        vl_ref.name = "Volume Leveler";
+        vl_ref.name = "Compressor";
 
         engine_->addPlugin(nighttime_ref, 0);
         engine_->addPlugin(eq_ref, 1);
@@ -1238,7 +1246,7 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
         engine_->setBypass(0, true);
         engine_->setBypass(1, true);
         engine_->setBypass(2, true);
-        StartupLog("Default plugins loaded (EQ, Auto volume leveller / Compressor, and Volume Leveler in bypass mode)");
+        StartupLog("Default plugins loaded (EQ, Volume Leveler, and Compressor in bypass mode)");
     }
 
     // T034: If autosave did not restore endpoint selections, fall back to roaming settings.
@@ -1342,9 +1350,6 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     // Restore the Energy Saver preference and reflect it on the leaf button.
     engine_->setEnergySaverEnabled(rs.energy_saver_enabled);
     updateEnergySaverVisual();
-
-    // Restore the drift-compensation preference.
-    engine_->setDriftCompensationEnabled(rs.drift_compensation_enabled);
 
     // Start a background plugin scan
     status_label_->setText("Scanning plugins...", juce::dontSendNotification);
@@ -1856,13 +1861,13 @@ void MainWindow::buildUI()
 {
     // --- Labels --------------------------------------------------------------
     transport_label_ = std::make_unique<juce::Label>(juce::String(), "Mode:");
-    input_label_ = std::make_unique<juce::Label>(juce::String(), "Input:");
-    output_label_ = std::make_unique<juce::Label>(juce::String(), "Output:");
+    input_label_ = std::make_unique<juce::Label>(juce::String(), "Captured audio device:");
+    output_label_ = std::make_unique<juce::Label>(juce::String(), "Output audio device:");
     asio_device_label_ = std::make_unique<juce::Label>(juce::String(), "ASIO Device:");
     asio_pair_label_ = std::make_unique<juce::Label>(juce::String(), "Channels:");
     buffer_label_ = std::make_unique<juce::Label>(juce::String(), "Buffer:");
-    input_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "In sampling rate:");
-    output_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "Out sampling rate:");
+    input_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "Captured sampling rate:");
+    output_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "Output sampling rate:");
     vst_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "VST sampling rate:");
     vol_label_ = std::make_unique<juce::Label>(juce::String(), "Vol:");
 
@@ -1906,23 +1911,25 @@ void MainWindow::buildUI()
     buffer_selector_->addItem("1024", 1024);
     buffer_selector_->addListener(this);
 
-    // --- Output sample-rate selector (common rates up to 192 kHz) ----------
-    output_rate_selector_ = std::make_unique<juce::ComboBox>();
+    // --- Output sample-rate readout (hardware-negotiated, read-only) ----------
+    output_rate_value_ = std::make_unique<juce::Label>(juce::String(), juce::String::fromUTF8("\xe2\x80\x94"));
+
+    // --- Input / VST rate readouts -------------------------------------------
+    input_rate_value_ = std::make_unique<juce::Label>(juce::String(), juce::String::fromUTF8("\xe2\x80\x94"));
+
+    // --- VST sample-rate selector (user-selected chain rate) -------------------
+    vst_rate_selector_ = std::make_unique<juce::ComboBox>();
     for (int rate : {44100, 48000, 88200, 96000, 176400, 192000})
     {
-        output_rate_selector_->addItem(juce::String(rate) + " Hz", rate);
+        vst_rate_selector_->addItem(juce::String(rate) + " Hz", rate);
     }
     // Reflect the engine's current desired rate (falls back to 48 kHz if unset).
     {
         const int desired = static_cast<int>(engine_->sampleRate());
-        output_rate_selector_->setSelectedId(desired > 0 ? desired : 48000,
+        vst_rate_selector_->setSelectedId(desired > 0 ? desired : 48000,
                                              juce::dontSendNotification);
     }
-    output_rate_selector_->addListener(this);
-
-    // --- Input / VST rate readouts (read-only) -----------------------------
-    input_rate_value_ = std::make_unique<juce::Label>(juce::String(), juce::String::fromUTF8("\xe2\x80\x94"));
-    vst_rate_value_ = std::make_unique<juce::Label>(juce::String(), juce::String::fromUTF8("\xe2\x80\x94"));
+    vst_rate_selector_->addListener(this);
 
     // --- Audio toggle (Power icon) ----------------------------------------
     audio_toggle_ = std::make_unique<PowerButton>();
@@ -1966,7 +1973,7 @@ void MainWindow::buildUI()
     cpu_bar_ = std::make_unique<CpuBar>();
 
     // --- Meters ------------------------------------------------------------
-    meter_input_label_ = std::make_unique<juce::Label>(juce::String{}, "In");
+    meter_input_label_ = std::make_unique<juce::Label>(juce::String{}, "Cap");
     meter_input_l_ = std::make_unique<MeterPanel>();
     meter_input_r_ = std::make_unique<MeterPanel>();
 
@@ -2003,12 +2010,6 @@ void MainWindow::buildUI()
     tooltips_button_ = std::make_unique<juce::ToggleButton>("enabled");
     tooltips_button_->setToggleState(rs.tooltips_enabled, juce::dontSendNotification);
     tooltips_button_->addListener(this);
-
-    // --- Drift compensation toggle -----------------------------------------
-    drift_compensation_label_ = std::make_unique<juce::Label>(juce::String(), "Drift compensation:");
-    drift_compensation_button_ = std::make_unique<juce::ToggleButton>("enabled");
-    drift_compensation_button_->setToggleState(rs.drift_compensation_enabled, juce::dontSendNotification);
-    drift_compensation_button_->addListener(this);
 
     // --- Tooltip window (global) -------------------------------------------
     tooltip_window_ = std::make_unique<juce::TooltipWindow>(this, 800);
@@ -2053,8 +2054,8 @@ void MainWindow::buildUI()
         input_rate_caption_.get(), input_rate_value_.get(),
         output_label_.get(), output_selector_.get(),
         buffer_label_.get(), buffer_selector_.get(),
-        output_rate_caption_.get(), output_rate_selector_.get(),
-        vst_rate_caption_.get(), vst_rate_value_.get(),
+        output_rate_caption_.get(), output_rate_value_.get(),
+        vst_rate_caption_.get(), vst_rate_selector_.get(),
         asio_device_label_.get(), asio_device_selector_.get(),
         asio_pair_label_.get(), asio_pair_selector_.get(),
         asio_settings_button_.get());
@@ -2131,7 +2132,7 @@ void MainWindow::refreshDeviceLists()
 
     for (const auto& in : inputs)
     {
-        input_selector_->addItem(endpointDisplayName(in), input_idx);
+        input_selector_->addItem(endpointDisplayName(in, true), input_idx);
         input_endpoint_ids_.push_back(in.endpoint_id);
         if (in.endpoint_id == current_input)
         {
@@ -2169,7 +2170,7 @@ void MainWindow::refreshDeviceLists()
     {
         if (out.transport_kind != TransportKind::Wasapi)
             continue;
-        output_selector_->addItem(endpointDisplayName(out), output_idx);
+        output_selector_->addItem(endpointDisplayName(out, false), output_idx);
         output_endpoint_ids_.push_back(out.endpoint_id);
         if (out.endpoint_id == current_output)
         {
@@ -2286,16 +2287,6 @@ void MainWindow::buttonClicked(juce::Button* button)
         rs.tooltips_enabled = tooltips_button_->getToggleState();
         roaming_settings_store_.save(rs);
         applyTooltips();
-    }
-    else if (button == drift_compensation_button_.get())
-    {
-        const bool enabled = drift_compensation_button_->getToggleState();
-        engine_->setDriftCompensationEnabled(enabled);
-        auto rs = roaming_settings_store_.load();
-        rs.drift_compensation_enabled = enabled;
-        roaming_settings_store_.save(rs);
-        status_label_->setText(enabled ? "Drift compensation enabled" : "Drift compensation disabled",
-                               juce::dontSendNotification);
     }
 }
 
@@ -2450,6 +2441,20 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             }
 
             engine_->selectInput(new_input);
+
+            // Default VST rate to the highest of input/output rates.
+            const int in_rate = engine_->inputDeviceSampleRate();
+            const int out_rate = engine_->outputDeviceSampleRate();
+            int default_vst = 48000;
+            if (in_rate > 0 && out_rate > 0)
+                default_vst = std::max(in_rate, out_rate);
+            else if (in_rate > 0)
+                default_vst = in_rate;
+            else if (out_rate > 0)
+                default_vst = out_rate;
+            engine_->setSampleRate(static_cast<double>(default_vst));
+            vst_rate_selector_->setSelectedId(default_vst, juce::dontSendNotification);
+
             saveSessionState();
 
             // T034: Persist capture endpoint selection to roaming settings.
@@ -2492,6 +2497,20 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             }
 
             engine_->selectOutput(new_output);
+
+            // Default VST rate to the highest of input/output rates.
+            const int in_rate = engine_->inputDeviceSampleRate();
+            const int out_rate = engine_->outputDeviceSampleRate();
+            int default_vst = 48000;
+            if (in_rate > 0 && out_rate > 0)
+                default_vst = std::max(in_rate, out_rate);
+            else if (in_rate > 0)
+                default_vst = in_rate;
+            else if (out_rate > 0)
+                default_vst = out_rate;
+            engine_->setSampleRate(static_cast<double>(default_vst));
+            vst_rate_selector_->setSelectedId(default_vst, juce::dontSendNotification);
+
             saveSessionState();
 
             // T034: Persist output endpoint selection to roaming settings.
@@ -2506,6 +2525,20 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         if (idx >= 0 && idx < static_cast<int>(asio_device_names_.size()))
         {
             engine_->selectOutput(asio_device_names_[idx]);
+
+            // Default VST rate to the highest of input/output rates.
+            const int in_rate = engine_->inputDeviceSampleRate();
+            const int out_rate = engine_->outputDeviceSampleRate();
+            int default_vst = 48000;
+            if (in_rate > 0 && out_rate > 0)
+                default_vst = std::max(in_rate, out_rate);
+            else if (in_rate > 0)
+                default_vst = in_rate;
+            else if (out_rate > 0)
+                default_vst = out_rate;
+            engine_->setSampleRate(static_cast<double>(default_vst));
+            vst_rate_selector_->setSelectedId(default_vst, juce::dontSendNotification);
+
             saveSessionState();
         }
     }
@@ -2531,16 +2564,13 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                 juce::String(e.what()));
         }
     }
-    else if (comboBoxThatHasChanged == output_rate_selector_.get())
+    else if (comboBoxThatHasChanged == vst_rate_selector_.get())
     {
-        const int rate = output_rate_selector_->getSelectedId();
+        const int rate = vst_rate_selector_->getSelectedId();
         if (rate > 0)
         {
             engine_->setSampleRate(static_cast<double>(rate));
             saveSessionState();
-            // The VST chain follows the output; reflect the negotiated rate
-            // (and snap the selector back if the hardware refused the request).
-            refreshSampleRates();
         }
     }
     else if (comboBoxThatHasChanged == theme_selector_.get())
@@ -2555,7 +2585,7 @@ void MainWindow::applyThemeChange(CustomLookAndFeel::ThemeId id)
 {
     custom_laf_.applyTheme(id);
 
-    // Push the theme palette to the built-in effect editors (EQ, Auto volume leveller / Compressor),
+    // Push the theme palette to the built-in effect editors (EQ, Volume Leveler),
     // which live in the audio-engine layer and cannot see CustomLookAndFeel.
     {
         const auto& src = custom_laf_.colors();
@@ -2590,12 +2620,12 @@ void MainWindow::applyTooltips()
     const juce::String empty;
 
     transport_mode_selector_->setTooltip(enabled ? "Select audio transport: WASAPI (loopback) or ASIO" : empty);
-    input_selector_->setTooltip(enabled ? "Capture source: system audio loopback or a specific input device" : empty);
+    input_selector_->setTooltip(enabled ? "Capture source: system audio loopback or a specific capture device" : empty);
     output_selector_->setTooltip(enabled ? "Playback device: where processed audio is sent" : empty);
     asio_device_selector_->setTooltip(enabled ? "ASIO hardware driver to use" : empty);
     asio_pair_selector_->setTooltip(enabled ? "Stereo output channel pair" : empty);
     buffer_selector_->setTooltip(enabled ? "Audio buffer size in samples (larger = more stable, smaller = lower latency)" : empty);
-    output_rate_selector_->setTooltip(enabled ? "Target sampling rate for the output device" : empty);
+    vst_rate_selector_->setTooltip(enabled ? "Target sampling rate for the VST plugin chain" : empty);
     audio_toggle_->setTooltip(enabled ? "Start or stop audio processing" : empty);
     volume_slider_->setTooltip(enabled ? "Master output volume" : empty);
     mute_button_->setTooltip(enabled ? "Mute / unmute the output" : empty);
@@ -2611,12 +2641,6 @@ void MainWindow::applyTooltips()
     tooltips_label_->setTooltip(enabled ? "Show helpful popup descriptions when hovering over controls. Turn this off for a cleaner interface." : empty);
     about_button_->setTooltip(enabled ? "About, diagnostics, and settings" : empty);
     energy_saver_button_->setTooltip(enabled ? "Toggle energy saver: auto-suspend the VST chain when input is silent to save CPU." : empty);
-    drift_compensation_button_->setTooltip(enabled ? "Enable adaptive resampling to correct speed drift between the capture source and output device. "
-                                                        "Turn this OFF when both use the same hardware clock (e.g. WASAPI loopback + ASIO on the same USB interface) "
-                                                        "to prevent pitch wobble from the PI controller hunting on jitter." : empty);
-    drift_compensation_label_->setTooltip(enabled ? "Enable adaptive resampling to correct speed drift between the capture source and output device. "
-                                                        "Turn this OFF when both use the same hardware clock (e.g. WASAPI loopback + ASIO on the same USB interface) "
-                                                        "to prevent pitch wobble from the PI controller hunting on jitter." : empty);
     help_button_->setTooltip(enabled ? "Open help documentation" : empty);
 
     // Refresh existing button tooltips that were set in their constructors.
@@ -2796,8 +2820,6 @@ void MainWindow::handleAbout()
     settings.start_minimized_button = start_minimized_button_.get();
     settings.tooltips_label = tooltips_label_.get();
     settings.tooltips_button = tooltips_button_.get();
-    settings.drift_compensation_label = drift_compensation_label_.get();
-    settings.drift_compensation_button = drift_compensation_button_.get();
 
     AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings,
                            &custom_laf_);
@@ -2942,9 +2964,18 @@ void MainWindow::restoreFromAutosave()
             juce::MessageManager::callAsync([this]() {
                 StartupLog("callAsync: starting audio");
                 engine_->start();
-                audio_running_ = true;
-                audio_toggle_->setPowerState(true);
-                status_label_->setText("Session restored - audio running", juce::dontSendNotification);
+                if (engine_->isRunning())
+                {
+                    audio_running_ = true;
+                    audio_toggle_->setPowerState(true);
+                    status_label_->setText("Session restored - audio running", juce::dontSendNotification);
+                }
+                else
+                {
+                    audio_running_ = false;
+                    audio_toggle_->setPowerState(false);
+                    status_label_->setText("Session restored - failed to start audio", juce::dontSendNotification);
+                }
             });
         }
         else
@@ -3000,21 +3031,17 @@ void MainWindow::refreshSampleRates()
     input_rate_value_->setText(format(running ? engine_->inputDeviceSampleRate() : 0),
                                juce::dontSendNotification);
 
-    // Reflect the rate the hardware actually negotiated in the selector, without
-    // firing a change notification (which would re-request the rate). If the
-    // negotiated rate is not one of the preset items, fall back to the desired
-    // rate so the selector still shows the user's choice.
-    const int device_rate = engine_->outputDeviceSampleRate();
-    const int desired_rate = static_cast<int>(engine_->sampleRate());
-    const int shown_rate = device_rate > 0 ? device_rate : desired_rate;
-    if (output_rate_selector_->getSelectedId() != shown_rate)
-    {
-        output_rate_selector_->setSelectedId(shown_rate, juce::dontSendNotification);
-    }
+    // Output endpoint rate (read-only).
+    output_rate_value_->setText(format(running ? engine_->outputDeviceSampleRate() : 0),
+                               juce::dontSendNotification);
 
-    // VST chain follows the output; show the negotiated chain rate while running.
-    vst_rate_value_->setText(format(running ? engine_->negotiatedSampleRate() : 0),
-                             juce::dontSendNotification);
+    // VST chain rate — reflect the user-selected rate in the dropdown without
+    // firing a change notification.
+    const int desired_rate = static_cast<int>(engine_->sampleRate());
+    if (vst_rate_selector_->getSelectedId() != desired_rate && desired_rate > 0)
+    {
+        vst_rate_selector_->setSelectedId(desired_rate, juce::dontSendNotification);
+    }
 }
 
 void MainWindow::refreshMeters()
@@ -3029,6 +3056,13 @@ void MainWindow::refreshMeters()
     meter_input_r_->setLevels(linearToDb(frame.input_peak_r), linearToDb(frame.input_rms_r));
     meter_output_l_->setLevels(linearToDb(frame.output_peak_l), linearToDb(frame.output_rms_l));
     meter_output_r_->setLevels(linearToDb(frame.output_peak_r), linearToDb(frame.output_rms_r));
+
+    // Update per-plugin output meters in the chain editor.
+    if (chain_editor_ != nullptr && engine_ != nullptr)
+    {
+        chain_editor_->setPluginMeterLevels(engine_->pluginOutputPeaks(),
+                                               engine_->pluginOutputRms());
+    }
 
     // Update tray volume popup meters if still open. tray_volume_popup_ is a
     // Component::SafePointer, so it automatically reads back as null once the

@@ -196,7 +196,7 @@ juce::AudioProcessorEditor* NightTimeProcessor::createEditor()
 
 void NightTimeProcessor::fillInPluginDescription(juce::PluginDescription& description) const
 {
-    description.name = "Auto volume leveller / Compressor";
+    description.name = "Volume Leveler";
     description.pluginFormatName = "Built-in";
     description.category = "Fx";
     description.manufacturerName = "JyGlobalVST";

@@ -1,6 +1,6 @@
 // src/audio-engine/builtin-effects/builtin_theme.h
 //
-// Theme colours for the built-in effect editors (EQ + Bass Boost, Auto volume leveller / Compressor).
+// Theme colours for the built-in effect editors (EQ + Bass Boost, Volume Leveler).
 //
 // The built-in editors live in the audio-engine layer and cannot depend on the
 // tray-app's CustomLookAndFeel. Instead the tray app pushes the currently
