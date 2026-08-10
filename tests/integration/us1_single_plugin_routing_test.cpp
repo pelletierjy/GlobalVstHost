@@ -90,6 +90,30 @@ TEST_F(US1SinglePluginRoutingTest, SampleRateNegotiation)
     StopEngine();
 }
 
+TEST_F(US1SinglePluginRoutingTest, SetSampleRateDoesNotRetuneOutputDevice)
+{
+    // Regression test: changing the VST chain's sample rate must only affect
+    // the chain's own processing rate, never the hardware output device's
+    // negotiated rate. On ASIO this used to force the driver's clock to match
+    // (audible pitch/click); the fix decouples the two and resamples instead.
+    StartEngine();
+
+    const int device_rate_before = engine()->outputDeviceSampleRate();
+    ASSERT_GT(device_rate_before, 0) << "Output device should have a negotiated rate while running";
+
+    // Request a chain rate that differs from whatever the real device negotiated.
+    const int requested_rate = (device_rate_before == 48000) ? 44100 : 48000;
+    engine()->setSampleRate(static_cast<double>(requested_rate));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    EXPECT_EQ(engine()->negotiatedSampleRate(), requested_rate)
+        << "The VST chain should run at the requested rate";
+    EXPECT_EQ(engine()->outputDeviceSampleRate(), device_rate_before)
+        << "Changing the VST sample rate must not change the output hardware's rate";
+
+    StopEngine();
+}
+
 TEST_F(US1SinglePluginRoutingTest, LatencyProfileReflectsDeviceLatency)
 {
     StartEngine();

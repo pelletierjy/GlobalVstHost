@@ -129,7 +129,9 @@ AsioSessionReport ASIOTransport::open(juce::AudioDeviceManager* manager,
     setup.outputDeviceName = juce::String(device_name);
     setup.inputDeviceName  = juce::String(device_name);
     setup.bufferSize       = config_.buffer_size;
-    setup.sampleRate       = config_.sample_rate > 0.0 ? config_.sample_rate : 48000.0;
+    // 0.0 (the caller's normal request — see applyAsioTransport()) leaves the
+    // driver at its current/native rate instead of forcing a hardware retune.
+    setup.sampleRate       = config_.sample_rate > 0.0 ? config_.sample_rate : 0.0;
     setup.inputChannels.setRange(0, config_.input_channels, true);
     setup.outputChannels.setRange(0, config_.output_channels, true);
     setup.useDefaultInputChannels  = false;

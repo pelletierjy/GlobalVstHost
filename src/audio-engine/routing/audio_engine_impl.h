@@ -218,6 +218,22 @@ private:
     // rate than the hardware.
     double juce_device_rate_ {0.0};
 
+    // Output-side resampler (UI-thread prepared, audio-thread used) for the
+    // ASIO / JUCE-callback path. The chain never follows an ASIO device's
+    // negotiated rate (applyAsioTransport() deliberately never asks the driver
+    // to change its clock) — instead it runs at the user-selected rate and
+    // this resampler bridges chain audio to whatever the device actually
+    // negotiated. Mirrors capture_resampler_ above, but source/target swapped.
+    WindowedSincResampler output_resampler_;
+    juce::AudioBuffer<float> output_resampled_buffer_;  // pre-allocated, device-rate frames
+    bool output_resampling_enabled_ {false};
+    double output_nominal_ratio_ {1.0};       // chain_rate / device_rate
+    // True capacity work_buffer_ was allocated at (audioDeviceAboutToStart). The
+    // callback shrinks work_buffer_'s logical size to chain_samples every block
+    // (avoidReallocating, so its getNumSamples() no longer reflects the original
+    // capacity) — this is the value to clamp chain_samples against instead.
+    int chain_block_capacity_ {0};
+
     void openWasapiCapture();
     void closeWasapiCapture();
     void openWasapiOutput();      // T017: Open real WASAPI render output

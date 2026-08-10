@@ -118,10 +118,14 @@ public:
     virtual int bufferSize() const = 0;
     virtual void setSampleRate(double rate) = 0;
     virtual double sampleRate() const = 0;
+    // Sample rate the VST chain is actually processing at (Hz). In WASAPI shared
+    // mode this always tracks outputDeviceSampleRate() (the endpoint's rate can't
+    // be changed). In ASIO mode it follows the user-requested setSampleRate()
+    // instead, since the driver's own clock is never forced to match — a
+    // resampler bridges the two when they differ.
     virtual int negotiatedSampleRate() const = 0;
     // Actual sample rate of the selected output hardware endpoint (Hz), or 0 when
-    // not running. The VST chain auto-follows this rate, so negotiatedSampleRate()
-    // normally equals this value in normal operation.
+    // not running. May differ from negotiatedSampleRate() in ASIO mode.
     virtual int outputDeviceSampleRate() const = 0;
     // Actual sample rate of the selected input/capture hardware endpoint (Hz), or 0
     // when not running.

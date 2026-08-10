@@ -837,11 +837,12 @@ int AudioEngineImpl::outputDeviceSampleRate() const
     {
         return static_cast<int>(output_wasapi_rate_);
     }
-    // ASIO / JUCE-callback mode: the device drives both chain and output, so the
-    // chain's negotiated rate is the output rate. Returns 0 when not running.
-    if (running_.load())
+    // ASIO / JUCE-callback mode: report the device's own negotiated rate, which
+    // can now differ from the chain's rate (negotiated_sample_rate_) — see
+    // audioDeviceAboutToStart(). Returns 0 when not running.
+    if (running_.load() && juce_device_rate_ > 0.0)
     {
-        return negotiated_sample_rate_.load();
+        return static_cast<int>(juce_device_rate_);
     }
     return 0;
 }
@@ -1926,10 +1927,20 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     }
 
     // 2. Acquire input samples.
-    // The chain always runs at the output device rate, so vst_samples equals
-    // num_samples in all modes. Capture-side resampling handles any input mismatch.
-    const int vst_samples = num_samples;
-    const int samples = std::min(num_samples, work_buffer_.getNumSamples());
+    // The chain runs at its own rate (desired_sample_rate_), which can differ
+    // from the device's num_samples-per-callback rate on ASIO — see
+    // audioDeviceAboutToStart(). chain_samples is how many chain-rate frames
+    // are needed so that, after output_resampler_, exactly num_samples device
+    // frames come out. Capture-side resampling handles any additional
+    // mismatch between the capture endpoint and the chain rate.
+    int chain_samples = num_samples;
+    if (output_resampling_enabled_)
+    {
+        chain_samples = std::min(
+            static_cast<int>(std::ceil(static_cast<double>(num_samples) * output_nominal_ratio_)) + 2,
+            chain_block_capacity_);
+    }
+    const int vst_samples = chain_samples;
     if (wasapi_capture_ != nullptr && capture_ring_buffer_ != nullptr)
     {
         std::size_t avail = capture_ring_buffer_->available();
@@ -1977,18 +1988,29 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     }
     else
     {
+        // No capture-ring source configured (e.g. direct hardware input, or no
+        // input at all): copy what's available at the device's native frame
+        // count, zero-filling the rest of the chain-rate block. This path does
+        // not resample the input leg — it only matters when no WASAPI capture
+        // is active, so a chain/device rate mismatch here just means silence
+        // padding rather than a pitch shift.
         const int channels = std::min(num_input_channels, work_buffer_.getNumChannels());
+        const int copy_n = std::min(chain_samples, num_samples);
         for (int c = 0; c < channels; ++c)
         {
             if (input_channel_data[c] != nullptr)
             {
                 std::memcpy(work_buffer_.getWritePointer(c), input_channel_data[c],
-                            static_cast<std::size_t>(samples) * sizeof(float));
+                            static_cast<std::size_t>(copy_n) * sizeof(float));
+            }
+            if (copy_n < chain_samples)
+            {
+                work_buffer_.clear(c, copy_n, chain_samples - copy_n);
             }
         }
         for (int c = channels; c < work_buffer_.getNumChannels(); ++c)
         {
-            work_buffer_.clear(c, 0, samples);
+            work_buffer_.clear(c, 0, chain_samples);
         }
     }
 
@@ -2014,10 +2036,18 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
         }
     }
 
-    // 3. Process through plugin chain. Energy Saver: while sleeping we skip the
-    //    CPU-heavy chain entirely and emit silence. The input peak/RMS above is
-    //    still computed every metering block, so the energy-saver thread keeps
-    //    seeing the true input level and resumes the instant audio returns.
+    // 3. Process through plugin chain. work_buffer_ is allocated (in
+    //    audioDeviceAboutToStart) at the worst-case chain_block capacity;
+    //    constrain it to the frames actually filled this callback so the chain
+    //    doesn't process stale tail samples from a previous, larger block.
+    //    avoidReallocating=true guarantees this never touches the heap since
+    //    chain_samples never exceeds that capacity.
+    work_buffer_.setSize(work_buffer_.getNumChannels(), chain_samples, false, false, true);
+
+    // Energy Saver: while sleeping we skip the CPU-heavy chain entirely and
+    // emit silence. The input peak/RMS above is still computed every metering
+    // block, so the energy-saver thread keeps seeing the true input level and
+    // resumes the instant audio returns.
     if (energy_saver_sleeping_.load(std::memory_order_relaxed))
     {
         work_buffer_.clear();
@@ -2042,15 +2072,38 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
         }
     }
 
-    // 4. Copy work buffer → output.
+    // 4. Resample chain audio (chain_samples @ chain_rate) to the device rate
+    //    when they differ — ASIO only; applyAsioTransport() never changes the
+    //    device's own clock, so this is what actually absorbs a chain-rate
+    //    change instead of it leaking into the hardware.
+    const juce::AudioBuffer<float>* out_buffer = &work_buffer_;
+    int out_samples = vst_samples;
+    if (output_resampling_enabled_)
+    {
+        output_resampled_buffer_.setSize(output_resampled_buffer_.getNumChannels(), num_samples, false, false, true);
+        const float* chain_src[2] = {
+            work_buffer_.getReadPointer(0),
+            work_buffer_.getNumChannels() > 1 ? work_buffer_.getReadPointer(1) : nullptr};
+        float* resampled_dst[2] = {
+            output_resampled_buffer_.getWritePointer(0),
+            output_resampled_buffer_.getNumChannels() > 1 ? output_resampled_buffer_.getWritePointer(1) : nullptr};
+        std::size_t out_consumed = 0;
+        output_resampler_.process(chain_src, resampled_dst,
+                                   static_cast<std::size_t>(num_samples),
+                                   static_cast<std::size_t>(chain_samples), &out_consumed);
+        out_buffer = &output_resampled_buffer_;
+        out_samples = num_samples;
+    }
+
+    // 4a. Copy resampled/chain buffer → output.
     if (wasapi_output_ == nullptr)
     {
-        const int out_channels = std::min(num_output_channels, work_buffer_.getNumChannels());
+        const int out_channels = std::min(num_output_channels, out_buffer->getNumChannels());
         for (int c = 0; c < out_channels; ++c)
         {
             if (output_channel_data[c] != nullptr)
             {
-                std::memcpy(output_channel_data[c], work_buffer_.getReadPointer(c),
+                std::memcpy(output_channel_data[c], out_buffer->getReadPointer(c),
                             static_cast<std::size_t>(num_samples) * sizeof(float));
             }
         }
@@ -2067,26 +2120,26 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     if (wasapi_output_ != nullptr && output_ring_buffer_ != nullptr)
     {
         const float* src_ptrs[2] = {
-            work_buffer_.getReadPointer(0),
-            work_buffer_.getNumChannels() > 1 ? work_buffer_.getReadPointer(1) : nullptr
+            out_buffer->getReadPointer(0),
+            out_buffer->getNumChannels() > 1 ? out_buffer->getReadPointer(1) : nullptr
         };
         const std::size_t written = output_ring_buffer_->tryWrite(
-            src_ptrs, static_cast<std::size_t>(vst_samples));
+            src_ptrs, static_cast<std::size_t>(out_samples));
         (void)written;
     }
 
-    if (do_meter && vst_samples > 0)
+    if (do_meter && out_samples > 0)
     {
-        const int out_channels = std::min(num_output_channels, work_buffer_.getNumChannels());
+        const int out_channels = std::min(num_output_channels, out_buffer->getNumChannels());
         if (out_channels > 0 && (wasapi_output_ != nullptr || output_channel_data[0] != nullptr))
         {
-            meter_output_peak_l_.store(work_buffer_.getMagnitude(0, 0, vst_samples));
-            meter_output_rms_l_.store(work_buffer_.getRMSLevel(0, 0, vst_samples));
+            meter_output_peak_l_.store(out_buffer->getMagnitude(0, 0, out_samples));
+            meter_output_rms_l_.store(out_buffer->getRMSLevel(0, 0, out_samples));
         }
         if (out_channels > 1 && (wasapi_output_ != nullptr || output_channel_data[1] != nullptr))
         {
-            meter_output_peak_r_.store(work_buffer_.getMagnitude(1, 0, vst_samples));
-            meter_output_rms_r_.store(work_buffer_.getRMSLevel(1, 0, vst_samples));
+            meter_output_peak_r_.store(out_buffer->getMagnitude(1, 0, out_samples));
+            meter_output_rms_r_.store(out_buffer->getRMSLevel(1, 0, out_samples));
         }
     }
 
@@ -2134,31 +2187,53 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         const int channels = std::max(2, device->getActiveOutputChannels().countNumberOfSetBits());
         const int block = device->getCurrentBufferSizeSamples();
 
-        work_buffer_.setSize(channels, block, false, false, true);
-        plugin_chain_->prepareToPlay(device_rate, block);
-        negotiated_sample_rate_.store(static_cast<int>(device_rate));
-        LogDebug("audioDeviceAboutToStart() device_sr=%.0f ch=%d block=%d", device_rate, channels, block);
+        // The chain runs at the user-selected rate, not whatever the ASIO device
+        // negotiated — applyAsioTransport() deliberately never asks the driver to
+        // change its clock. When the two differ, output_resampler_ bridges chain
+        // audio to the device rate (see audioDeviceIOCallbackWithContext).
+        const double chain_rate = desired_sample_rate_ > 0.0 ? desired_sample_rate_ : device_rate;
 
-        // Set up capture-side resampler when capture rate differs from device rate.
-        const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : device_rate;
-        capture_resampling_enabled_ = wasapi_rate > 0.0 && device_rate > 0.0 &&
-                                      std::abs(wasapi_rate - device_rate) > 0.1;
+        output_resampling_enabled_ = device_rate > 0.0 && std::abs(chain_rate - device_rate) > 0.1;
+        output_nominal_ratio_ = (device_rate > 0.0) ? (chain_rate / device_rate) : 1.0;
+
+        const int chain_block = static_cast<int>(std::ceil(
+                                    static_cast<double>(block) * output_nominal_ratio_)) + 8;
+        chain_block_capacity_ = chain_block;
+
+        work_buffer_.setSize(channels, chain_block, false, false, true);
+        output_resampled_buffer_.setSize(channels, block, false, false, true);
+        plugin_chain_->prepareToPlay(chain_rate, chain_block);
+        negotiated_sample_rate_.store(static_cast<int>(chain_rate));
+        LogDebug("audioDeviceAboutToStart() device_sr=%.0f chain_sr=%.0f ch=%d block=%d chain_block=%d",
+                 device_rate, chain_rate, channels, block, chain_block);
+
+        if (output_resampling_enabled_)
+        {
+            output_resampler_.prepare(output_nominal_ratio_, static_cast<std::size_t>(chain_block), 2);
+            LogDebug("audioDeviceAboutToStart() output SRC: chain=%.0f device=%.0f ratio=%.6f",
+                     chain_rate, device_rate, output_nominal_ratio_);
+        }
+
+        // Set up capture-side resampler when capture rate differs from chain rate.
+        const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : chain_rate;
+        capture_resampling_enabled_ = wasapi_rate > 0.0 && chain_rate > 0.0 &&
+                                      std::abs(wasapi_rate - chain_rate) > 0.1;
 
         // Always compute the ratio and size the raw scratch buffer — even when
         // resampling is disabled (ratio == 1.0) — so the callback can peek from
         // the capture ring into a valid buffer.
-        capture_nominal_ratio_ = (device_rate > 0.0) ? (wasapi_rate / device_rate) : 1.0;
+        capture_nominal_ratio_ = (chain_rate > 0.0) ? (wasapi_rate / chain_rate) : 1.0;
         xrun_count_.store(0, std::memory_order_relaxed);
 
         const int raw_max = static_cast<int>(std::ceil(
-                                static_cast<double>(block) * capture_nominal_ratio_)) + 8;
+                                static_cast<double>(chain_block) * capture_nominal_ratio_)) + 8;
         capture_raw_buffer_.setSize(2, raw_max, false, true, true);
         if (capture_resampling_enabled_)
         {
             capture_resampler_.prepare(capture_nominal_ratio_, static_cast<std::size_t>(raw_max), 2);
 
-            LogDebug("audioDeviceAboutToStart() capture SRC: wasapi=%.0f device=%.0f ratio=%.6f",
-                     wasapi_rate, device_rate, capture_nominal_ratio_);
+            LogDebug("audioDeviceAboutToStart() capture SRC: wasapi=%.0f chain=%.0f ratio=%.6f",
+                     wasapi_rate, chain_rate, capture_nominal_ratio_);
         }
     }
     LogDebug("audioDeviceAboutToStart() completed");
@@ -2301,7 +2376,14 @@ void AudioEngineImpl::applyAsioTransport()
 
     SessionConfig asio_config;
     asio_config.buffer_size = desired_buffer_size_;
-    asio_config.sample_rate = desired_sample_rate_;
+    // Never ask the ASIO driver to change its hardware sample rate: unlike
+    // WASAPI shared mode (which silently ignores a mismatched request and
+    // always runs the chain at whatever the mixer negotiated), ASIO drivers
+    // genuinely retune the DAC clock when asked. desired_sample_rate_ is the
+    // user's *chain* rate, not a hardware request — 0.0 tells ASIOTransport to
+    // leave the device at its current/native rate; audioDeviceAboutToStart()
+    // then resamples chain audio to whatever that turns out to be.
+    asio_config.sample_rate = 0.0;
     asio_config.input_channels = mixed_mode_active_.load(std::memory_order_acquire) ? 0 : 2;
     asio_config.output_channels = desired_asio_output_pair_ + 2;
     asio_transport_->setPreferred(asio_config);
