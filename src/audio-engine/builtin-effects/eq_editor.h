@@ -11,7 +11,8 @@ class EqProcessor;
 
 class EqEditor : public juce::AudioProcessorEditor,
                  public juce::Slider::Listener,
-                 public juce::Button::Listener
+                 public juce::Button::Listener,
+                 private juce::Timer
 {
 public:
     explicit EqEditor(EqProcessor& processor);
@@ -24,7 +25,12 @@ public:
     void buttonClicked(juce::Button* button) override;
 
 private:
+    void timerCallback() override;
+
     EqProcessor& processor_;
+
+    std::unique_ptr<juce::Slider> input_volume_slider_;
+    std::unique_ptr<juce::Label> input_volume_label_;
 
     std::array<std::unique_ptr<juce::Slider>, 10> band_sliders_;
     std::array<std::unique_ptr<juce::Label>, 10> band_labels_;
@@ -36,6 +42,7 @@ private:
 
     void updateBandSliders();
     void updateBassBoostSlider();
+    void updateInputVolumeSlider();
     void applyThemeColors();
 };
 

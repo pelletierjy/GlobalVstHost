@@ -3,6 +3,7 @@
 #include "builtin_ids.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <array>
+#include <atomic>
 #include <vector>
 
 namespace jyglobalvst::engine {
@@ -47,6 +48,12 @@ public:
     void setBandGain(int band_index, float gain_db);
     float getBassBoost() const;
     void setBassBoost(float gain_db);
+    float getInputVolume() const;
+    void setInputVolume(float gain_db);
+
+    // Per-band linear peak level (0..~1), updated once per audio block for the
+    // band meter UI. Safe to poll from the message thread.
+    float getBandLevel(int band_index) const;
 
 private:
     struct Biquad
@@ -62,11 +69,20 @@ private:
     double sample_rate_ = 0.0;
     std::array<float, kNumBands> band_gains_;
     float bass_boost_db_ = 0.f;
+    float input_volume_db_ = 0.f;
+    float input_volume_linear_ = 1.f;
     std::array<std::array<Biquad, kNumBands>, 2> band_filters_;  // [channel][band]
     std::array<Biquad, 2> bass_shelf_;  // Low shelf for bass boost
 
+    // Bandpass filters used only to estimate the per-band signal level for the
+    // meter UI; they run on the dry (pre-gain) signal and never touch the
+    // audio path.
+    std::array<std::array<Biquad, kNumBands>, 2> band_analysis_filters_;  // [channel][band]
+    std::array<std::atomic<float>, kNumBands> band_levels_;
+
     void updateFilterCoefficients();
     void computeBiquadCoefficients(float center_hz, float gain_db, float q, Biquad& biquad);
+    void computeBandpassCoefficients(float center_hz, float q, Biquad& biquad);
 };
 
 }  // namespace jyglobalvst::engine

@@ -3,6 +3,17 @@
 
 include(GoogleTest)
 
+# Coverage support (MSVC + Visual Studio's /PROFILE coverage, or gcov-compatible)
+if(JYGLOBALVST_ENABLE_COVERAGE)
+    message(STATUS "Code coverage instrumentation enabled (JYGLOBALVST_ENABLE_COVERAGE)")
+    if(MSVC)
+        # Use /PROFILE for coverage (VS2022 17.9+) or fall back to legacy /Zi
+        add_compile_options(/PROFILE)
+        add_compile_options(/Zi)
+        add_compile_definitions(COVERAGE_ENABLED)
+    endif()
+endif()
+
 function(jyglobalvst_add_test name)
     add_executable(${name} ${ARGN})
     target_link_libraries(${name} PRIVATE
@@ -50,3 +61,13 @@ foreach(_src IN LISTS _contract_test_sources)
     get_filename_component(_name "${_src}" NAME_WE)
     jyglobalvst_add_test(${_name} ${_src})
 endforeach()
+
+# polish_accessibility_test unity-includes chain_editor.cpp to exercise
+# ChainSlotRow directly; chain_editor.cpp needs HorizontalMeterPanel's
+# implementation, which must be compiled as its own translation unit here
+# (rather than also unity-included) since both .cpp files define an
+# identically-named linearToDb() in an anonymous namespace.
+if(TARGET polish_accessibility_test)
+    target_sources(polish_accessibility_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/horizontal_meter_panel.cpp")
+endif()

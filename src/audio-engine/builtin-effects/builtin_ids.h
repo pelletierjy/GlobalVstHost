@@ -97,9 +97,10 @@ namespace eq {
     constexpr int PARAM_BAND_8 = 8;
     constexpr int PARAM_BAND_9 = 9;
     constexpr int PARAM_BASS_BOOST = 10;
+    constexpr int PARAM_INPUT_VOLUME = 11;
 
     constexpr int NUM_BANDS = 10;
-    constexpr int NUM_PARAMETERS = 11;  // 10 bands + bass boost
+    constexpr int NUM_PARAMETERS = 12;  // 10 bands + bass boost + input volume
 
     // Fixed band center frequencies (Hz).
     constexpr std::array<float, NUM_BANDS> BAND_CENTERS_HZ = {
@@ -115,6 +116,11 @@ namespace eq {
     constexpr float BASS_BOOST_MIN_DB = 0.0f;
     constexpr float BASS_BOOST_MAX_DB = 12.0f;
     constexpr float BASS_BOOST_DEFAULT_DB = 0.0f;
+
+    // Input volume trim range (dB), applied before the band filters.
+    constexpr float INPUT_VOLUME_MIN_DB = -12.0f;
+    constexpr float INPUT_VOLUME_MAX_DB = 12.0f;
+    constexpr float INPUT_VOLUME_DEFAULT_DB = 0.0f;
 
     // Output safety ceiling (dB, just below 0 dBFS).
     constexpr float OUTPUT_CEILING_DB = -0.1f;

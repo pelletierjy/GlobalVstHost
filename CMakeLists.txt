@@ -34,6 +34,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 option(JYGLOBALVST_BUILD_TESTS "Build unit and integration tests" ON)
+option(JYGLOBALVST_ENABLE_COVERAGE "Enable code coverage instrumentation (MSVC only)" OFF)
 
 # ASIO support is mandatory (not a toggle): this host requires ASIO output.
 # The SDK can be provided via:
@@ -116,4 +117,5 @@ message(STATUS "JyGlobalVST configuration:")
 message(STATUS "  Build type:       ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ standard:     ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Tests:            ${JYGLOBALVST_BUILD_TESTS}")
+message(STATUS "  Coverage:         ${JYGLOBALVST_ENABLE_COVERAGE}")
 message(STATUS "")

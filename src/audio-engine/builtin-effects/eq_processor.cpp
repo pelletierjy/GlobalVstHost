@@ -37,6 +37,9 @@ void EqProcessor::prepareToPlay(double sample_rate, int)
     for (auto& ch : band_filters_)
         for (auto& biquad : ch)
             biquad.reset();
+    for (auto& ch : band_analysis_filters_)
+        for (auto& biquad : ch)
+            biquad.reset();
     for (auto& biquad : bass_shelf_)
         biquad.reset();
     updateFilterCoefficients();
@@ -57,13 +60,25 @@ void EqProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     auto* left = buffer.getWritePointer(0);
     auto* right = buffer.getWritePointer(1);
 
+    std::array<float, kNumBands> block_peak{};
+
     for (int i = 0; i < num_samples; ++i)
     {
-        float l = left[i];
-        float r = right[i];
+        float l = left[i] * input_volume_linear_;
+        float r = right[i] * input_volume_linear_;
+
+        const float dry_l = l;
+        const float dry_r = r;
 
         for (int b = 0; b < kNumBands; ++b)
         {
+            // Analysis-only bandpass, run on the dry signal, feeding the band meter.
+            float band_l = band_analysis_filters_[0][b].processL(dry_l);
+            float band_r = band_analysis_filters_[1][b].processR(dry_r);
+            float mag = std::max(std::abs(band_l), std::abs(band_r));
+            if (mag > block_peak[b])
+                block_peak[b] = mag;
+
             l = band_filters_[0][b].processL(l);
             r = band_filters_[1][b].processR(r);
         }
@@ -74,6 +89,9 @@ void EqProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
         left[i] = std::min(1.f, std::max(-1.f, l));
         right[i] = std::min(1.f, std::max(-1.f, r));
     }
+
+    for (int b = 0; b < kNumBands; ++b)
+        band_levels_[b].store(block_peak[b], std::memory_order_relaxed);
 }
 
 void EqProcessor::updateFilterCoefficients()
@@ -85,7 +103,10 @@ void EqProcessor::updateFilterCoefficients()
         float center_hz = builtin::eq::BAND_CENTERS_HZ[b];
         float gain_db = band_gains_[b];
         for (int ch = 0; ch < 2; ++ch)
+        {
             computeBiquadCoefficients(center_hz, gain_db, q, band_filters_[ch][b]);
+            computeBandpassCoefficients(center_hz, q, band_analysis_filters_[ch][b]);
+        }
     }
 
     for (int ch = 0; ch < 2; ++ch)
@@ -121,6 +142,27 @@ void EqProcessor::computeBiquadCoefficients(float center_hz, float gain_db, floa
     biquad.a2 = static_cast<float>(a2 / a0);
 }
 
+void EqProcessor::computeBandpassCoefficients(float center_hz, float q, Biquad& biquad)
+{
+    double w0 = 2.0 * kPi * center_hz / sample_rate_;
+    double sin_w0 = std::sin(w0);
+    double cos_w0 = std::cos(w0);
+    double alpha = sin_w0 / (2.0 * q);
+
+    double b0 = alpha;
+    double b1 = 0.0;
+    double b2 = -alpha;
+    double a0 = 1.0 + alpha;
+    double a1 = -2.0 * cos_w0;
+    double a2 = 1.0 - alpha;
+
+    biquad.b0 = static_cast<float>(b0 / a0);
+    biquad.b1 = static_cast<float>(b1 / a0);
+    biquad.b2 = static_cast<float>(b2 / a0);
+    biquad.a1 = static_cast<float>(a1 / a0);
+    biquad.a2 = static_cast<float>(a2 / a0);
+}
+
 float EqProcessor::getBandGain(int band_index) const
 {
     if (band_index >= 0 && band_index < kNumBands)
@@ -148,6 +190,24 @@ void EqProcessor::setBassBoost(float gain_db)
     updateFilterCoefficients();
 }
 
+float EqProcessor::getInputVolume() const
+{
+    return input_volume_db_;
+}
+
+void EqProcessor::setInputVolume(float gain_db)
+{
+    input_volume_db_ = gain_db;
+    input_volume_linear_ = std::pow(10.f, gain_db / 20.f);
+}
+
+float EqProcessor::getBandLevel(int band_index) const
+{
+    if (band_index >= 0 && band_index < kNumBands)
+        return band_levels_[band_index].load(std::memory_order_relaxed);
+    return 0.f;
+}
+
 void EqProcessor::getStateInformation(juce::MemoryBlock& dest)
 {
     nlohmann::json state;
@@ -156,6 +216,7 @@ void EqProcessor::getStateInformation(juce::MemoryBlock& dest)
     for (int i = 0; i < kNumBands; ++i)
         state["bands"].push_back(band_gains_[i]);
     state["bass"] = bass_boost_db_;
+    state["input_volume"] = input_volume_db_;
 
     std::string json_str = state.dump();
     dest.setSize(json_str.size());
@@ -178,6 +239,9 @@ void EqProcessor::setStateInformation(const void* data, int size)
 
         if (state.contains("bass"))
             bass_boost_db_ = state["bass"].get<float>();
+
+        if (state.contains("input_volume"))
+            setInputVolume(state["input_volume"].get<float>());
 
         updateFilterCoefficients();
     }
