@@ -22,7 +22,7 @@ TEST(BuiltinRegistryTest, EntriesContainAllEffects)
             EXPECT_EQ(entry.file_path, "");
             EXPECT_TRUE(entry.has_editor);
         }
-        if (entry.ref.name == "EQ (Bass Boost)")
+        if (entry.ref.name == "Equalizer")
         {
             found_eq = true;
             EXPECT_EQ(entry.ref.vendor, "JyGlobalVST");
@@ -66,7 +66,7 @@ TEST(BuiltinRegistryTest, CreateWorks)
 
     PluginRef ref;
     ref.vendor = "JyGlobalVST";
-    ref.name = "EQ (Bass Boost)";
+    ref.name = "Equalizer";
 
     auto proc = registry.create(ref);
     EXPECT_NE(proc, nullptr);

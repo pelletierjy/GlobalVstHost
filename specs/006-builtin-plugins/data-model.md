@@ -11,7 +11,7 @@ Each effect gets a fixed 16-byte `PluginUid` from a stable ASCII seed. `vendor =
 | Effect | Display name | ASCII seed (16 bytes) | UID hex (32 chars, lowercase) |
 |---|---|---|---|
 | Night-time | `Night-time` | `JYGL-NIGHTTIME01` | `4a59474c2d4e49474854494d453031` **+ pad** → see note |
-| EQ | `EQ (Bass Boost)` | `JYGL-EQ-BAND0010` | derived from ASCII bytes |
+| EQ | `Equalizer` | `JYGL-EQ-BAND0010` | derived from ASCII bytes |
 
 > **Note**: The authoritative constants are defined once in `builtin_ids.h` as the ASCII byte arrays; the hex form is whatever `PluginUidToHexString()` yields from those 16 bytes. Implementation must assert `seed.size() == 16` and that the two UIDs differ. (The hex sample above is illustrative — the header's ASCII array is the source of truth.)
 

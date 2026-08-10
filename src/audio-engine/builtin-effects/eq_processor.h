@@ -23,7 +23,7 @@ public:
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
 
-    const juce::String getName() const override { return "EQ (Bass Boost)"; }
+    const juce::String getName() const override { return "Equalizer"; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }

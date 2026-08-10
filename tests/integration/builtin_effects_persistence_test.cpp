@@ -51,7 +51,7 @@ void addBuiltins(AudioEngineImpl& engine)
 
     PluginRef eq_ref;
     eq_ref.vendor = "JyGlobalVST";
-    eq_ref.name = "EQ (Bass Boost)";
+    eq_ref.name = "Equalizer";
     engine.addPlugin(eq_ref, 1);
 }
 
@@ -74,7 +74,7 @@ TEST(BuiltinEffectsPersistenceTest, PresetRoundTrip)
         auto snapshot = engine2.snapshotChain();
         EXPECT_EQ(snapshot.slots.size(), 2);
         EXPECT_EQ(snapshot.slots[0].ref.name, "Volume Leveler");
-        EXPECT_EQ(snapshot.slots[1].ref.name, "EQ (Bass Boost)");
+        EXPECT_EQ(snapshot.slots[1].ref.name, "Equalizer");
     }
 
     std::filesystem::remove(preset_path);

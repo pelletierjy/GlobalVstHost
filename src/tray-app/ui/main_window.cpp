@@ -1234,7 +1234,7 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
 
         PluginRef eq_ref;
         eq_ref.vendor = "JyGlobalVST";
-        eq_ref.name = "EQ (Bass Boost)";
+        eq_ref.name = "Equalizer";
 
         PluginRef vl_ref;
         vl_ref.vendor = "JyGlobalVST";

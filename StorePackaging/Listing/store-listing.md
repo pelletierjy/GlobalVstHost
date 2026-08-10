@@ -252,7 +252,7 @@ generic device names if convenient.
 | WASAPI loopback capture, no driver | `src/audio-engine/routing/wasapi_capture.cpp:333` sets `AUDCLNT_STREAMFLAGS_LOOPBACK`; no driver or NT service dependency anywhere |
 | Selectable hardware input device | `audio_engine_impl.cpp:2374` — `listInputs()` enumerates `EndpointFlow::Capture` endpoints; `selectInput()` at `798`. Visible in the screenshot as an Input selector |
 | "Auto Volume Leveller / Compressor" is a stereo compressor/limiter for consistent late-night volume | `src/audio-engine/builtin-effects/nighttime_processor.cpp`; registered as `"Auto Volume Leveller / Compressor"` in `builtin_effect_registry.cpp`; intent per `specs/006-builtin-plugins/spec.md` US1 |
-| EQ with multi-band gains and a dedicated bass boost | `src/audio-engine/builtin-effects/eq_processor.cpp` (`setBandGain`, `setBassBoost`, bass shelf at 200 Hz); registered as `"EQ (Bass Boost)"` |
+| EQ with multi-band gains and a dedicated bass boost | `src/audio-engine/builtin-effects/eq_processor.cpp` (`setBandGain`, `setBassBoost`, bass shelf at 200 Hz); registered as `"Equalizer"` |
 | Built-ins need no scan or download | Registered in-process at construction; spec 006 US1 AC1 |
 | Loads user-installed VST3 from the standard folder | `src/audio-engine/vst-host/default_scan_paths.cpp` resolves `FOLDERID_ProgramFiles\Common Files\VST3` |
 | Live add/remove/reorder without dropouts | `src/audio-engine/chain/plugin_chain.cpp`; SPSC command queue applied at the top of `processBlock` |

@@ -252,7 +252,7 @@ void EqProcessor::setStateInformation(const void* data, int size)
 
 void EqProcessor::fillInPluginDescription(juce::PluginDescription& description) const
 {
-    description.name = "EQ (Bass Boost)";
+    description.name = "Equalizer";
     description.pluginFormatName = "Built-in";
     description.category = "Fx";
     description.manufacturerName = "JyGlobalVST";

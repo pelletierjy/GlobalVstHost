@@ -28,7 +28,7 @@ ctest --test-dir build -C Release --output-on-failure -R "builtin|nighttime|eq_p
 
 1. Delete `%LocalAppData%\JyGlobalVST\scan-cache.json` (simulate no scanned plugins) and launch `jyglobalvst_tray`.
 2. Open the plugin list ("Add Plugin" → Catalog dialog).
-3. **Expected**: "Night-time" and "EQ (Bass Boost)" appear (vendor *JyGlobalVST*), with no scan/download step; optionally shown with a "Built-in" badge.
+3. **Expected**: "Night-time" and "Equalizer" appear (vendor *JyGlobalVST*), with no scan/download step; optionally shown with a "Built-in" badge.
 
 ## Scenario 2 — Night-time levels late-night content (US1, FR-007/008/010/011, SC-002)
 

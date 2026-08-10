@@ -29,7 +29,7 @@ void BuiltinEffectRegistry::registerBuiltins()
     // EQ effect
     descriptors_.push_back(Descriptor{
         builtin::EQ_UID,
-        "EQ (Bass Boost)",
+        "Equalizer",
         "JyGlobalVST",
         "Fx",
         []() -> std::unique_ptr<juce::AudioPluginInstance> {

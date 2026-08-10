@@ -24,14 +24,14 @@ TEST(BuiltinEqTest, AddEqToChain)
 
     PluginRef ref;
     ref.vendor = "JyGlobalVST";
-    ref.name = "EQ (Bass Boost)";
+    ref.name = "Equalizer";
 
     auto id = engine.addPlugin(ref, 0);
     EXPECT_FALSE(id.isNull()) << "Failed to add EQ to chain";
 
     auto snapshot = engine.snapshotChain();
     EXPECT_EQ(snapshot.slots.size(), 1);
-    EXPECT_EQ(snapshot.slots[0].ref.name, "EQ (Bass Boost)");
+    EXPECT_EQ(snapshot.slots[0].ref.name, "Equalizer");
 }
 
 TEST(BuiltinEffectsTest, BothEffectsInChain)
@@ -45,7 +45,7 @@ TEST(BuiltinEffectsTest, BothEffectsInChain)
 
     PluginRef eq_ref;
     eq_ref.vendor = "JyGlobalVST";
-    eq_ref.name = "EQ (Bass Boost)";
+    eq_ref.name = "Equalizer";
     engine.addPlugin(eq_ref, 1);
 
     auto snapshot = engine.snapshotChain();

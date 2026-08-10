@@ -29,7 +29,7 @@ in the effect list immediately, with no scanning, download, or file selection:
   1. "Auto Volume Leveller / Compressor"      - a stereo compressor/limiter that evens out loud and
                          quiet passages so volume stays consistent at low
                          listening levels.
-  2. "EQ (Bass Boost)" - a multi-band equalizer with a dedicated bass boost.
+  2. "Equalizer" - a multi-band equalizer with a dedicated bass boost.
 
 Suggested 2-minute test:
 
@@ -38,7 +38,7 @@ Suggested 2-minute test:
   2. Start playing any audio in another app (browser video, music player).
   3. In Global VST Host, select an audio output device (for example your
      speakers or headphones).
-  4. Add "EQ (Bass Boost)" to the chain and raise the Bass Boost amount. The
+  4. Add "Equalizer" to the chain and raise the Bass Boost amount. The
      audio you are already playing audibly gains low end in real time.
   5. Add "Auto Volume Leveller / Compressor" and play content with both loud and quiet passages. Loud
      parts are pulled down and quiet parts brought up.
