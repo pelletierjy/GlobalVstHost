@@ -34,11 +34,23 @@ Run your system audio through VST3 effects and a built-in auto volume leveller /
 
 ```
 Global VST Host routes the audio your PC is already playing through an ordered chain
-of audio effects, then out to the device you choose. It hosts VST3 plugins that you
-have installed on your own computer, and it includes two effects built in, so it is
-useful immediately with no plugins at all.
+of audio effects, then out to the hardware device you choose from inside the app. It
+hosts VST3 plugins that you have installed on your own computer, and it includes two
+effects built in, so it is useful immediately with no plugins at all.
 
-No driver to install. No reboot. No virtual audio cable to configure.
+No driver to install. No reboot. No virtual playback device to select in Windows
+Sound settings, and nothing to configure there — Global VST Host picks up your
+system audio in the background while your normal output stays your default device.
+
+HOW IT WORKS
+
+Under the hood, Global VST Host uses WASAPI loopback capture: the same mechanism
+Windows itself uses for things like screen-recording audio. It reads the audio
+stream your PC is already producing, feeds it through your effect chain in 32-bit
+floating point, and writes the result to the hardware output you selected — your
+speakers, headphones, a USB DAC, an HDMI receiver, or an ASIO interface. Everything
+after installation happens inside the app's own tray window: pick an output, add
+effects, done.
 
 BUILT-IN EFFECTS — NOTHING TO DOWNLOAD
 
@@ -46,47 +58,69 @@ Auto Volume Leveller / Compressor
 A stereo compressor and limiter for late-night listening. Loud action scenes are
 pulled down and quiet dialogue is brought up, so the volume stays consistent and
 comfortable while other people are asleep. No more reaching for the remote every
-time the music swells.
+time the music swells. A look-ahead control lets you trade a small amount of extra
+latency for smoother gain changes, and the effect reports its own added latency so
+you always know the cost.
 
 EQ with Bass Boost
-A simple multi-band equalizer for shaping the overall tone of your system audio,
-with a dedicated bass boost for adding low-end warmth. One click resets everything
-back to flat.
+A ten-band equalizer for shaping the overall tone of your system audio, with a
+dedicated bass-boost shelf for adding low-end warmth without touching the other
+bands. Each band has its own gain, there's an input-level control and a per-band
+level meter so you can see what's actually happening to the signal, and one click
+on Flat/Reset returns every band and the bass boost to zero.
 
 HOST YOUR OWN VST3 PLUGINS
 
-Global VST Host loads VST3 effect plugins already installed on your PC, from the
-standard VST3 folder or a folder you point it at. Build a chain, drag effects into
-the order you want, and adjust each plugin's own interface while audio is playing.
+Global VST Host loads VST3 effect plugins already installed on your PC — from the
+standard system VST3 folder, or from an additional folder you add in Settings if
+your plugins live somewhere else. Tap the "+" at the end of the chain to open the
+plugin catalog, pick an effect, and it's added to the end of the chain. Drag chain
+entries to reorder them, and open any plugin's own editor window to adjust it while
+audio keeps playing.
 
-Add, remove, reorder, and bypass effects live. Changes take effect without stopping
-the audio.
+Add, remove, reorder, and bypass effects live, in any combination, in any position
+in the chain. Changes take effect immediately — the audio never stops or drops out
+while you edit the chain.
 
 DESIGNED FOR EVERYDAY LISTENING
 
-- Process your system audio, or select a hardware input device instead
-- Choose any audio output on your system, including ASIO devices
-- Save and load effect chains as preset files
-- Stereo input and output level meters, plus a live latency and CPU readout
-- An energy-saver mode that steps back when there is no audio to process
-- A faulty plugin is bypassed and reported rather than taking the app down with it
+- Process your system audio, or select a hardware input device instead (a line
+  input or an audio interface channel, for example)
+- Choose any audio output on your system, including ASIO devices, with selectable
+  buffer size and sample rate
+- Save an effect chain — built-ins and third-party plugins together, in order,
+  with all their settings — as a preset file, and load it back later
+- The current chain autosaves as you work, and is restored automatically the next
+  time you open the app, even if you never explicitly saved a preset
+- Stereo input and output level meters (peak and RMS, in dB), plus a live
+  round-trip latency readout and a CPU-usage meter with a high-load warning
+- An energy-saver mode, on by default, that reduces the app's own footprint when
+  there is no audio to process
+- Runs from the system tray with no separate taskbar window taking up space
+- A light and dark theme, and an in-app Settings tab for adjusting them
+- A faulty plugin is caught, bypassed, and reported in the app rather than being
+  allowed to crash the whole audio chain
 
 PRIVATE BY DESIGN
 
 Global VST Host performs no network communication whatsoever. No accounts, no
-telemetry, no analytics, no crash reporting, no update pings. Your settings and
-presets stay on your machine.
+telemetry, no analytics, no crash reporting, no background update checks or
+pings of any kind. Your settings and presets stay on your machine, in your own
+user profile.
 
 It captures the audio your computer is playing, processes it in memory, and passes
-it straight to your output device. Audio is never recorded, saved, or sent anywhere.
+it straight to your output device. Audio is never recorded, saved to disk, or sent
+anywhere — not to us, not to anyone.
 
 By default it reads what your speakers are already playing, not your microphone.
-You can choose a hardware input device instead if you want to process a line
-input or an audio interface channel.
+You can choose a hardware input device instead if you want to process a line input
+or an audio interface channel, but that is an explicit choice you make in the app,
+not the default.
 
-Windows requires the microphone permission for any audio capture, so you may see
-a microphone prompt and the microphone privacy indicator even when only system
-audio is being processed.
+Windows requires the microphone permission for any audio capture, so you may see a
+microphone prompt and the microphone privacy indicator even when only system audio
+is being processed. This is a Windows platform requirement for the capture API
+used, not an indication that your microphone is being read.
 
 REQUIREMENTS AND LIMITATIONS
 
@@ -193,7 +227,9 @@ trip, and publishing it invites users to hold you to it.
 **Three caveats still baked into these images.** None blocks submission; all argue for
 recapturing once the app-side fixes land:
 
-1. The window title and header read `GlobalVSTHost`, not `Global VST Host` — see below.
+1. The window title and header may read `GlobalVSTHost`, not `Global VST Host` — this was
+   fixed in code since these screenshots were captured (see "One cosmetic issue remains"
+   below), so check the actual images rather than assuming either way.
 2. A specific audio interface name is visible (`Art Pro (B) (USB IV 3/4)`). Harmless, but
    generic device names look better.
 3. In `02`, the EQ editor covers the level meters. Reposition it when recapturing.
@@ -231,13 +267,15 @@ Capture on the **installed MSIX package** at 100% scaling. Note the existing scr
 exposes a specific audio interface name ("Art Pro (B) (USB IV 3/4)") — harmless, but prefer
 generic device names if convenient.
 
-### Two cosmetic issues worth fixing first
+### One cosmetic issue remains
 
-- **The app calls itself "GlobalVSTHost", the Store calls it "Global VST Host".** The window
-  title bar and the in-app header both read `GlobalVSTHost` (no spaces), while the reserved
-  name, manifest `DisplayName`, and Store listing are `Global VST Host`. Not a certification
-  blocker, but customers see both names and it reads as sloppy. One-line UI text change, and
-  worth doing before screenshots are taken so they do not need retaking.
+- **The window title / app name mismatch is fixed.** Previously the window title bar and
+  in-app header read `GlobalVSTHost` (no spaces) while the Store listing used `Global VST
+  Host`. Re-checked against current code: `main.cpp`'s `kWindowTitle` and the
+  `DocumentWindow` constructor in `main_window.cpp:1198` both now read `"Global VST Host"`.
+  **The existing screenshots may still show the old title**, since I have not opened the
+  PNG files to check — recapture (or at least eyeball) them before submission rather than
+  assuming this is resolved everywhere.
 - **The icons are functional placeholders**, not designed artwork. They will pass
   certification but are the weakest part of the listing.
 
@@ -266,6 +304,12 @@ generic device names if convenient.
 | **No network communication** | Shipped `JyGlobalVST.exe` imports no `winhttp`/`wininet`/`ws2_32` — confirmed by `dumpbin /dependents` |
 | x64 only, Windows 10 1909+ | `AppxManifest.xml` `MinVersion=10.0.18363.0`, `ProcessorArchitecture=x64` |
 | VST3 only, no VST2 | No VST2 support in `src/audio-engine/vst-host/` |
+| Additional VST3 folder configurable in Settings | `src/tray-app/ui/settings_dialog_scan_paths.cpp` — `addPath()`, backed by a folder-browse `FileChooser` |
+| "+" button opens a plugin catalog to add to the chain | `chain_editor.cpp:393` — `add_plugin_button_` is a `TextButton("+")`; opens `catalog_dialog.cpp` |
+| Auto Volume Leveller / Compressor has a configurable look-ahead that reports its own added latency | `nighttime_processor.cpp:9,22-25,57-58` — `current_lookahead_ms_`, `lookahead_buffer_l/r_`, `latency_samples_` |
+| EQ has an input-volume control and per-band level metering | `eq_processor.cpp:67-68` (`input_volume_linear_` applied to the signal), `193-201` (`getInputVolume`/`setInputVolume`), `204` (`getBandLevel`) |
+| Chain autosaves and restores on next launch without an explicit preset load | `src/tray-app/presets/autosave.cpp` |
+| Window title reads "Global VST Host" (name mismatch fixed) | `main.cpp` `kWindowTitle`; `main_window.cpp:1198` `DocumentWindow("Global VST Host", ...)` |
 
 ### Deliberately NOT claimed — do not add these
 
