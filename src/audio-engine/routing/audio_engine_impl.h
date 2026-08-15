@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "capture_drift_controller.h"
 #include "format_convert.h"
 #include "resampler.h"
 #include "wasapi_capture.h"
@@ -53,6 +54,7 @@ class BuiltinEffectRegistry;
 class DeviceWatchdog;
 }
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -156,6 +158,7 @@ public:
     MeterFrame latestMeterFrame() const override;
     std::vector<float> pluginOutputPeaks() const override;
     std::vector<float> pluginOutputRms() const override;
+    int copyRecentOutputSamples(float* dest, int max_samples) const override;
 
     // --- Test helpers ------------------------------------------------------
     void injectTestCatalogEntry(const PluginCatalogEntry& entry);
@@ -233,6 +236,32 @@ private:
     // (avoidReallocating, so its getNumSamples() no longer reflects the original
     // capacity) — this is the value to clamp chain_samples against instead.
     int chain_block_capacity_ {0};
+    // Fixed block size the chain is prepared at and always processes in. The
+    // resampler consumes a variable number of chain frames per device block, so
+    // the chain can't simply be run once per callback — chain_out_fifo_ absorbs
+    // the difference (see the output leg of audioDeviceIOCallbackWithContext).
+    int chain_block_ {0};
+    // Chain-rate frames produced but not yet consumed by output_resampler_.
+    // Single-threaded (audio thread only); LockFreeAudioRingBuffer is reused
+    // because its peek/advanceRead pair is exactly the discipline needed and
+    // already proven on the capture leg.
+    std::unique_ptr<shared::LockFreeAudioRingBuffer> chain_out_fifo_;
+    juce::AudioBuffer<float> chain_peek_buffer_;   // pre-allocated, chain-rate frames
+
+    // Clears every output-resampling field. Only audioDeviceAboutToStart() sets
+    // them, so the pure-WASAPI path must clear them or a previous ASIO session's
+    // values leak in and corrupt the callback's block arithmetic.
+    void resetOutputResamplingState();
+
+    // --- Capture→device clock-drift controller ----------------------------
+    // The WASAPI capture clock and the output device clock are independent, so
+    // capture_ring_buffer_'s fill level drifts even when the nominal rates are
+    // identical. Left uncorrected it eventually starves (silence, which reads as
+    // "no input") or overflows. The controller servos a multiplicative trim on
+    // capture_nominal_ratio_ and gates the priming period. Read/written on the
+    // audio thread; configure()/arm() run on the control thread while the
+    // callback is detached or not yet started.
+    CaptureDriftController capture_drift_;
 
     void openWasapiCapture();
     void closeWasapiCapture();
@@ -260,6 +289,12 @@ private:
     std::atomic<bool> energy_saver_thread_running_ {false};
     static constexpr int kEnergySaverIdleMs = 2'000;         // silence before sleeping
     static constexpr float kEnergySaverWakeDb = -50.0f;      // input level counted as "audio"
+
+    // The same thread supervises the capture stream (see energySaverThreadLoop).
+    // Back off between re-open attempts so a permanently absent device doesn't
+    // spin. Energy-saver-thread owned.
+    long long last_capture_recovery_ms_ {-100000};
+    static constexpr long long kCaptureRecoveryBackoffMs = 1'000;
     void startEnergySaver();
     void stopEnergySaver();
     void energySaverThreadLoop();
@@ -305,6 +340,23 @@ private:
     std::atomic<float> master_volume_ {1.0f};
     std::atomic<std::uint64_t> xrun_count_ {0};
 
+    // --- Output fade (rate-change mute) ------------------------------------
+    // setSampleRate() reconfigures the chain in place rather than reopening the
+    // device, so it has to silence the output itself. The control thread sets the
+    // target and waits (bounded) on fade_settled_; the audio thread ramps
+    // output_fade_gain_ toward it and flags arrival. Atomics only — no locks on
+    // the audio path.
+    std::atomic<float> output_fade_target_ {1.0f};
+    std::atomic<bool> fade_settled_ {true};
+    float output_fade_gain_ {1.0f};             // audio-thread owned
+    static constexpr float kFadeMs = 10.0f;
+    static constexpr int kFadeWaitMs = 50;      // control-thread wait cap
+
+    // Fades out, runs `reconfigure` with the audio callback detached, fades back
+    // in. Returns false when there is no live JUCE device to reconfigure, in
+    // which case the caller must fall back to a full stop()/start().
+    bool reconfigureChainInPlace(const std::function<void()>& reconfigure);
+
     // US4: atomic meter samples updated from audio callback, read by UI thread.
     std::atomic<float> meter_input_peak_l_ {0.f};
     std::atomic<float> meter_input_peak_r_ {0.f};
@@ -314,6 +366,17 @@ private:
     std::atomic<float> meter_output_peak_r_ {0.f};
     std::atomic<float> meter_output_rms_l_ {0.f};
     std::atomic<float> meter_output_rms_r_ {0.f};
+
+    // Spectrum analyser tap (see IAudioEngine::copyRecentOutputSamples). Fixed,
+    // preallocated ring of mono-summed post-chain samples: the audio thread only
+    // ever writes and bumps the position, the UI thread only reads. No locks and
+    // no allocation on the audio path. A UI read that the audio thread laps mid-
+    // copy can pick up a torn window; harmless for a visualiser, and the reason
+    // this is not used for anything but display.
+    static constexpr int kSpectrumRingSize = 8192;  // power of two — index is masked
+    static constexpr std::uint64_t kSpectrumRingMask = static_cast<std::uint64_t>(kSpectrumRingSize) - 1;
+    std::array<float, kSpectrumRingSize> spectrum_ring_ {};
+    std::atomic<std::uint64_t> spectrum_write_pos_ {0};  // total samples ever written
 
     // Audio-thread-owned scratch — sized in audioDeviceAboutToStart, never
     // reallocated within the callback.

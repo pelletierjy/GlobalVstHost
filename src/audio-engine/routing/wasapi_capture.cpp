@@ -112,6 +112,34 @@ struct WasapiCapture::Impl
     std::vector<float> planar_;
 
     std::atomic<std::size_t> xrun_count_ {0};
+    // Cleared when the stream is unrecoverable; the owner polls isHealthy() and
+    // re-opens. Consecutive soft failures are counted so a single transient hiccup
+    // doesn't tear down a working stream.
+    std::atomic<bool> healthy_ {true};
+    int consecutive_failures_ = 0;
+    static constexpr int kMaxConsecutiveFailures = 20;
+
+    // True for HRESULTs that mean the stream object is gone for good — no amount
+    // of retrying on this client will bring it back, only a full re-open will.
+    static bool isFatalStreamError(HRESULT hr)
+    {
+        return hr == AUDCLNT_E_DEVICE_INVALIDATED ||
+               hr == AUDCLNT_E_SERVICE_NOT_RUNNING ||
+               hr == AUDCLNT_E_NOT_INITIALIZED ||
+               hr == AUDCLNT_E_RESOURCES_INVALIDATED;
+    }
+
+    // AUDCLNT_E_BUFFER_ERROR and friends are recoverable in place; a stop/reset/
+    // start cycle usually resynchronises the client.
+    bool tryRestartStream()
+    {
+        if (audio_client_ == nullptr)
+            return false;
+        audio_client_->Stop();
+        if (FAILED(audio_client_->Reset()))
+            return false;
+        return SUCCEEDED(audio_client_->Start());
+    }
 
     void threadLoop()
     {
@@ -139,15 +167,33 @@ struct WasapiCapture::Impl
                 WaitForSingleObject(event_, 200);
             }
 
-            // Drain all available packets before sleeping.
-            UINT32 packet_size = 0;
-            while (SUCCEEDED(capture_client_->GetNextPacketSize(&packet_size)) && packet_size > 0)
+            // Drain all available packets before sleeping. Note that a packet
+            // count of zero is NOT an error: a loopback endpoint delivers nothing
+            // at all while no application is playing. Only real HRESULT failures
+            // count against the stream's health.
+            bool stream_failed = false;
+            bool made_progress = false;
+            for (;;)
             {
+                UINT32 packet_size = 0;
+                HRESULT hr = capture_client_->GetNextPacketSize(&packet_size);
+                if (FAILED(hr))
+                {
+                    stream_failed = isFatalStreamError(hr) || !tryRestartStream();
+                    break;
+                }
+                if (packet_size == 0)
+                    break;
+
                 BYTE* data = nullptr;
                 UINT32 frames_read = 0;
                 DWORD flags = 0;
-                if (FAILED(capture_client_->GetBuffer(&data, &frames_read, &flags, nullptr, nullptr)))
+                hr = capture_client_->GetBuffer(&data, &frames_read, &flags, nullptr, nullptr);
+                if (FAILED(hr))
+                {
+                    stream_failed = isFatalStreamError(hr) || !tryRestartStream();
                     break;
+                }
 
                 if (data != nullptr && frames_read > 0 && (flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0)
                     convertAndWrite(data, frames_read);
@@ -155,6 +201,25 @@ struct WasapiCapture::Impl
                     writeSilence(frames_read);
 
                 capture_client_->ReleaseBuffer(frames_read);
+                made_progress = true;
+            }
+
+            if (stream_failed)
+            {
+                // A restart attempt may have succeeded; only a run of failures
+                // condemns the stream. Without this the thread used to spin on the
+                // 200 ms timeout forever, producing nothing while isRunning() kept
+                // reporting healthy — the "sound stops until I toggle it" symptom.
+                if (++consecutive_failures_ >= kMaxConsecutiveFailures)
+                {
+                    healthy_.store(false, std::memory_order_release);
+                    break;
+                }
+                Sleep(5);
+            }
+            else if (made_progress)
+            {
+                consecutive_failures_ = 0;
             }
 
             if (event_ == nullptr)
@@ -243,6 +308,7 @@ struct WasapiCapture::Impl
     double target_sample_rate_ = 48000.0;
     std::atomic<bool> open_ {false};
     std::atomic<bool> running_ {false};
+    std::atomic<bool> healthy_ {true};
     std::atomic<std::size_t> xrun_count_ {0};
     std::thread thread_;
 };
@@ -260,7 +326,8 @@ WasapiCapture::~WasapiCapture()
 bool WasapiCapture::open(const EndpointId& endpoint_id,
                          double target_sample_rate,
                          shared::LockFreeAudioRingBuffer* ring_buffer,
-                         bool loopback)
+                         bool loopback,
+                         bool allow_exclusive)
 {
     close();
 
@@ -342,6 +409,14 @@ bool WasapiCapture::open(const EndpointId& endpoint_id,
     // 1-3 ms vs. the shared-mode engine pipeline at ~5-15 ms total).
     // Uses a separate IAudioClient probe so the shared-mode fallback client
     // remains clean if exclusive initialisation fails (Initialize is one-shot).
+    //
+    // Skipped for loopback: AUDCLNT_STREAMFLAGS_LOOPBACK is only valid on a
+    // render endpoint in shared mode, so the probe can only fail — and were it
+    // ever to succeed it would take the render endpoint away from every other
+    // application on the machine. Also skipped unless the user actually asked
+    // for exclusive mode; probing it unconditionally meant an endpoint another
+    // app held exclusively could make the open behave unpredictably.
+    if (allow_exclusive && !loopback)
     {
         IAudioClient* excl_client = nullptr;
         hr = impl_->device_->Activate(
@@ -456,8 +531,11 @@ bool WasapiCapture::open(const EndpointId& endpoint_id,
 #else
     (void)endpoint_id;
     (void)target_sample_rate;
+    (void)loopback;
+    (void)allow_exclusive;
 #endif
 
+    impl_->healthy_.store(true, std::memory_order_release);
     return true;
 }
 
@@ -571,6 +649,11 @@ bool WasapiCapture::isOpen() const noexcept
 bool WasapiCapture::isRunning() const noexcept
 {
     return impl_ != nullptr && impl_->running_.load(std::memory_order_acquire);
+}
+
+bool WasapiCapture::isHealthy() const noexcept
+{
+    return impl_ != nullptr && impl_->healthy_.load(std::memory_order_acquire);
 }
 
 double WasapiCapture::negotiatedSampleRate() const noexcept

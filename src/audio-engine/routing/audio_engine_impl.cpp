@@ -69,6 +69,23 @@ constexpr double kMaxSupportedSampleRate = 192000.0;
 // independent of the <10 ms plugin-chain processing budget.
 constexpr double kCaptureTargetSeconds = 0.045;  // 45 ms
 
+// Loop gains, applied per callback to the normalised fill error
+// (avail - target) / target. Deliberately sluggish: the loop only has to track
+// crystal drift (tens of ppm), so it should ignore per-block burst jitter
+// entirely. Time constant lands around a second at typical block rates.
+constexpr double kDriftKp = 4.0e-4;
+constexpr double kDriftKi = 8.0e-6;
+
+// Hard clamp on the total trim. Crystal mismatch between two consumer clocks is
+// well under 0.1 %; 0.5 % leaves generous margin while staying far below the
+// threshold where the pitch shift becomes audible.
+constexpr double kDriftMaxTrim = 0.005;
+
+// Clamp on the integral term alone, so a long starvation (e.g. a loopback
+// endpoint that simply has nothing to deliver) cannot wind the integrator up and
+// leave a lasting offset once audio returns.
+constexpr double kDriftMaxIntegral = 0.004;
+
 // Helper function to log debug messages
 void LogDebug(const char* fmt, ...)
 {
@@ -327,6 +344,13 @@ void AudioEngineImpl::start()
             // Prepare work buffer and plugin chain manually.
             // The chain runs at the output device's negotiated rate so no output-side
             // resampler is needed. Capture is resampled only when its rate differs.
+            // Only audioDeviceAboutToStart() (the JUCE/ASIO path) ever enables
+            // output-side resampling. Clearing it here stops a previous ASIO
+            // session's ratio and block capacity from leaking into this WASAPI
+            // session, which produced garbage or silence until the user toggled
+            // the engine a few more times.
+            resetOutputResamplingState();
+
             double chain_rate = desired_sample_rate_;
             if (wasapi_output_ != nullptr && output_wasapi_rate_ > 0.0)
             {
@@ -338,8 +362,16 @@ void AudioEngineImpl::start()
                 LogDebug("Mixed mode: chain_rate = desired_sample_rate_ = %.0f Hz", chain_rate);
             }
             work_buffer_.setSize(2, desired_buffer_size_, false, false, true);
+            chain_block_ = desired_buffer_size_;
+            chain_block_capacity_ = desired_buffer_size_;
             plugin_chain_->prepareToPlay(chain_rate, desired_buffer_size_);
             negotiated_sample_rate_.store(static_cast<int>(chain_rate));
+
+            // No drift servo on this path: engineThreadLoop() paces the chain
+            // against output_ring_buffer_ backpressure rather than against an
+            // independent hardware clock, so the two rings stay in step on their
+            // own. A target fill of 0 selects the plain fixed-ratio read.
+            capture_drift_.configure(0, {kDriftKp, kDriftKi, kDriftMaxTrim, kDriftMaxIntegral});
 
             // Set up capture-side resampler when capture rate differs from chain rate.
             const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : chain_rate;
@@ -433,6 +465,7 @@ void AudioEngineImpl::stop()
     endpoint_volume_guard_.deactivate();
     mixed_mode_active_.store(false, std::memory_order_release);
     work_buffer_.setSize(0, 0);
+    resetOutputResamplingState();
     plugin_chain_->releaseResources();
     LogDebug("stop() completed");
 }
@@ -561,6 +594,29 @@ void AudioEngineImpl::energySaverThreadLoop()
         if (controller.update(now_ms(), peak))
         {
             setEnergySaverSleeping(controller.sleeping());
+        }
+
+        // Capture-stream supervision. A stream whose endpoint was invalidated (a
+        // format change, the audio service restarting, the device being disabled
+        // and re-enabled) leaves the capture thread alive but silent forever, so
+        // nothing upstream notices — this is what forced the user to toggle the
+        // engine off and on to get audio back. Re-open it here instead.
+        if (running_.load(std::memory_order_acquire))
+        {
+            const long long now = now_ms();
+            // try_to_lock, never a blocking lock: stop() acquires control_mutex_
+            // and only then calls stopEnergySaver(), which joins this thread.
+            // Blocking here would deadlock that sequence. Missing a tick costs
+            // nothing — the next one is 100 ms away.
+            std::unique_lock lk {control_mutex_, std::try_to_lock};
+            if (lk.owns_lock() && wasapi_capture_ != nullptr && !wasapi_capture_->isHealthy() &&
+                now - last_capture_recovery_ms_ >= kCaptureRecoveryBackoffMs)
+            {
+                last_capture_recovery_ms_ = now;
+                LogDebug("energySaver: capture stream unhealthy, re-opening");
+                closeWasapiCapture();
+                openWasapiCapture();
+            }
         }
     }
 }
@@ -803,6 +859,69 @@ int AudioEngineImpl::bufferSize() const
     return desired_buffer_size_;
 }
 
+void AudioEngineImpl::resetOutputResamplingState()
+{
+    output_resampling_enabled_ = false;
+    output_nominal_ratio_ = 1.0;
+    chain_block_capacity_ = 0;
+    chain_block_ = 0;
+    chain_out_fifo_.reset();
+}
+
+bool AudioEngineImpl::reconfigureChainInPlace(const std::function<void()>& reconfigure)
+{
+    // ASIO only. It is the one transport where the device's rate is deliberately
+    // never requested (applyAsioTransport passes sample_rate = 0.0), so a chain
+    // rate change genuinely cannot affect the device and reopening it would be
+    // pure cost. The WASAPI paths do request desired_sample_rate_ from the device
+    // (applyDeviceSelection) and the pure-WASAPI path runs its own engine thread,
+    // so both still need a full stop()/start().
+    if (desired_output_transport_kind_ != TransportKind::Asio ||
+        wasapi_output_ != nullptr ||
+        device_manager_.getCurrentAudioDevice() == nullptr)
+    {
+        return false;
+    }
+
+    // Fade to silence first so the transition doesn't click, then wait (bounded)
+    // for the audio thread to confirm it got there.
+    fade_settled_.store(false, std::memory_order_release);
+    output_fade_target_.store(0.0f, std::memory_order_release);
+    for (int waited = 0; waited < kFadeWaitMs && !fade_settled_.load(std::memory_order_acquire); ++waited)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    // Detaching the callback is what makes the reconfigure safe: JUCE removes it
+    // under the same lock the IO callback holds, so the callback is guaranteed
+    // not to be running once this returns. The device itself stays open — with no
+    // callback registered JUCE simply zeroes the output — so the ASIO driver is
+    // never renegotiated and its clock is never retuned.
+    device_manager_.removeAudioCallback(this);
+
+    if (reconfigure)
+    {
+        reconfigure();
+    }
+
+    // Stale capture frames were produced for the old configuration; drop them and
+    // let the servo re-prime rather than resampling them at the new ratio.
+    if (capture_ring_buffer_ != nullptr)
+    {
+        capture_ring_buffer_->advanceRead(capture_ring_buffer_->available());
+    }
+    capture_drift_.arm();
+
+    // Re-adding invokes audioDeviceAboutToStart(), which recomputes the chain
+    // rate, both resamplers, the FIFO and every buffer, and re-prepares the
+    // chain. audioDeviceStopped() released the chain on the way out, so the
+    // release/prepare pairing stays balanced.
+    output_fade_gain_ = 0.0f;
+    device_manager_.addAudioCallback(this);
+    output_fade_target_.store(1.0f, std::memory_order_release);
+    return true;
+}
+
 void AudioEngineImpl::setSampleRate(double rate)
 {
     {
@@ -816,8 +935,16 @@ void AudioEngineImpl::setSampleRate(double rate)
     if (running_.load())
     {
         std::lock_guard lk {control_mutex_};
-        stop();
-        start();
+        // Since the ASIO driver's own clock is never touched (applyAsioTransport
+        // passes sample_rate = 0.0), a rate change only affects the chain and the
+        // resamplers. Reconfiguring in place avoids tearing down and renegotiating
+        // the driver — which is what made every rate change audibly glitch — and
+        // costs only a short, deliberate fade.
+        if (!reconfigureChainInPlace(nullptr))
+        {
+            stop();
+            start();
+        }
     }
 }
 
@@ -1871,6 +1998,22 @@ std::vector<float> AudioEngineImpl::pluginOutputRms() const
     return rms;
 }
 
+int AudioEngineImpl::copyRecentOutputSamples(float* dest, int max_samples) const
+{
+    if (dest == nullptr || max_samples <= 0)
+        return 0;
+
+    const std::uint64_t write_pos = spectrum_write_pos_.load(std::memory_order_acquire);
+    const std::uint64_t wanted = static_cast<std::uint64_t>(std::min(max_samples, kSpectrumRingSize));
+    const std::uint64_t available = std::min(wanted, write_pos);
+    const std::uint64_t start = write_pos - available;
+    for (std::uint64_t i = 0; i < available; ++i)
+    {
+        dest[i] = spectrum_ring_[static_cast<std::size_t>((start + i) & kSpectrumRingMask)];
+    }
+    return static_cast<int>(available);
+}
+
 void AudioEngineImpl::injectTestCatalogEntry(const PluginCatalogEntry& entry)
 {
     std::lock_guard lk {control_mutex_};
@@ -1927,92 +2070,30 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     }
 
     // 2. Acquire input samples.
-    // The chain runs at its own rate (desired_sample_rate_), which can differ
-    // from the device's num_samples-per-callback rate on ASIO — see
-    // audioDeviceAboutToStart(). chain_samples is how many chain-rate frames
-    // are needed so that, after output_resampler_, exactly num_samples device
-    // frames come out. Capture-side resampling handles any additional
-    // mismatch between the capture endpoint and the chain rate.
-    int chain_samples = num_samples;
-    if (output_resampling_enabled_)
+    // The chain always runs at the fixed block size it was prepared with. When
+    // the chain and device rates differ (ASIO only — applyAsioTransport() never
+    // changes the driver's clock), output_resampler_ consumes a variable number
+    // of chain frames per device block, so the chain runs zero, one, or more
+    // times per callback and chain_out_fifo_ carries the remainder across
+    // callbacks. The previous scheme sized the block as
+    // ceil(num_samples * ratio) + 2 and discarded whatever the resampler didn't
+    // consume, dropping a couple of frames of signal on every single callback —
+    // a periodic discontinuity, audible as a buzz on any mismatched rate pair.
+    int chain_samples = output_resampling_enabled_ ? chain_block_ : num_samples;
+    if (chain_block_capacity_ > 0)
     {
-        chain_samples = std::min(
-            static_cast<int>(std::ceil(static_cast<double>(num_samples) * output_nominal_ratio_)) + 2,
-            chain_block_capacity_);
+        chain_samples = std::min(chain_samples, chain_block_capacity_);
     }
     const int vst_samples = chain_samples;
-    if (wasapi_capture_ != nullptr && capture_ring_buffer_ != nullptr)
-    {
-        std::size_t avail = capture_ring_buffer_->available();
 
-        // Fixed-ratio read from the WASAPI-capture ring. Resampling applies only
-        // when capture and output rates differ.
-        const std::size_t needed =
-            static_cast<std::size_t>(std::ceil(static_cast<double>(vst_samples) * capture_nominal_ratio_)) + 2;
-        const std::size_t raw_cap = static_cast<std::size_t>(capture_raw_buffer_.getNumSamples());
-        const std::size_t peek_n = std::min({needed, avail, raw_cap});
-
-        float* raw[2] = {
-            capture_raw_buffer_.getWritePointer(0),
-            capture_raw_buffer_.getWritePointer(1)};
-        const std::size_t peeked = capture_ring_buffer_->peek(raw, peek_n);
-
-        const float* src[2] = {raw[0], raw[1]};
-        float* dst[2] = {
-            work_buffer_.getWritePointer(0),
-            work_buffer_.getNumChannels() > 1 ? work_buffer_.getWritePointer(1) : nullptr};
-
-        std::size_t consumed = 0;
-        if (capture_resampling_enabled_ && std::abs(capture_nominal_ratio_ - 1.0) > 0.001)
-        {
-            capture_resampler_.processAdaptive(capture_nominal_ratio_, src, dst,
-                                               static_cast<std::size_t>(vst_samples), peeked, &consumed);
-        }
-        else
-        {
-            consumed = std::min(peeked, static_cast<std::size_t>(vst_samples));
-            for (int c = 0; c < 2; ++c)
-            {
-                if (dst[c] != nullptr && src[c] != nullptr && consumed > 0)
-                    std::memcpy(dst[c], src[c], consumed * sizeof(float));
-                if (dst[c] != nullptr && consumed < static_cast<std::size_t>(vst_samples))
-                    std::memset(dst[c] + consumed, 0, (vst_samples - consumed) * sizeof(float));
-            }
-        }
-        capture_ring_buffer_->advanceRead(consumed);
-
-        if (peeked < needed && capture_resampling_enabled_)
-        {
-            xrun_count_.fetch_add(1, std::memory_order_relaxed);
-        }
-    }
-    else
-    {
-        // No capture-ring source configured (e.g. direct hardware input, or no
-        // input at all): copy what's available at the device's native frame
-        // count, zero-filling the rest of the chain-rate block. This path does
-        // not resample the input leg — it only matters when no WASAPI capture
-        // is active, so a chain/device rate mismatch here just means silence
-        // padding rather than a pitch shift.
-        const int channels = std::min(num_input_channels, work_buffer_.getNumChannels());
-        const int copy_n = std::min(chain_samples, num_samples);
-        for (int c = 0; c < channels; ++c)
-        {
-            if (input_channel_data[c] != nullptr)
-            {
-                std::memcpy(work_buffer_.getWritePointer(c), input_channel_data[c],
-                            static_cast<std::size_t>(copy_n) * sizeof(float));
-            }
-            if (copy_n < chain_samples)
-            {
-                work_buffer_.clear(c, copy_n, chain_samples - copy_n);
-            }
-        }
-        for (int c = channels; c < work_buffer_.getNumChannels(); ++c)
-        {
-            work_buffer_.clear(c, 0, chain_samples);
-        }
-    }
+    // Chain-rate frames the FIFO must hold to satisfy this callback. The slack
+    // covers the resampler's fractional phase, which shifts consumption by a
+    // frame or two either way.
+    const bool use_chain_fifo = output_resampling_enabled_ && chain_out_fifo_ != nullptr;
+    const int fifo_needed =
+        use_chain_fifo
+            ? static_cast<int>(std::ceil(static_cast<double>(num_samples) * output_nominal_ratio_)) + 4
+            : 0;
 
     // Meters only need to be current when we actually push a frame to the UI (~30 Hz).
     // Gate the per-block peak/RMS scans to those dispatch blocks so the audio thread
@@ -2021,78 +2102,268 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     ++meter_callback_counter_;
     const bool do_meter = (meter_callback_counter_ % kMeterThrottleDivisor == 0);
 
-    // 2a. Compute input peak / RMS (channels 0 and 1).
-    if (do_meter)
+    // Number of chain passes this callback. Without output resampling this is
+    // always exactly one, preserving the pre-existing behaviour on every other
+    // transport.
+    // kMaxChainPasses is a hard stop, not an expected value: chain_block_ always
+    // exceeds fifo_needed in practice, so a starting-empty FIFO needs one pass.
+    // Bounding the loop keeps a bad chain_block_ from hanging the audio thread.
+    static constexpr int kMaxChainPasses = 4;
+    int chain_passes = 1;
+    if (use_chain_fifo && chain_block_ > 0)
     {
-        if (work_buffer_.getNumChannels() > 0 && vst_samples > 0)
+        chain_passes = 0;
+        int have = static_cast<int>(chain_out_fifo_->available());
+        while (have < fifo_needed && chain_passes < kMaxChainPasses)
         {
-            meter_input_peak_l_.store(work_buffer_.getMagnitude(0, 0, vst_samples));
-            meter_input_rms_l_.store(work_buffer_.getRMSLevel(0, 0, vst_samples));
+            have += chain_block_;
+            ++chain_passes;
         }
-        if (work_buffer_.getNumChannels() > 1 && vst_samples > 0)
+    }
+
+    for (int pass = 0; pass < chain_passes; ++pass)
+    {
+        // Meter the first pass only, so a callback that happens to run the chain
+        // twice doesn't report the second block's level as the whole callback's.
+        const bool meter_this_pass = do_meter && pass == 0;
+
+        if (wasapi_capture_ != nullptr && capture_ring_buffer_ != nullptr)
         {
-            meter_input_peak_r_.store(work_buffer_.getMagnitude(1, 0, vst_samples));
-            meter_input_rms_r_.store(work_buffer_.getRMSLevel(1, 0, vst_samples));
-        }
-    }
+            const std::size_t avail = capture_ring_buffer_->available();
 
-    // 3. Process through plugin chain. work_buffer_ is allocated (in
-    //    audioDeviceAboutToStart) at the worst-case chain_block capacity;
-    //    constrain it to the frames actually filled this callback so the chain
-    //    doesn't process stale tail samples from a previous, larger block.
-    //    avoidReallocating=true guarantees this never touches the heap since
-    //    chain_samples never exceeds that capacity.
-    work_buffer_.setSize(work_buffer_.getNumChannels(), chain_samples, false, false, true);
+            // --- Clock-drift servo -------------------------------------------
+            // The capture endpoint and the output device run off independent clocks,
+            // so the ring's fill drifts even when the nominal rates match. Decision
+            // logic lives in CaptureDriftController (unit-tested separately); this
+            // just applies its trim. Active on every block, including at nominally
+            // equal rates — nominal equality says nothing about the physical clocks,
+            // and leaving those uncorrected is what let the ring drain until audio
+            // stopped coming through entirely.
+            const bool emit_silence = capture_drift_.update(avail);
 
-    // Energy Saver: while sleeping we skip the CPU-heavy chain entirely and
-    // emit silence. The input peak/RMS above is still computed every metering
-    // block, so the energy-saver thread keeps seeing the true input level and
-    // resumes the instant audio returns.
-    if (energy_saver_sleeping_.load(std::memory_order_relaxed))
-    {
-        work_buffer_.clear();
-    }
-    else
-    {
-        juce::MidiBuffer empty_midi;
-        plugin_chain_->processBlock(work_buffer_, empty_midi);
-    }
-
-    // 3a. Apply master volume scalar.
-    {
-        const float gain = master_volume_.load(std::memory_order_relaxed);
-        if (gain != 1.0f)
-        {
-            for (int c = 0; c < work_buffer_.getNumChannels(); ++c)
+            if (emit_silence)
             {
-                float* ptr = work_buffer_.getWritePointer(c);
-                for (int s = 0; s < vst_samples; ++s)
-                    ptr[s] *= gain;
+                work_buffer_.clear();
+            }
+            else
+            {
+                const double effective_ratio = capture_nominal_ratio_ * capture_drift_.trim();
+
+                const std::size_t needed =
+                    static_cast<std::size_t>(std::ceil(static_cast<double>(vst_samples) * effective_ratio)) + 2;
+                const std::size_t raw_cap = static_cast<std::size_t>(capture_raw_buffer_.getNumSamples());
+                const std::size_t peek_n = std::min({needed, avail, raw_cap});
+
+                float* raw[2] = {
+                    capture_raw_buffer_.getWritePointer(0),
+                    capture_raw_buffer_.getWritePointer(1)};
+                const std::size_t peeked = capture_ring_buffer_->peek(raw, peek_n);
+
+                const float* src[2] = {raw[0], raw[1]};
+                float* dst[2] = {
+                    work_buffer_.getWritePointer(0),
+                    work_buffer_.getNumChannels() > 1 ? work_buffer_.getWritePointer(1) : nullptr};
+
+                std::size_t consumed = 0;
+                if (capture_drift_.enabled() || capture_resampling_enabled_)
+                {
+                    // Adaptive path, used even at nominal ratio 1.0 so the drift trim
+                    // has somewhere to act. The interpolator is transparent at unity.
+                    capture_resampler_.processAdaptive(effective_ratio, src, dst,
+                                                       static_cast<std::size_t>(vst_samples), peeked, &consumed);
+                }
+                else
+                {
+                    consumed = std::min(peeked, static_cast<std::size_t>(vst_samples));
+                    for (int c = 0; c < 2; ++c)
+                    {
+                        if (dst[c] != nullptr && src[c] != nullptr && consumed > 0)
+                            std::memcpy(dst[c], src[c], consumed * sizeof(float));
+                        if (dst[c] != nullptr && consumed < static_cast<std::size_t>(vst_samples))
+                            std::memset(dst[c] + consumed, 0, (vst_samples - consumed) * sizeof(float));
+                    }
+                }
+                capture_ring_buffer_->advanceRead(consumed);
+
+                if (peeked < needed)
+                {
+                    xrun_count_.fetch_add(1, std::memory_order_relaxed);
+                }
             }
         }
-    }
+        else
+        {
+            // No capture-ring source configured (e.g. direct hardware input, or no
+            // input at all): copy what's available at the device's native frame
+            // count, zero-filling the rest of the chain-rate block. This path does
+            // not resample the input leg — it only matters when no WASAPI capture
+            // is active, so a chain/device rate mismatch here just means silence
+            // padding rather than a pitch shift.
+            const int channels = std::min(num_input_channels, work_buffer_.getNumChannels());
+            const int copy_n = std::min(chain_samples, num_samples);
+            for (int c = 0; c < channels; ++c)
+            {
+                if (input_channel_data[c] != nullptr)
+                {
+                    std::memcpy(work_buffer_.getWritePointer(c), input_channel_data[c],
+                                static_cast<std::size_t>(copy_n) * sizeof(float));
+                }
+                if (copy_n < chain_samples)
+                {
+                    work_buffer_.clear(c, copy_n, chain_samples - copy_n);
+                }
+            }
+            for (int c = channels; c < work_buffer_.getNumChannels(); ++c)
+            {
+                work_buffer_.clear(c, 0, chain_samples);
+            }
+        }
 
-    // 4. Resample chain audio (chain_samples @ chain_rate) to the device rate
-    //    when they differ — ASIO only; applyAsioTransport() never changes the
-    //    device's own clock, so this is what actually absorbs a chain-rate
-    //    change instead of it leaking into the hardware.
+        // 2a. Compute input peak / RMS (channels 0 and 1).
+        if (meter_this_pass)
+        {
+            if (work_buffer_.getNumChannels() > 0 && vst_samples > 0)
+            {
+                meter_input_peak_l_.store(work_buffer_.getMagnitude(0, 0, vst_samples));
+                meter_input_rms_l_.store(work_buffer_.getRMSLevel(0, 0, vst_samples));
+            }
+            if (work_buffer_.getNumChannels() > 1 && vst_samples > 0)
+            {
+                meter_input_peak_r_.store(work_buffer_.getMagnitude(1, 0, vst_samples));
+                meter_input_rms_r_.store(work_buffer_.getRMSLevel(1, 0, vst_samples));
+            }
+        }
+
+        // 3. Process through plugin chain. work_buffer_ is allocated (in
+        //    audioDeviceAboutToStart) at the worst-case chain_block capacity;
+        //    constrain it to the frames actually filled this callback so the chain
+        //    doesn't process stale tail samples from a previous, larger block.
+        //    avoidReallocating=true guarantees this never touches the heap since
+        //    chain_samples never exceeds that capacity.
+        work_buffer_.setSize(work_buffer_.getNumChannels(), chain_samples, false, false, true);
+
+        // Energy Saver: while sleeping we skip the CPU-heavy chain entirely and
+        // emit silence. The input peak/RMS above is still computed every metering
+        // block, so the energy-saver thread keeps seeing the true input level and
+        // resumes the instant audio returns.
+        if (energy_saver_sleeping_.load(std::memory_order_relaxed))
+        {
+            work_buffer_.clear();
+        }
+        else
+        {
+            juce::MidiBuffer empty_midi;
+            plugin_chain_->processBlock(work_buffer_, empty_midi);
+        }
+
+        // 3a. Apply master volume scalar.
+        {
+            const float gain = master_volume_.load(std::memory_order_relaxed);
+            if (gain != 1.0f)
+            {
+                for (int c = 0; c < work_buffer_.getNumChannels(); ++c)
+                {
+                    float* ptr = work_buffer_.getWritePointer(c);
+                    for (int s = 0; s < vst_samples; ++s)
+                        ptr[s] *= gain;
+                }
+            }
+        }
+
+        // 3b. Spectrum tap — mono-sum the post-chain block into the preallocated ring
+        //     the UI analyser reads. Plain stores plus one release store: no locks, no
+        //     allocation, and the audio thread never waits on the reader.
+        if (vst_samples > 0 && work_buffer_.getNumChannels() > 0)
+        {
+            const float* left = work_buffer_.getReadPointer(0);
+            const float* right = work_buffer_.getNumChannels() > 1 ? work_buffer_.getReadPointer(1) : left;
+            std::uint64_t write_pos = spectrum_write_pos_.load(std::memory_order_relaxed);
+            for (int s = 0; s < vst_samples; ++s)
+            {
+                spectrum_ring_[static_cast<std::size_t>(write_pos & kSpectrumRingMask)] =
+                    0.5f * (left[s] + right[s]);
+                ++write_pos;
+            }
+            spectrum_write_pos_.store(write_pos, std::memory_order_release);
+        }
+
+        // 3c. Hand this chain block to the FIFO the output resampler drains from.
+        if (use_chain_fifo)
+        {
+            // The FIFO is 2-channel and dereferences both pointers, so a mono work
+            // buffer duplicates channel 0 rather than handing it a null.
+            const float* fifo_src[2] = {
+                work_buffer_.getReadPointer(0),
+                work_buffer_.getReadPointer(work_buffer_.getNumChannels() > 1 ? 1 : 0)};
+            (void)chain_out_fifo_->tryWrite(fifo_src, static_cast<std::size_t>(chain_samples));
+        }
+    }  // end chain pass loop
+
+    // 4. Resample chain audio (chain rate) to the device rate when they differ —
+    //    ASIO only; applyAsioTransport() never changes the device's own clock, so
+    //    this is what actually absorbs a chain-rate change instead of it leaking
+    //    into the hardware. peek → process → advanceRead(consumed) is the same
+    //    discipline the capture leg uses: the resampler keeps filter state but not
+    //    unconsumed input, so anything it didn't take has to stay in the FIFO for
+    //    the next callback rather than being dropped.
     const juce::AudioBuffer<float>* out_buffer = &work_buffer_;
     int out_samples = vst_samples;
-    if (output_resampling_enabled_)
+    if (use_chain_fifo)
     {
         output_resampled_buffer_.setSize(output_resampled_buffer_.getNumChannels(), num_samples, false, false, true);
-        const float* chain_src[2] = {
-            work_buffer_.getReadPointer(0),
-            work_buffer_.getNumChannels() > 1 ? work_buffer_.getReadPointer(1) : nullptr};
+
+        const std::size_t peek_n = std::min({static_cast<std::size_t>(fifo_needed),
+                                             chain_out_fifo_->available(),
+                                             static_cast<std::size_t>(chain_peek_buffer_.getNumSamples())});
+        // peek() writes both channels unconditionally, so neither pointer may be null.
+        float* peek_dst[2] = {
+            chain_peek_buffer_.getWritePointer(0),
+            chain_peek_buffer_.getWritePointer(chain_peek_buffer_.getNumChannels() > 1 ? 1 : 0)};
+        const std::size_t peeked = chain_out_fifo_->peek(peek_dst, peek_n);
+
+        const float* chain_src[2] = {peek_dst[0], peek_dst[1]};
         float* resampled_dst[2] = {
             output_resampled_buffer_.getWritePointer(0),
             output_resampled_buffer_.getNumChannels() > 1 ? output_resampled_buffer_.getWritePointer(1) : nullptr};
+
         std::size_t out_consumed = 0;
         output_resampler_.process(chain_src, resampled_dst,
                                    static_cast<std::size_t>(num_samples),
-                                   static_cast<std::size_t>(chain_samples), &out_consumed);
+                                   peeked, &out_consumed);
+        chain_out_fifo_->advanceRead(out_consumed);
+
         out_buffer = &output_resampled_buffer_;
         out_samples = num_samples;
+    }
+
+    // 4b. Rate-change mute. setSampleRate() reconfigures the chain without
+    //     reopening the device, so the fade to and from silence happens here.
+    //     Ramping (rather than a hard cut) is what keeps the transition from
+    //     clicking.
+    {
+        const float target = output_fade_target_.load(std::memory_order_relaxed);
+        if (output_fade_gain_ != target || target != 1.0f)
+        {
+            const double rate = juce_device_rate_ > 0.0 ? juce_device_rate_ : 48000.0;
+            const float step = static_cast<float>(
+                static_cast<double>(out_samples) / (kFadeMs * 0.001 * rate));
+            const float start_gain = output_fade_gain_;
+            if (output_fade_gain_ < target)
+                output_fade_gain_ = std::min(target, output_fade_gain_ + step);
+            else
+                output_fade_gain_ = std::max(target, output_fade_gain_ - step);
+
+            auto* ramp_target = const_cast<juce::AudioBuffer<float>*>(out_buffer);
+            for (int c = 0; c < ramp_target->getNumChannels(); ++c)
+            {
+                ramp_target->applyGainRamp(c, 0, out_samples, start_gain, output_fade_gain_);
+            }
+
+            if (output_fade_gain_ == target)
+            {
+                fade_settled_.store(true, std::memory_order_release);
+            }
+        }
     }
 
     // 4a. Copy resampled/chain buffer → output.
@@ -2199,6 +2470,7 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         const int chain_block = static_cast<int>(std::ceil(
                                     static_cast<double>(block) * output_nominal_ratio_)) + 8;
         chain_block_capacity_ = chain_block;
+        chain_block_ = chain_block;
 
         work_buffer_.setSize(channels, chain_block, false, false, true);
         output_resampled_buffer_.setSize(channels, block, false, false, true);
@@ -2210,8 +2482,23 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         if (output_resampling_enabled_)
         {
             output_resampler_.prepare(output_nominal_ratio_, static_cast<std::size_t>(chain_block), 2);
-            LogDebug("audioDeviceAboutToStart() output SRC: chain=%.0f device=%.0f ratio=%.6f",
-                     chain_rate, device_rate, output_nominal_ratio_);
+
+            // FIFO between the chain and the output resampler. The resampler
+            // consumes a variable number of chain frames per device block, so
+            // whatever it doesn't take has to survive to the next callback.
+            // Four chain blocks is ample: steady-state occupancy stays under one.
+            // Cost is under one chain block of added latency (mean ~half), and
+            // only on the mismatched-rate path.
+            chain_out_fifo_ = std::make_unique<shared::LockFreeAudioRingBuffer>(
+                static_cast<std::size_t>(chain_block) * 4, 2);
+            chain_peek_buffer_.setSize(2, chain_block * 4, false, true, true);
+
+            LogDebug("audioDeviceAboutToStart() output SRC: chain=%.0f device=%.0f ratio=%.6f fifo=%d",
+                     chain_rate, device_rate, output_nominal_ratio_, chain_block * 4);
+        }
+        else
+        {
+            chain_out_fifo_.reset();
         }
 
         // Set up capture-side resampler when capture rate differs from chain rate.
@@ -2225,15 +2512,33 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         capture_nominal_ratio_ = (chain_rate > 0.0) ? (wasapi_rate / chain_rate) : 1.0;
         xrun_count_.store(0, std::memory_order_relaxed);
 
+        // The drift servo can push the effective ratio up to kDriftMaxTrim above
+        // nominal, so the raw scratch has to cover that too — otherwise the peek
+        // gets clamped short at high rates and every block reports a false xrun.
         const int raw_max = static_cast<int>(std::ceil(
-                                static_cast<double>(chain_block) * capture_nominal_ratio_)) + 8;
+                                static_cast<double>(chain_block) * capture_nominal_ratio_
+                                * (1.0 + kDriftMaxTrim))) + 8;
         capture_raw_buffer_.setSize(2, raw_max, false, true, true);
-        if (capture_resampling_enabled_)
+
+        // On this transport the capture ring is fed by the WASAPI capture thread
+        // and drained by the device's own clock — two independent clocks. Arm the
+        // drift servo whether or not the nominal rates differ, and always prepare
+        // the resampler, since the servo trims the ratio even around unity.
+        std::size_t target_fill = 0;
+        if (wasapi_capture_ != nullptr && capture_ring_buffer_ != nullptr && wasapi_rate > 0.0)
+        {
+            target_fill = static_cast<std::size_t>(kCaptureTargetSeconds * wasapi_rate);
+            target_fill = std::min(target_fill, capture_ring_buffer_->capacity() / 2);
+        }
+        capture_drift_.configure(target_fill,
+                                 {kDriftKp, kDriftKi, kDriftMaxTrim, kDriftMaxIntegral});
+
+        if (capture_resampling_enabled_ || capture_drift_.enabled())
         {
             capture_resampler_.prepare(capture_nominal_ratio_, static_cast<std::size_t>(raw_max), 2);
 
-            LogDebug("audioDeviceAboutToStart() capture SRC: wasapi=%.0f chain=%.0f ratio=%.6f",
-                     wasapi_rate, chain_rate, capture_nominal_ratio_);
+            LogDebug("audioDeviceAboutToStart() capture SRC: wasapi=%.0f chain=%.0f ratio=%.6f target_fill=%zu",
+                     wasapi_rate, chain_rate, capture_nominal_ratio_, target_fill);
         }
     }
     LogDebug("audioDeviceAboutToStart() completed");
@@ -2451,7 +2756,7 @@ void AudioEngineImpl::openWasapiCapture()
     const bool loopback = desired_input_is_loopback_;
     LogDebug("openWasapiCapture(): opening id='%s', loopback=%d", desired_input_id_.c_str(), loopback ? 1 : 0);
     if (!wasapi_capture_->open(desired_input_id_, desired_sample_rate_,
-                                 capture_ring_buffer_.get(), loopback))
+                                 capture_ring_buffer_.get(), loopback, wasapi_exclusive_))
     {
         // T012: Notify UI that loopback capture initialization failed.
         LogDebug("openWasapiCapture(): WasapiCapture::open() FAILED for id='%s'", desired_input_id_.c_str());
@@ -2478,6 +2783,9 @@ void AudioEngineImpl::openWasapiCapture()
         capture_ring_buffer_.reset();
         return;
     }
+    // Re-arm the drift servo: the fresh ring is empty and has to build its
+    // cushion before the callback starts draining it.
+    capture_drift_.arm();
     LogDebug("openWasapiCapture(): start() OK");
 }
 

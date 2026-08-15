@@ -12,6 +12,7 @@
 #include "scan_dialog.h"
 #include "settings/local_state.h"
 #include "settings/roaming_settings.h"
+#include "spectrum_analyzer.h"
 
 #include "jyglobalvst/audio_engine.h"
 
@@ -263,6 +264,7 @@ private:
     std::unique_ptr<juce::Label> meter_output_label_;
 
     std::unique_ptr<ChainEditor> chain_editor_;
+    std::unique_ptr<SpectrumAnalyzer> spectrum_analyzer_;
     std::unique_ptr<ScanDialog> scan_dialog_;
     std::unique_ptr<CatalogDialog> catalog_dialog_;
     CustomLookAndFeel custom_laf_;

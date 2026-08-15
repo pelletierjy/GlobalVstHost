@@ -196,6 +196,14 @@ public:
     // Per-plugin output metering (US4 extension).
     virtual std::vector<float> pluginOutputPeaks() const = 0;
     virtual std::vector<float> pluginOutputRms() const = 0;
+
+    // --- Spectrum analyser tap --------------------------------------------
+    // Copies the most recent post-chain, mono-summed samples (oldest first) into
+    // `dest` and returns how many were written — 0 when the engine has produced
+    // nothing yet. The tap is a preallocated lock-free ring written by the audio
+    // thread; reading never blocks it. Samples are at negotiatedSampleRate().
+    // Non-pure so IPC / test implementations need not provide one.
+    virtual int copyRecentOutputSamples(float* /*dest*/, int /*max_samples*/) const { return 0; }
 };
 
 // Factory. The concrete implementation lives in src/audio-engine/routing/.

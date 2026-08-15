@@ -21,7 +21,18 @@ juce_add_gui_app(jyglobalvst_tray
     DOCUMENT_BROWSER_ENABLED FALSE)
 
 target_include_directories(jyglobalvst_tray PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR})
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR})
+
+# Windows version resource. JUCE writes its own VERSIONINFO, but through a custom
+# command that never re-runs once the file exists, so its version froze at the
+# scaffolding value. Its script honours JUCE_USER_DEFINED_RC_FILE, so point that
+# at a resource configured from PROJECT_VERSION instead.
+string(REPLACE "." "," JYGLOBALVST_VERSION_COMMA "${PROJECT_VERSION}")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/version_info.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/version_info.rc"
+    @ONLY)
 
 juce_add_binary_data(tray_app_icons
     HEADER_NAME "BinaryData.h"
@@ -35,6 +46,7 @@ target_link_libraries(jyglobalvst_tray PRIVATE
     jyglobalvst_shared
     tray_app_icons
     juce::juce_audio_utils
+    juce::juce_dsp
     juce::juce_gui_basics
     juce::juce_gui_extra)
 
@@ -45,7 +57,8 @@ target_compile_definitions(jyglobalvst_tray PRIVATE
     JUCE_DISPLAY_SPLASH_SCREEN=1
     JUCE_USE_DARK_SPLASH_SCREEN=0
     JUCE_REPORT_APP_USAGE=0
-    JUCE_MODAL_LOOPS_PERMITTED=1)
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_USER_DEFINED_RC_FILE="version_info.rc")
 
 file(GLOB_RECURSE _tray_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.cpp"

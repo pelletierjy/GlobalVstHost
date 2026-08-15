@@ -139,27 +139,14 @@ AsioSessionReport ASIOTransport::open(juce::AudioDeviceManager* manager,
 
     juce::String err = manager->setAudioDeviceSetup(setup, true);
 
-    // Many ASIO drivers are locked to the sample rate / buffer size configured in
-    // their own control panel and reject a mismatched explicit request. Retry
-    // granularly so a valid buffer-size change isn't lost just because the
-    // sample-rate is locked, and vice-versa.
+    // Many ASIO drivers are locked to the buffer size configured in their own
+    // control panel and reject a mismatched explicit request, so fall back to the
+    // driver's own size. The sample rate is NOT part of the ladder: the caller
+    // always passes 0.0 (see applyAsioTransport()), and re-introducing a concrete
+    // rate on a retry would retune the DAC clock — exactly the behaviour the chain
+    // rate is resampled to avoid.
     if (err.isNotEmpty())
     {
-        // Retry 1: keep requested buffer size, accept driver's sample rate.
-        setup.sampleRate = 0.0;
-        err = manager->setAudioDeviceSetup(setup, true);
-    }
-    if (err.isNotEmpty())
-    {
-        // Retry 2: keep requested sample rate, accept driver's buffer size.
-        setup.sampleRate = config_.sample_rate > 0.0 ? config_.sample_rate : 48000.0;
-        setup.bufferSize = 0;
-        err = manager->setAudioDeviceSetup(setup, true);
-    }
-    if (err.isNotEmpty())
-    {
-        // Retry 3: accept both driver defaults.
-        setup.sampleRate = 0.0;
         setup.bufferSize = 0;
         err = manager->setAudioDeviceSetup(setup, true);
     }

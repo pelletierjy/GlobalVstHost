@@ -258,6 +258,62 @@ private:
     }
 
 public:
+    // Signal-direction marker drawn under the tray popup's meter pairs: an arrow
+    // meeting a baseline (pointing down = signal coming in, pointing up = signal
+    // going out). Stroked with the same rounded pen and filled arrowhead as the
+    // power / mute / pencil marks so it reads as part of the same icon family.
+    static void drawSignalDirectionIcon(juce::Graphics& g, juce::Rectangle<float> bounds,
+                                        bool isInput, juce::Colour colour)
+    {
+        const auto c = bounds.getCentre();
+        const float s = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+
+        const float stemTop = c.y - s * 0.74f;
+        const float stemBot = c.y + s * 0.26f;
+        const float headHalfW = s * 0.36f;
+        const float headH = s * 0.38f;
+        const float baseHalfW = s * 0.62f;
+        const float baseY = c.y + s * 0.74f;
+
+        g.setColour(colour);
+
+        // Shaft, stopping short of the arrowhead so the filled tip stays crisp.
+        juce::Path stem;
+        if (isInput)
+        {
+            stem.startNewSubPath(c.x, stemTop);
+            stem.lineTo(c.x, stemBot - headH * 0.55f);
+        }
+        else
+        {
+            stem.startNewSubPath(c.x, stemTop + headH * 0.55f);
+            stem.lineTo(c.x, stemBot);
+        }
+        g.strokePath(stem, iconStroke(1.5f));
+
+        // Arrowhead: down at the baseline for input, up and away for output.
+        juce::Path head;
+        if (isInput)
+        {
+            head.startNewSubPath(c.x - headHalfW, stemBot - headH);
+            head.lineTo(c.x + headHalfW, stemBot - headH);
+            head.lineTo(c.x, stemBot);
+        }
+        else
+        {
+            head.startNewSubPath(c.x - headHalfW, stemTop + headH);
+            head.lineTo(c.x + headHalfW, stemTop + headH);
+            head.lineTo(c.x, stemTop);
+        }
+        head.closeSubPath();
+        g.fillPath(head);
+
+        // Baseline the signal arrives at / departs from.
+        juce::Path base;
+        base.startNewSubPath(c.x - baseHalfW, baseY);
+        base.lineTo(c.x + baseHalfW, baseY);
+        g.strokePath(base, iconStroke(1.5f));
+    }
 
 private:
     // Buttons whose text is one of these tokens convey their on/off state through

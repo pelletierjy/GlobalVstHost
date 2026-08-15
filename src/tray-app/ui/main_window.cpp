@@ -62,6 +62,30 @@ constexpr int kTimerHz = 10;  // 10 Hz UI refresh for meters / CPU.
 constexpr UINT kTrayIconMsg = WM_APP + 1;
 constexpr UINT kTrayIconId  = 1;
 
+// Tiny "in" / "out" marker sat under a meter pair in the tray popup. Drawn as a
+// vector glyph through the LookAndFeel, so it matches the mute / power icons on
+// the same popup rather than reading as a text caption.
+class SignalDirectionIcon : public juce::Component
+{
+public:
+    explicit SignalDirectionIcon(bool is_input) : is_input_(is_input)
+    {
+        setInterceptsMouseClicks(false, false);
+        setTitle(is_input ? "Input" : "Output");
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        auto* laf = dynamic_cast<CustomLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour colour = (laf != nullptr) ? laf->colors().textDim : kTextDim;
+        CustomLookAndFeel::drawSignalDirectionIcon(g, getLocalBounds().toFloat(),
+                                                   is_input_, colour);
+    }
+
+private:
+    bool is_input_;
+};
+
 // Small content component shown in a CallOutBox when the tray icon is left-clicked.
 // Holds input/output meters on sides, a vertical master-volume slider in center,
 // and control buttons below, all reporting changes through callbacks.
@@ -124,6 +148,9 @@ public:
         addAndMakeVisible(meter_output_l_.get());
         addAndMakeVisible(meter_output_r_.get());
 
+        addAndMakeVisible(input_icon_);
+        addAndMakeVisible(output_icon_);
+
         is_muted_ = (initial_gain <= 0.0f);
         updateMuteButtonVisual();
         mute_button_.setClickingTogglesState(true);
@@ -171,7 +198,8 @@ public:
         };
         addAndMakeVisible(audio_button_);
 
-        setSize(160, 280);
+        // Height allows for the in/out glyph strip without shortening the meters.
+        setSize(160, 300);
     }
 
     void resized() override
@@ -212,14 +240,25 @@ public:
         // Meters (14px each) on left/right, volume in middle
         const int meter_width = 14;
         const int spacing = 3;
+        const int icon_height = 16;
 
-        auto in_l_area = b.removeFromLeft(meter_width);
+        auto in_area = b.removeFromLeft(meter_width * 2 + spacing);
         b.removeFromLeft(spacing);
-        auto in_r_area = b.removeFromLeft(meter_width);
-        b.removeFromLeft(spacing);
-        auto out_l_area = b.removeFromRight(meter_width);
+        auto out_area = b.removeFromRight(meter_width * 2 + spacing);
         b.removeFromRight(spacing);
-        auto out_r_area = b.removeFromRight(meter_width);
+
+        // The in/out glyph sits directly under each meter pair, spanning both channels.
+        input_icon_.setBounds(in_area.removeFromBottom(icon_height));
+        output_icon_.setBounds(out_area.removeFromBottom(icon_height));
+        in_area.removeFromBottom(3);
+        out_area.removeFromBottom(3);
+
+        auto in_l_area = in_area.removeFromLeft(meter_width);
+        in_area.removeFromLeft(spacing);
+        auto in_r_area = in_area.removeFromLeft(meter_width);
+        auto out_l_area = out_area.removeFromRight(meter_width);
+        out_area.removeFromRight(spacing);
+        auto out_r_area = out_area.removeFromRight(meter_width);
 
         meter_input_l_->setBounds(in_l_area);
         meter_input_r_->setBounds(in_r_area);
@@ -287,6 +326,8 @@ private:
     std::unique_ptr<MeterPanel> meter_input_r_;
     std::unique_ptr<MeterPanel> meter_output_l_;
     std::unique_ptr<MeterPanel> meter_output_r_;
+    SignalDirectionIcon input_icon_ {true};
+    SignalDirectionIcon output_icon_ {false};
     std::function<void(float)> on_change_;
     std::function<bool()> on_toggle_audio_;
     std::function<void()> on_mute_toggle_;
@@ -566,7 +607,8 @@ public:
                                           static_cast<float>(input_hdr.getBottom()) - 1.0f,
                                           static_cast<float>(input_hdr.getWidth()), 1.0f));
 
-        b.removeFromTop(2 + 28 + 4 + 28 + 6);  // gap + input row + in-rate row + spacing before OUTPUT
+        // Must match the INPUT-section carving in resized() exactly.
+        b.removeFromTop(kHdrGap + kRowH + kRowGap + kRowH + kSectionGap);
 
         auto output_hdr = b.removeFromTop(kSubHeaderH);
         g.setColour(col);
@@ -582,30 +624,30 @@ public:
         auto b = contentBounds();
 
         b.removeFromTop(kSubHeaderH);  // INPUT header (drawn in paint)
-        b.removeFromTop(2);
-        auto row_input = b.removeFromTop(28);
-        b.removeFromTop(4);
-        auto row_input_rate = b.removeFromTop(28);
-        b.removeFromTop(6);
+        b.removeFromTop(kHdrGap);
+        auto row_input = b.removeFromTop(kRowH);
+        b.removeFromTop(kRowGap);
+        auto row_input_rate = b.removeFromTop(kRowH);
+        b.removeFromTop(kSectionGap);
 
         b.removeFromTop(kSubHeaderH);  // OUTPUT header (drawn in paint)
-        b.removeFromTop(2);
-        auto row_transport = b.removeFromTop(28);
-        b.removeFromTop(4);
-        auto row_output = b.removeFromTop(28);  // WASAPI output or ASIO device (same slot)
-        b.removeFromTop(4);
-        auto row_buffer = b.removeFromTop(28);
-        b.removeFromTop(4);
-        auto row_output_rate = b.removeFromTop(28);
-        b.removeFromTop(4);
-        auto row_vst_rate = b.removeFromTop(28);
-        b.removeFromTop(4);
-        auto row_asio_pair = b.removeFromTop(28);
+        b.removeFromTop(kHdrGap);
+        auto row_transport = b.removeFromTop(kRowH);
+        b.removeFromTop(kRowGap);
+        auto row_output = b.removeFromTop(kRowH);  // WASAPI output or ASIO device (same slot)
+        b.removeFromTop(kRowGap);
+        auto row_buffer = b.removeFromTop(kRowH);
+        b.removeFromTop(kRowGap);
+        auto row_output_rate = b.removeFromTop(kRowH);
+        b.removeFromTop(kRowGap);
+        auto row_vst_rate = b.removeFromTop(kRowH);
+        b.removeFromTop(kRowGap);
+        auto row_asio_pair = b.removeFromTop(kRowH);
 
         juce::FlexBox fb_input;
         fb_input.flexDirection = juce::FlexBox::Direction::row;
         fb_input.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_input.items.add(juce::FlexItem(*input_label_).withMinWidth(130).withWidth(130));
+        fb_input.items.add(juce::FlexItem(*input_label_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_input.items.add(juce::FlexItem().withWidth(4));
         fb_input.items.add(juce::FlexItem(*input_).withFlex(1));
         fb_input.performLayout(row_input);
@@ -613,7 +655,7 @@ public:
         juce::FlexBox fb_in_rate;
         fb_in_rate.flexDirection = juce::FlexBox::Direction::row;
         fb_in_rate.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_in_rate.items.add(juce::FlexItem(*input_rate_caption_).withMinWidth(140).withWidth(140));
+        fb_in_rate.items.add(juce::FlexItem(*input_rate_caption_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_in_rate.items.add(juce::FlexItem().withWidth(4));
         fb_in_rate.items.add(juce::FlexItem(*input_rate_value_).withFlex(1));
         fb_in_rate.performLayout(row_input_rate);
@@ -621,7 +663,7 @@ public:
         juce::FlexBox fb_transport;
         fb_transport.flexDirection = juce::FlexBox::Direction::row;
         fb_transport.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_transport.items.add(juce::FlexItem(*transport_label_).withMinWidth(45).withWidth(45));
+        fb_transport.items.add(juce::FlexItem(*transport_label_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_transport.items.add(juce::FlexItem().withWidth(4));
         fb_transport.items.add(juce::FlexItem(*transport_mode_).withFlex(1));
         fb_transport.performLayout(row_transport);
@@ -630,7 +672,7 @@ public:
         juce::FlexBox fb_out_w;
         fb_out_w.flexDirection = juce::FlexBox::Direction::row;
         fb_out_w.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_out_w.items.add(juce::FlexItem(*output_label_).withMinWidth(120).withWidth(120));
+        fb_out_w.items.add(juce::FlexItem(*output_label_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_out_w.items.add(juce::FlexItem().withWidth(4));
         fb_out_w.items.add(juce::FlexItem(*output_).withFlex(1));
         fb_out_w.performLayout(row_output);
@@ -638,7 +680,7 @@ public:
         juce::FlexBox fb_out_a;
         fb_out_a.flexDirection = juce::FlexBox::Direction::row;
         fb_out_a.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_out_a.items.add(juce::FlexItem(*asio_device_label_).withMinWidth(75).withWidth(75));
+        fb_out_a.items.add(juce::FlexItem(*asio_device_label_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_out_a.items.add(juce::FlexItem().withWidth(4));
         fb_out_a.items.add(juce::FlexItem(*asio_device_).withFlex(1));
         fb_out_a.performLayout(row_output);
@@ -646,7 +688,7 @@ public:
         juce::FlexBox fb_buffer;
         fb_buffer.flexDirection = juce::FlexBox::Direction::row;
         fb_buffer.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_buffer.items.add(juce::FlexItem(*buffer_label_).withMinWidth(45).withWidth(45));
+        fb_buffer.items.add(juce::FlexItem(*buffer_label_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_buffer.items.add(juce::FlexItem().withWidth(4));
         fb_buffer.items.add(juce::FlexItem(*buffer_).withFlex(1));
         fb_buffer.performLayout(row_buffer);
@@ -654,7 +696,7 @@ public:
         juce::FlexBox fb_out_rate;
         fb_out_rate.flexDirection = juce::FlexBox::Direction::row;
         fb_out_rate.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_out_rate.items.add(juce::FlexItem(*output_rate_caption_).withMinWidth(130).withWidth(130));
+        fb_out_rate.items.add(juce::FlexItem(*output_rate_caption_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_out_rate.items.add(juce::FlexItem().withWidth(4));
         fb_out_rate.items.add(juce::FlexItem(*output_rate_value_).withFlex(1));
         fb_out_rate.performLayout(row_output_rate);
@@ -662,7 +704,7 @@ public:
         juce::FlexBox fb_vst_rate;
         fb_vst_rate.flexDirection = juce::FlexBox::Direction::row;
         fb_vst_rate.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_vst_rate.items.add(juce::FlexItem(*vst_rate_caption_).withMinWidth(55).withWidth(55));
+        fb_vst_rate.items.add(juce::FlexItem(*vst_rate_caption_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_vst_rate.items.add(juce::FlexItem().withWidth(4));
         fb_vst_rate.items.add(juce::FlexItem(*vst_rate_selector_).withFlex(1));
         fb_vst_rate.performLayout(row_vst_rate);
@@ -671,7 +713,7 @@ public:
         juce::FlexBox fb_asio_pair;
         fb_asio_pair.flexDirection = juce::FlexBox::Direction::row;
         fb_asio_pair.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb_asio_pair.items.add(juce::FlexItem(*asio_pair_label_).withMinWidth(55).withWidth(55));
+        fb_asio_pair.items.add(juce::FlexItem(*asio_pair_label_).withMinWidth(kLabelW).withWidth(kLabelW));
         fb_asio_pair.items.add(juce::FlexItem().withWidth(4));
         fb_asio_pair.items.add(juce::FlexItem(*asio_pair_).withFlex(1));
         fb_asio_pair.items.add(juce::FlexItem().withWidth(4));
@@ -680,6 +722,21 @@ public:
     }
 
     static constexpr int kSubHeaderH = 14;
+
+    // Row metrics. paint() has to skip the INPUT rows to place the OUTPUT
+    // sub-header, so it repeats the same arithmetic as resized() — naming these
+    // keeps the two from drifting apart.
+    static constexpr int kRowH       = 28;
+    static constexpr int kRowGap     = 4;
+    static constexpr int kHdrGap     = 2;   // sub-header → first row of its section
+    static constexpr int kSectionGap = 6;   // last row of a section → next sub-header
+
+    // Every row is "fixed-width caption | 4 px | flex(1) control". One shared
+    // caption width keeps the control column aligned and, unlike the previous
+    // per-row values, is wide enough for the longest caption in the panel
+    // ("Captured sampling rate:"). The VST row used to get 55 px, which clipped
+    // "VST sampling rate:" to "VST sa…" once the panel moved into a 2:1 column.
+    static constexpr int kLabelW = 140;
 
 private:
     juce::Label* transport_label_;
@@ -860,31 +917,61 @@ private:
 };
 
 
-class TopAreaComponent : public juce::Component
+// Two-column body: the wide left column stacks AUDIO DEVICE over PLUGIN CHAIN,
+// the narrow right column stacks LEVELS over SPECTRUM. Panels in a column share
+// its width, so the chain editor lines up with the device panel and the analyser
+// with the meters.
+class BodyComponent : public juce::Component
 {
 public:
-    TopAreaComponent(juce::Component* device_panel, juce::Component* meter_panel)
-        : device_panel_(device_panel), meter_panel_(meter_panel)
+    BodyComponent(juce::Component* device_panel, juce::Component* chain_panel,
+                  juce::Component* meter_panel, juce::Component* spectrum_panel)
+        : device_panel_(device_panel), chain_panel_(chain_panel),
+          meter_panel_(meter_panel), spectrum_panel_(spectrum_panel)
     {
         addAndMakeVisible(device_panel_);
+        addAndMakeVisible(chain_panel_);
         addAndMakeVisible(meter_panel_);
+        addAndMakeVisible(spectrum_panel_);
     }
 
     void resized() override
     {
         auto b = getLocalBounds();
-        juce::FlexBox fb;
-        fb.flexDirection = juce::FlexBox::Direction::row;
-        fb.alignItems = juce::FlexBox::AlignItems::stretch;
-        fb.items.add(juce::FlexItem(*device_panel_).withFlex(2.0f));
-        fb.items.add(juce::FlexItem().withWidth(8));
-        fb.items.add(juce::FlexItem(*meter_panel_).withFlex(1.0f));
-        fb.performLayout(b);
+        if (b.getWidth() <= 0 || b.getHeight() <= 0)
+            return;
+
+        // 2:1 column split — the same proportion the device/levels row used before
+        // the chain editor and analyser joined them.
+        const int right_w = (b.getWidth() - kGap) / 3;
+        auto left = b.removeFromLeft(b.getWidth() - kGap - right_w);
+        b.removeFromLeft(kGap);
+        auto right = b;
+
+        // The top row keeps the fixed height it had as a full-width row; the chain
+        // editor and analyser below share whatever the window leaves.
+        const int top_h = kTopRowH;
+
+        auto device_area = left.removeFromTop(top_h);
+        left.removeFromTop(kGap);
+        device_panel_->setBounds(device_area);
+        chain_panel_->setBounds(left);
+
+        auto meter_area = right.removeFromTop(top_h);
+        right.removeFromTop(kGap);
+        meter_panel_->setBounds(meter_area);
+        spectrum_panel_->setBounds(right);
     }
+
+    static constexpr int kGap = 8;
+    static constexpr int kTopRowH = 320;
+    static constexpr int kMinBottomH = 100;
 
 private:
     juce::Component* device_panel_;
+    juce::Component* chain_panel_;
     juce::Component* meter_panel_;
+    juce::Component* spectrum_panel_;
 };
 
 class ChainEditorPanel : public GlassPanel
@@ -903,6 +990,24 @@ public:
 
 private:
     juce::Component* editor_;
+};
+
+class SpectrumPanel : public GlassPanel
+{
+public:
+    explicit SpectrumPanel(juce::Component* analyzer) : analyzer_(analyzer)
+    {
+        setSectionTitle("SPECTRUM");
+        addAndMakeVisible(analyzer_);
+    }
+
+    void resized() override
+    {
+        analyzer_->setBounds(contentBounds());
+    }
+
+private:
+    juce::Component* analyzer_;
 };
 
 // Simple horizontal progress bar for CPU display. Fills with green proportional
@@ -987,16 +1092,14 @@ class MainContentComponent : public juce::Component
 {
 public:
     MainContentComponent(juce::Component* header,
-                         juce::Component* top_area,
-                         juce::Component* chain_editor,
+                         juce::Component* body,
                          juce::Component* plugin_panel,
                          juce::Component* status_bar)
-        : header_(header), top_area_(top_area), chain_editor_(chain_editor),
+        : header_(header), body_(body),
           plugin_panel_(plugin_panel), status_bar_(status_bar)
     {
         addAndMakeVisible(header_);
-        addAndMakeVisible(top_area_);
-        addAndMakeVisible(chain_editor_);
+        addAndMakeVisible(body_);
         addAndMakeVisible(plugin_panel_);
         addAndMakeVisible(status_bar_);
     }
@@ -1012,9 +1115,10 @@ public:
 
         fb.items.add(juce::FlexItem(*header_).withMinHeight(48).withHeight(48));
         fb.items.add(juce::FlexItem().withHeight(8));
-        fb.items.add(juce::FlexItem(*top_area_).withMinHeight(320).withHeight(320));
-        fb.items.add(juce::FlexItem().withHeight(8));
-        fb.items.add(juce::FlexItem(*chain_editor_).withMinHeight(120).withFlex(1.0f));
+        fb.items.add(juce::FlexItem(*body_).withMinHeight(BodyComponent::kTopRowH
+                                                          + BodyComponent::kGap
+                                                          + BodyComponent::kMinBottomH)
+                                            .withFlex(1.0f));
         fb.items.add(juce::FlexItem().withHeight(8));
         fb.items.add(juce::FlexItem(*plugin_panel_).withMinHeight(44).withHeight(44));
         fb.items.add(juce::FlexItem().withHeight(8));
@@ -1025,8 +1129,7 @@ public:
 
 private:
     juce::Component* header_;
-    juce::Component* top_area_;
-    juce::Component* chain_editor_;
+    juce::Component* body_;
     juce::Component* plugin_panel_;
     juce::Component* status_bar_;
 };
@@ -1967,6 +2070,9 @@ void MainWindow::buildUI()
     chain_editor_ = std::make_unique<ChainEditor>(engine_.get());
     chain_editor_->onAddPluginRequested = [this]() { handleLoadPlugin(); };
 
+    // --- Spectrum analyser -------------------------------------------------
+    spectrum_analyzer_ = std::make_unique<SpectrumAnalyzer>(engine_.get());
+
     // --- Latency / CPU -----------------------------------------------------
     latency_label_ = std::make_unique<juce::Label>(juce::String{}, "Latency: — ms");
     cpu_label_ = std::make_unique<juce::Label>(juce::String{}, "CPU");
@@ -2069,15 +2175,16 @@ void MainWindow::buildUI()
         meter_output_label_.get(), meter_output_l_.get(), meter_output_r_.get(),
         vol_label_.get(), volume_slider_.get(), mute_button_.get());
 
-    auto* top_area = new TopAreaComponent(device_panel, meter_panel);
-
     auto* chain_panel = new ChainEditorPanel(chain_editor_.get());
+    auto* spectrum_panel = new SpectrumPanel(spectrum_analyzer_.get());
+
+    auto* body = new BodyComponent(device_panel, chain_panel, meter_panel, spectrum_panel);
 
     auto* status_bar = new StatusBarComponent(
         status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get());
 
     auto* content = new MainContentComponent(
-        header, top_area, chain_panel, plugin_panel, status_bar);
+        header, body, plugin_panel, status_bar);
     content_root_ = content;
 
     // Apply global LookAndFeel to the content tree.
