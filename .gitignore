@@ -14,6 +14,7 @@ obj/
 *.idb
 ui-test/
 build-test/**
+test/**
 
 # NOTE: StorePackaging/Assets/*.png used to be ignored here as "generated
 # artifacts". They are not generated - no script produces them, and the MSIX
