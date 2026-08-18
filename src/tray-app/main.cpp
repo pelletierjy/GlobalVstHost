@@ -35,7 +35,14 @@ public:
 
     const juce::String getApplicationVersion() override
     {
-        return "1.0.11.0";
+        // Defined from PROJECT_VERSION by src/tray-app/CMakeLists.txt. The literal
+        // is only a fallback for builds that bypass that target; keep it in step
+        // with the root CMakeLists version.
+#if defined(JYGLOBALVST_VERSION_STRING)
+        return JYGLOBALVST_VERSION_STRING;
+#else
+        return "1.0.13.0";
+#endif
     }
 
     bool moreThanOneInstanceAllowed() override

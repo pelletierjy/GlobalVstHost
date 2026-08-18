@@ -118,6 +118,7 @@ public:
     void onSameDeviceConflict(const EndpointId& device) override;
     void onCaptureMuteFallbackRequired(const EndpointId& endpoint) override;
     void onEnergySaverStateChanged(bool sleeping) override;
+    void onAudioStalled() override;
 
     // System tray -----------------------------------------------------------
     void createTrayIcon();
@@ -181,6 +182,19 @@ public:
     void onSystemResume();
 
 private:
+    // Rebinds capture + output after a standby cycle. Deliberately deferred from
+    // the resume notification itself — see onSystemResume().
+    void restartAfterResume();
+
+    // Delay between the resume notification and the restart attempt. Audio
+    // hardware (USB/PCIe interfaces behind an ASIO driver especially) is often
+    // still being re-enumerated when the resume message arrives, and a start()
+    // issued then binds a driver that never begins streaming. If the deferred
+    // attempt still comes up dead the engine's stall supervisor asks for another
+    // one via onAudioStalled(), so this only needs to cover the common case.
+    static constexpr int kResumeRestartDelayMs = 2500;
+
+
     std::unique_ptr<IAudioEngine> engine_;
     AutoSaveStore autosave_store_;
     LocalStateStore local_state_store_;
@@ -280,6 +294,18 @@ private:
 
     bool audio_running_ {false};
     bool audio_was_running_before_suspend_ {false};
+    bool resume_restart_pending_ {false};
+
+    // Stall-recovery bookkeeping (onAudioStalled). The engine re-notifies every
+    // ~5 s while the transport stays dead, so a device that never comes back
+    // (an interface unplugged during standby) would otherwise be restarted
+    // forever. Give up after a few consecutive attempts and say so; a quiet
+    // period longer than kStallAttemptResetMs means audio ran again in between,
+    // which re-arms the counter.
+    int stall_restart_attempts_ {0};
+    juce::int64 last_stall_restart_ms_ {0};
+    static constexpr int kMaxStallRestartAttempts = 4;
+    static constexpr juce::int64 kStallAttemptResetMs = 60'000;
     int last_chain_revision_ {-1};
     bool preset_override_flag_ {false};
     bool plugin_scan_complete_ {false};

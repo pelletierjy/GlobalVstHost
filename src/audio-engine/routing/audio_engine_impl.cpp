@@ -16,6 +16,7 @@
 #include "audio_engine_impl.h"
 #include "device_watchdog.h"
 #include "energy_saver_controller.h"
+#include "stall_supervisor.h"
 
 #include "../builtin-effects/builtin_effect_registry.h"
 #include "../chain/preset_serializer.h"
@@ -584,6 +585,12 @@ void AudioEngineImpl::energySaverThreadLoop()
     };
     controller.reset(now_ms());
 
+    // Stall supervision, owned by this thread alone. Arming it here gives the
+    // transport a full kStallTimeoutMs grace period to produce its first
+    // callback — an ASIO driver does not necessarily stream immediately.
+    StallSupervisor stall(kStallTimeoutMs, kStallRestartBackoffMs);
+    stall.reset(now_ms(), callback_heartbeat_.load(std::memory_order_relaxed));
+
     while (energy_saver_thread_running_.load(std::memory_order_acquire))
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -617,6 +624,27 @@ void AudioEngineImpl::energySaverThreadLoop()
                 closeWasapiCapture();
                 openWasapiCapture();
             }
+        }
+
+        // Audio-path stall supervision. Covers the failure the capture check
+        // above cannot see: the transport itself stopped calling us. After a
+        // standby/resume cycle an ASIO driver typically comes back with the
+        // device still nominally open but never resumes streaming, and on the
+        // pure-WASAPI path an invalidated render client leaves engineThreadLoop
+        // waiting on an output ring that never drains. Either way the callback
+        // stops, and because the input meters are computed inside it the
+        // energy-saver detector also freezes below the wake threshold: no audio,
+        // no meters, no recovery until the user hits Reset. Ask the host for a
+        // restart instead — stop()/start() cannot run on this thread, because
+        // stop() joins it.
+        if (stall.update(now_ms(),
+                         callback_heartbeat_.load(std::memory_order_relaxed),
+                         running_.load(std::memory_order_acquire),
+                         stall_supervision_suspended_.load(std::memory_order_acquire)))
+        {
+            LogDebug("energySaver: audio callback stalled >%lld ms, requesting engine restart",
+                     kStallTimeoutMs);
+            notifyOnUiThread([](IAudioEngineListener& l) { l.onAudioStalled(); });
         }
     }
 }
@@ -1872,7 +1900,12 @@ void AudioEngineImpl::openAsioControlPanel()
     auto* device = device_manager_.getCurrentAudioDevice();
     if (device == nullptr)
         return;
+    // showControlPanel() blocks until the user dismisses the driver's own dialog,
+    // and most drivers stop streaming while it is up. Mute the stall supervisor
+    // for the duration so it doesn't read that as a dead transport.
+    stall_supervision_suspended_.store(true, std::memory_order_release);
     device->showControlPanel();
+    stall_supervision_suspended_.store(false, std::memory_order_release);
     if (running_.load())
     {
         stop();
@@ -2051,6 +2084,10 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                                                       const juce::AudioIODeviceCallbackContext& /*context*/)
 {
     const auto t_start = rt_clock_.now();
+
+    // 0. Liveness beacon for the stall supervisor (see energySaverThreadLoop).
+    //    A lock-free relaxed increment: no allocation, no ordering cost.
+    callback_heartbeat_.fetch_add(1, std::memory_order_relaxed);
 
     // 1. Drain pending parameter commands and apply to plugin chain.
     EngineCommand cmd;

@@ -75,6 +75,17 @@ public:
     // or state changed). The UI should re-query listOutputs/listInputs.
     // Non-pure for backward compatibility.
     virtual void onDeviceListChanged() {}
+
+    // The audio transport stopped delivering callbacks while the engine still
+    // believed it was running — the state a machine comes back in from standby
+    // when the ASIO driver never resumes streaming, or when the WASAPI render
+    // client is invalidated. Recovery is a stop()/start() cycle, which must run
+    // on the control thread, so the engine reports the stall here rather than
+    // restarting itself from its supervisor thread. Delivered on the UI thread;
+    // the host should call reset(). Re-fires (with back-off) until the transport
+    // starts producing callbacks again. Non-pure so existing listeners need not
+    // implement it.
+    virtual void onAudioStalled() {}
 };
 
 class IAudioEngine

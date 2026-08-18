@@ -295,6 +295,28 @@ private:
     // spin. Energy-saver-thread owned.
     long long last_capture_recovery_ms_ {-100000};
     static constexpr long long kCaptureRecoveryBackoffMs = 1'000;
+
+    // --- Audio-path stall supervision --------------------------------------
+    // Bumped once per audio callback. Both transports funnel through
+    // audioDeviceIOCallbackWithContext (the JUCE/ASIO device calls it directly;
+    // engineThreadLoop calls it on the pure-WASAPI path), so a frozen counter
+    // means no audio is flowing whichever transport is active.
+    //
+    // Capture-side supervision above cannot see this class of failure: after a
+    // standby cycle an ASIO driver commonly comes back with the device nominally
+    // open but never resumes calling its callback, and the WASAPI render client
+    // can be invalidated without the capture client noticing. The input meters
+    // are computed *inside* the callback, so a dead callback also freezes the
+    // energy-saver wake detector — the engine then sits asleep and silent until
+    // the user hits Reset. The supervisor watches the counter instead and asks
+    // the host to restart (IAudioEngineListener::onAudioStalled); it must not
+    // call stop() itself, since stop() joins this very thread.
+    std::atomic<std::uint64_t> callback_heartbeat_ {0};
+    // Set while an intentional interruption is expected to freeze the heartbeat
+    // (the ASIO control panel blocks the control thread with the device stopped).
+    std::atomic<bool> stall_supervision_suspended_ {false};
+    static constexpr long long kStallTimeoutMs = 2'000;
+    static constexpr long long kStallRestartBackoffMs = 5'000;
     void startEnergySaver();
     void stopEnergySaver();
     void energySaverThreadLoop();

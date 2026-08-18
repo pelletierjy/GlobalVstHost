@@ -351,8 +351,12 @@ LRESULT CALLBACK mainWindowSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             {
                 self->onSystemSuspend();
             }
-            else if (wParam == PBT_APMRESUMEAUTOMATIC || wParam == PBT_APMRESUMESUSPEND)
+            else if (wParam == PBT_APMRESUMEAUTOMATIC || wParam == PBT_APMRESUMESUSPEND ||
+                     wParam == PBT_APMRESUMECRITICAL)
             {
+                // PBT_APMRESUMECRITICAL is the resume that follows a suspend we
+                // were never told about, which is exactly the case where the
+                // engine is still holding pre-standby devices.
                 self->onSystemResume();
             }
         }
@@ -2916,7 +2920,9 @@ void MainWindow::handleAbout()
     snap.latency = engine_->latencyProfile();
     snap.cpu = engine_->cpuStats();
 
-    juce::String version = "1.0.1";
+    // The running app is the authority; the literal only covers a host with no
+    // JUCEApplication instance (unit-test harnesses).
+    juce::String version = "1.0.13.0";
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 
@@ -3402,15 +3408,84 @@ void MainWindow::onSystemSuspend()
 
 void MainWindow::onSystemResume()
 {
-    if (audio_was_running_before_suspend_)
+    // Restart when audio was running before we suspended — and also when
+    // audio_running_ is still true, which means the suspend notification never
+    // arrived (it is not delivered for every sleep transition). The devices bound
+    // before standby are stale in both cases.
+    if (!audio_was_running_before_suspend_ && !audio_running_)
     {
-        engine_->start();
-        audio_running_ = true;
-        juce::MessageManager::callAsync([this]() {
-            audio_toggle_->setPowerState(true);
-            status_label_->setText("Audio running (system resume)", juce::dontSendNotification);
-        });
+        return;
     }
+    audio_was_running_before_suspend_ = false;
+
+    // Windows delivers more than one resume code for a single wake
+    // (PBT_APMRESUMESUSPEND then PBT_APMRESUMEAUTOMATIC); one restart is enough.
+    if (resume_restart_pending_)
+    {
+        return;
+    }
+    resume_restart_pending_ = true;
+
+    // Do not rebind on the resume message itself: see kResumeRestartDelayMs.
+    juce::Component::SafePointer<MainWindow> self {this};
+    juce::Timer::callAfterDelay(kResumeRestartDelayMs, [self]() {
+        if (auto* window = self.getComponent())
+        {
+            window->restartAfterResume();
+        }
+    });
+
+    status_label_->setText("System resumed; restarting audio...", juce::dontSendNotification);
+}
+
+void MainWindow::restartAfterResume()
+{
+    resume_restart_pending_ = false;
+
+    // Always tear down first: on a missed suspend notification the engine is
+    // still holding the pre-standby capture/render clients, and start() alone is
+    // a no-op while running_ is set.
+    if (audio_running_ || engine_->isRunning())
+    {
+        engine_->stop();
+    }
+    engine_->start();
+    audio_running_ = true;
+    audio_toggle_->setPowerState(true);
+    status_label_->setText("Audio running (system resume)", juce::dontSendNotification);
+    updateTrayIconAppearance();
+}
+
+void MainWindow::onAudioStalled()
+{
+    // Delivered on the message thread by the engine's supervisor when the audio
+    // callback has stopped firing while the engine believes it is running. This
+    // is the automatic equivalent of the user pressing Reset, which is what the
+    // symptom used to require after a standby cycle in ASIO mode.
+    if (!audio_running_)
+    {
+        return;
+    }
+
+    const juce::int64 now = juce::Time::currentTimeMillis();
+    if (now - last_stall_restart_ms_ > kStallAttemptResetMs)
+    {
+        stall_restart_attempts_ = 0;
+    }
+    last_stall_restart_ms_ = now;
+
+    if (++stall_restart_attempts_ > kMaxStallRestartAttempts)
+    {
+        status_label_->setText("Audio device is not responding; reselect a device or press Reset",
+                               juce::dontSendNotification);
+        return;
+    }
+
+    status_label_->setText(juce::String::formatted("Audio stalled; restarting engine (attempt %d)",
+                                                   stall_restart_attempts_),
+                           juce::dontSendNotification);
+    engine_->reset();
+    refreshDeviceLists();
 }
 
 }  // namespace jyglobalvst::tray

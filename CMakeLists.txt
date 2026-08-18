@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(JyGlobalVST
-    VERSION 1.0.12.0
+    VERSION 1.0.13.0
     DESCRIPTION "Windows system-wide VST3 host (testable-dev build)"
     LANGUAGES CXX)
 

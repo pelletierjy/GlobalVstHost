@@ -58,7 +58,10 @@ target_compile_definitions(jyglobalvst_tray PRIVATE
     JUCE_USE_DARK_SPLASH_SCREEN=0
     JUCE_REPORT_APP_USAGE=0
     JUCE_MODAL_LOOPS_PERMITTED=1
-    JUCE_USER_DEFINED_RC_FILE="version_info.rc")
+    JUCE_USER_DEFINED_RC_FILE="version_info.rc"
+    # The version the About dialog reports. Fed from PROJECT_VERSION so it cannot
+    # drift from the CMake/installer/Store version the way a literal in main.cpp did.
+    JYGLOBALVST_VERSION_STRING="${PROJECT_VERSION}")
 
 file(GLOB_RECURSE _tray_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.cpp"

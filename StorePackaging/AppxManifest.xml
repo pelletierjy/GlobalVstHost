@@ -10,7 +10,7 @@
     Name="JYPSolutions.GlobalVSTHost"
     Publisher="CN=8132E2DA-CE50-4072-9189-3353C494C0CF"
     ProcessorArchitecture="x64"
-    Version="1.0.12.0" />
+    Version="1.0.13.0" />
 
   <Properties>
     <DisplayName>Global VST Host</DisplayName>
