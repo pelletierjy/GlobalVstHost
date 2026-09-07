@@ -1,0 +1,22 @@
+Global VST Host | Product identity
+Your product has a unique identity, assigned by the Store. If you build your package manually, you'll need to include its identity details. (If you're using Visual Studio, this is done automatically.)Learn more
+
+Include these values in your package manifest:
+
+Package/Identity/Name	JYPSolutions.GlobalVSTHost
+Package/Identity/Publisher	CN=8132E2DA-CE50-4072-9189-3353C494C0CF
+Package/Properties/PublisherDisplayName	JYP Solutions
+Together, these elements declare the identity of your app, establishing the "package family" to which all of its packages belong. Individual packages will have additional details, such as architecture and version.
+
+The package family can also be expressed in calculated forms which are not declared in the manifest:
+
+Package Family Name (PFN)	JYPSolutions.GlobalVSTHost_5dwj5njb3tf3w
+Package SID	S-1-15-2-3632279870-2323778972-369607795-1855742295-3686697983-2700739126-156761878
+You can share the direct link and Store ID to help customers find your app in the Store:
+
+URL	https://apps.microsoft.com/detail/9ND7HRZGWCWN
+Store ID	9ND7HRZGWCWN
+Store protocol link	ms-windows-store://pdp/?productid=9ND7HRZGWCWN
+MSA app
+
+MSA app Id	1d24c14b-b220-4833-949e-fa02dde0669a
