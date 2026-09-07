@@ -142,6 +142,7 @@ public:
     void removeSlot(int position) override;
     void moveSlot(int from, int to) override;
     void setBypass(int position, bool bypassed) override;
+    void setSlotTag(int position, const std::string& tag) override;
     void setParameter(int position, ParamId param, float value) override;
     void openEditor(int position) override;
     void closeEditor(int position) override;

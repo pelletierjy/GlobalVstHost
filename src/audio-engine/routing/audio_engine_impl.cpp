@@ -1098,6 +1098,30 @@ void AudioEngineImpl::setBypass(int position, bool bypassed)
     rebumpChain();
 }
 
+void AudioEngineImpl::setSlotTag(int position, const std::string& tag)
+{
+    if (position < 0)
+    {
+        LogDebug("setSlotTag: Invalid position %d (negative)", position);
+        return;
+    }
+
+    if (!plugin_chain_)
+    {
+        LogDebug("setSlotTag: plugin_chain_ is null");
+        return;
+    }
+
+    if (position >= static_cast<int>(plugin_chain_->snapshot().size()))
+    {
+        LogDebug("setSlotTag: Position %d out of bounds", position);
+        return;
+    }
+
+    plugin_chain_->setTag(position, tag);
+    rebumpChain();
+}
+
 void AudioEngineImpl::setParameter(int position, ParamId param, float value)
 {
     if (position < 0)
@@ -1644,6 +1668,13 @@ void AudioEngineImpl::loadChainFromJson(const nlohmann::json& doc,
                     out_missing.push_back({ref, static_cast<int>(i)});
                 }
             }
+        }
+
+        // Every branch above added a slot at index i; restore its user tag.
+        const std::string tag = slot.value("tag", std::string {});
+        if (!tag.empty())
+        {
+            plugin_chain_->setTag(static_cast<int>(i), tag);
         }
     }
     LogDebug("loadChainFromJson() done, restored_slots=%zu, missing=%zu", doc["slots"].size(), out_missing.size());

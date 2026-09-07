@@ -35,7 +35,9 @@ public:
 
     const juce::String getApplicationVersion() override
     {
-        return "0.1.0";
+        // Defined by src/tray-app/CMakeLists.txt from the top-level
+        // project(VERSION ...), so the About dialog cannot drift out of date.
+        return JYGLOBALVST_VERSION_STRING;
     }
 
     bool moreThanOneInstanceAllowed() override

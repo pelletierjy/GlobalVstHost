@@ -26,7 +26,7 @@ cmake --build build --config Release --target msi_installer
 .\src\installer\wix\test-msi.ps1 -Test Silent
 ```
 
-**Output:** `build/GlobalVSTHost-1.0.0-x64.msi`
+**Output:** `build/GlobalVSTHost-1.1.0-x64.msi`
 
 ### `wix/product.wxs` — Component Map
 
@@ -88,17 +88,17 @@ Once tests pass:
 
 ```powershell
 # 1. Tag release
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 
 # 2. Create GitHub release manually, or script it:
-gh release create v1.0.0 `
-  --title "Global VST Host v1.0.0" `
+gh release create v1.1.0 `
+  --title "Global VST Host v1.1.0" `
   --notes "Initial release with driverless audio capture and built-in effects" `
-  build/GlobalVSTHost-1.0.0-x64.msi
+  build/GlobalVSTHost-1.1.0-x64.msi
 
 # 3. Compute SHA256 for WinGet manifest
-(Get-FileHash "build\GlobalVSTHost-1.0.0-x64.msi" -Algorithm SHA256).Hash
+(Get-FileHash "build\GlobalVSTHost-1.1.0-x64.msi" -Algorithm SHA256).Hash
 ```
 
 ### Phase 3: WinGet Submission

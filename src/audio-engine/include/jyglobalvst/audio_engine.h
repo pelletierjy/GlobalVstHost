@@ -172,6 +172,10 @@ public:
     virtual void removeSlot(int position) = 0;
     virtual void moveSlot(int from, int to) = 0;
     virtual void setBypass(int position, bool bypassed) = 0;
+    // Optional user-assigned label for a slot, shown beside the plugin name and
+    // persisted with the chain. Whitespace is trimmed and the tag is truncated
+    // to an implementation-defined maximum; an empty tag clears it.
+    virtual void setSlotTag(int position, const std::string& tag) = 0;
     virtual void setParameter(int position, ParamId param, float value) = 0;
     virtual void openEditor(int position) = 0;
     virtual void closeEditor(int position) = 0;
@@ -192,6 +196,13 @@ public:
     // Per-plugin output metering (US4 extension).
     virtual std::vector<float> pluginOutputPeaks() const = 0;
     virtual std::vector<float> pluginOutputRms() const = 0;
+
+    // Spectrum analyser tap: copies up to `max_samples` of recent post-chain
+    // output into `dest` and returns the number actually written. Returns 0
+    // when no tap is available (engine not running, or implementation does not
+    // provide one). Default returns 0 so implementations that predate the tap
+    // are not forced to override.
+    virtual int copyRecentOutputSamples(float* /*dest*/, int /*max_samples*/) const { return 0; }
 };
 
 // Factory. The concrete implementation lives in src/audio-engine/routing/.

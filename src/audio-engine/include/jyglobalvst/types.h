@@ -140,6 +140,7 @@ struct ChainSlotSnapshot
     bool is_failed {false};
     bool editor_open {false};
     std::string file_path; // Source .vst3 path (for preset fallback loading)
+    std::string tag;       // Optional user-assigned label shown beside the plugin name
 };
 
 struct ChainSnapshot

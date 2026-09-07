@@ -230,6 +230,14 @@ private:
         {
             drawSpeakerIcon(g, bounds, false, textColour);
         }
+        else if (text == "TAG")
+        {
+            drawTagIcon(g, bounds, false, textColour);
+        }
+        else if (text == "TAG_SET")
+        {
+            drawTagIcon(g, bounds, true, textColour);
+        }
         else if (text == "?")
         {
             drawQuestionIcon(g, bounds, textColour);
@@ -267,6 +275,7 @@ private:
     {
         return t == "ON" || t == "OFF"
             || t == "SPEAKER_ON" || t == "SPEAKER_OFF"
+            || t == "TAG" || t == "TAG_SET"
             || t == "EQ" || t == "NT" || t == "VL";
     }
 
@@ -375,6 +384,57 @@ private:
         detail.startNewSubPath(c.x, topY + s * 0.1f);
         detail.lineTo(c.x, bandY - s * 0.04f);
         g.strokePath(detail, iconStroke(1.4f));
+    }
+
+    // Shopping / price tag. Outlined grey while the slot carries no tag; green
+    // and scribbled on ("scratched") once a tag has been written. Like the power
+    // icon, state reads from colour, so the passed-in text colour is ignored.
+    void drawTagIcon(juce::Graphics& g, juce::Rectangle<float> bounds, bool hasTag,
+                     juce::Colour /*colour*/) const
+    {
+        const auto c = bounds.getCentre();
+        const float s = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+        const float w = s * 0.40f;
+        const float h = s * 0.58f;
+
+        const juce::Colour markColour = hasTag ? kIconActiveGreen : kIconInactiveGrey;
+
+        // Square-ended body tapering to a point, drawn upright then rotated 45°
+        // so it hangs like a price tag.
+        juce::Path tag;
+        tag.startNewSubPath(-w, -h);
+        tag.lineTo(w, -h);
+        tag.lineTo(w, h * 0.30f);
+        tag.lineTo(0.0f, h);
+        tag.lineTo(-w, h * 0.30f);
+        tag.closeSubPath();
+
+        const float hole = w * 0.30f;
+        juce::Path holePath;
+        holePath.addEllipse(-hole, -h + w * 0.45f - hole, hole * 2.0f, hole * 2.0f);
+
+        const auto place = juce::AffineTransform::rotation(juce::MathConstants<float>::pi * 0.25f)
+                               .translated(c.x, c.y);
+        tag.applyTransform(place);
+        holePath.applyTransform(place);
+
+        g.setColour(markColour.withAlpha(hasTag ? 0.30f : kIconFillAlpha));
+        g.fillPath(tag);
+        g.setColour(markColour);
+        g.strokePath(tag, iconStroke());
+        g.strokePath(holePath, iconStroke(1.4f));
+
+        if (hasTag)
+        {
+            // Two scored lines across the body: the tag has been written on.
+            juce::Path scribble;
+            scribble.startNewSubPath(-w * 0.62f, -h * 0.18f);
+            scribble.lineTo(w * 0.62f, -h * 0.34f);
+            scribble.startNewSubPath(-w * 0.62f, h * 0.22f);
+            scribble.lineTo(w * 0.62f, h * 0.06f);
+            scribble.applyTransform(place);
+            g.strokePath(scribble, iconStroke(1.4f));
+        }
     }
 
     // Universal power symbol (IEC 5009): a ring broken at the top with a stem

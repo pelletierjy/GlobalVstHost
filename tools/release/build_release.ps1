@@ -53,7 +53,7 @@ if (-not $Version) {
         $Version = $Matches[1]
     }
     else {
-        $Version = "0.1.0"
+        $Version = "1.1.0"
     }
 }
 Write-Host "Building JyGlobalVST v$Version ($Configuration)" -ForegroundColor Cyan

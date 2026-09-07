@@ -45,7 +45,10 @@ target_compile_definitions(jyglobalvst_tray PRIVATE
     JUCE_DISPLAY_SPLASH_SCREEN=1
     JUCE_USE_DARK_SPLASH_SCREEN=0
     JUCE_REPORT_APP_USAGE=0
-    JUCE_MODAL_LOOPS_PERMITTED=1)
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    # Single source of truth for the version the app reports (About dialog,
+    # update checks): project(VERSION) in the top-level CMakeLists.txt.
+    JYGLOBALVST_VERSION_STRING="${PROJECT_VERSION}")
 
 file(GLOB_RECURSE _tray_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.cpp"

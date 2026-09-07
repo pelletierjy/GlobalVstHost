@@ -110,7 +110,8 @@ nlohmann::json chainSnapshotToJson(const ChainSnapshot& snap)
              slot.kind == PluginSlotKind::Plugin ? "plugin" : "placeholder"},
             {"position", slot.position},
             {"is_bypassed", slot.is_bypassed},
-            {"is_failed", slot.is_failed}};
+            {"is_failed", slot.is_failed},
+            {"tag", slot.tag}};
         if (slot.kind == PluginSlotKind::Plugin)
         {
             j["plugin_uid"] = jyglobalvst::PluginUidToHexString(slot.ref.plugin_uid);
@@ -313,6 +314,15 @@ void PipeServer::handleClient(HANDLE hPipe)
             auto payload = msg.value("payload", nlohmann::json::object());
             engine_->setBypass(payload.value("position", 0),
                               payload.value("is_bypassed", false));
+            response["result"] = {
+                {"chain_revision", engine_->snapshotChain().chain_revision}};
+            response["error"] = nullptr;
+        }
+        else if (cmd == "chain.set_tag")
+        {
+            auto payload = msg.value("payload", nlohmann::json::object());
+            engine_->setSlotTag(payload.value("position", 0),
+                                payload.value("tag", std::string {}));
             response["result"] = {
                 {"chain_revision", engine_->snapshotChain().chain_revision}};
             response["error"] = nullptr;

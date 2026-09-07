@@ -1,0 +1,46 @@
+// src/tray-app/version_info.rc.in
+//
+// Windows version resource for JyGlobalVST.exe, configured by CMake so the file
+// details always track PROJECT_VERSION — there is nothing to bump by hand here.
+//
+// This replaces the VERSIONINFO block JUCE generates: JUCE emits its resource
+// script once via a custom command that does not depend on the info file, so its
+// version silently went stale (it still said 0.1.0 at 1.0.10.0). The generated
+// script defers to this file when JUCE_USER_DEFINED_RC_FILE is defined, which
+// src/tray-app/CMakeLists.txt does.
+
+#pragma code_page(65001)
+
+#undef  WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION    @JYGLOBALVST_VERSION_COMMA@
+PRODUCTVERSION @JYGLOBALVST_VERSION_COMMA@
+FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
+FILEFLAGS      0x0L
+FILEOS         VOS_NT_WINDOWS32
+FILETYPE       VFT_APP
+FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904E4"
+    BEGIN
+      VALUE "CompanyName",      "JYP Solutions\0"
+      VALUE "FileDescription",  "Global VST Host\0"
+      VALUE "FileVersion",      "@PROJECT_VERSION@\0"
+      VALUE "InternalName",     "JyGlobalVST\0"
+      VALUE "LegalCopyright",   "Copyright (C) 2026 JYP Solutions\0"
+      VALUE "OriginalFilename", "JyGlobalVST.exe\0"
+      VALUE "ProductName",      "Global VST Host\0"
+      VALUE "ProductVersion",   "@PROJECT_VERSION@\0"
+    END
+  END
+
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1252
+  END
+END
