@@ -192,6 +192,29 @@ void PluginChain::setParameter(int position, ParamId param, float value)
     }
 }
 
+void PluginChain::setTag(int position, const std::string& tag)
+{
+    auto* slots = active_slots_.load(std::memory_order_acquire);
+    if (!slots || position < 0 || position >= static_cast<int>(slots->size()))
+    {
+        return;
+    }
+
+    const auto first = tag.find_first_not_of(" \t\r\n");
+    std::string trimmed;
+    if (first != std::string::npos)
+    {
+        const auto last = tag.find_last_not_of(" \t\r\n");
+        trimmed = tag.substr(first, last - first + 1);
+    }
+    if (trimmed.size() > kMaxTagLength)
+    {
+        trimmed.resize(kMaxTagLength);
+    }
+
+    (*slots)[position].tag = std::move(trimmed);
+}
+
 std::vector<ChainSlotSnapshot> PluginChain::snapshot() const
 {
     std::vector<ChainSlotSnapshot> out;
@@ -220,6 +243,7 @@ std::vector<ChainSlotSnapshot> PluginChain::snapshot() const
         snap.position = i;
         snap.is_bypassed = slot.is_bypassed.load(std::memory_order_relaxed);
         snap.is_failed = slot.is_failed.load(std::memory_order_relaxed);
+        snap.tag = slot.tag;
 
         if (slot.instance)
         {

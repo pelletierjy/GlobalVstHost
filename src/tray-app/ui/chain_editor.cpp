@@ -50,13 +50,43 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
              slot_.is_failed ? "true" : "false",
              slot_.ref.name.c_str());
 
+    const bool has_tag = !slot_.tag.empty();
+
     name_label_ = std::make_unique<juce::Label>();
-    name_label_->setText(juce::String(slot_.ref.name.empty() ? "Placeholder" : slot_.ref.name),
+    // A tagged slot reads as "Equalizer - Volume drop": the separator hangs off
+    // the name so the tag label holds nothing but the editable tag text.
+    name_label_->setText(juce::String(slot_.ref.name.empty() ? "Placeholder" : slot_.ref.name)
+                             + (has_tag ? " -" : ""),
                          juce::dontSendNotification);
     // The label is display-only; let mouse drags fall through to the row so the
     // row can be grabbed and dragged by its title.
     name_label_->setInterceptsMouseClicks(false, false);
     addAndMakeVisible(name_label_.get());
+
+    tag_label_ = std::make_unique<juce::Label>();
+    tag_label_->setText(juce::String(slot_.tag), juce::dontSendNotification);
+    tag_label_->setColour(juce::Label::textColourId, kAccentCyan);
+    tag_label_->setEditable(true, true, false);
+    tag_label_->onEditorShow = [this]() {
+        if (auto* ed = tag_label_->getCurrentTextEditor())
+        {
+            ed->setInputRestrictions(kMaxTagChars);
+        }
+    };
+    // Fires for both commit and Escape (which restores the previous text, making
+    // the commit a no-op). Deferred because the editor's text has not been copied
+    // into the label yet at this point.
+    tag_label_->onEditorHide = [this]() {
+        juce::Component::SafePointer<ChainSlotRow> safe {this};
+        juce::MessageManager::callAsync([safe]() {
+            if (safe != nullptr)
+            {
+                safe->commitTag(safe->tag_label_->getText());
+            }
+        });
+    };
+    addChildComponent(tag_label_.get());
+    tag_label_->setVisible(has_tag);
 
     bypass_button_ = std::make_unique<juce::TextButton>(slot_.is_bypassed ? "OFF" : "ON");
     bypass_button_->setClickingTogglesState(true);
@@ -69,6 +99,11 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
     editor_button_ = std::make_unique<juce::TextButton>("E");
     editor_button_->addListener(this);
     addAndMakeVisible(editor_button_.get());
+
+    tag_button_ = std::make_unique<juce::TextButton>(has_tag ? "TAG_SET" : "TAG");
+    tag_button_->setTooltip(has_tag ? "Clear tag" : "Add a tag");
+    tag_button_->addListener(this);
+    addAndMakeVisible(tag_button_.get());
 
     remove_button_ = std::make_unique<juce::TextButton>("X");
     remove_button_->addListener(this);
@@ -96,6 +131,15 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
         bypass_button_->setEnabled(false);
         editor_button_->setEnabled(false);
         remove_button_->setEnabled(false);
+    }
+
+    if (!isDraggable())
+    {
+        // Placeholder / failed slots keep showing an existing tag but cannot be
+        // retagged, matching the other per-slot controls.
+        tag_button_->setEnabled(false);
+        tag_label_->setEditable(false, false, false);
+        tag_label_->setColour(juce::Label::textColourId, kTextDim);
     }
 
     setWantsKeyboardFocus(true);
@@ -149,10 +193,50 @@ void ChainSlotRow::buttonClicked(juce::Button* button)
         LogDebug("  -> Editor button clicked for position %d, calling engine_->openEditor()", position_);
         engine_->openEditor(position_);
     }
+    else if (button == tag_button_.get())
+    {
+        if (slot_.tag.empty())
+        {
+            LogDebug("  -> Tag button clicked, starting inline edit");
+            beginTagEdit();
+        }
+        else
+        {
+            LogDebug("  -> Tag button clicked, clearing tag");
+            engine_->setSlotTag(position_, "");
+        }
+    }
     else if (button == remove_button_.get())
     {
         LogDebug("  -> Remove button clicked");
         engine_->removeSlot(position_);
+    }
+}
+
+void ChainSlotRow::beginTagEdit()
+{
+    tag_label_->setVisible(true);
+    resized();
+    tag_label_->showEditor();
+}
+
+void ChainSlotRow::commitTag(const juce::String& text)
+{
+    const auto trimmed = text.trim().substring(0, kMaxTagChars);
+
+    if (trimmed.toStdString() == slot_.tag)
+    {
+        // Unchanged (including an abandoned edit on an untagged slot): just drop
+        // the temporary label instead of churning the chain revision.
+        tag_label_->setText(juce::String(slot_.tag), juce::dontSendNotification);
+        tag_label_->setVisible(!slot_.tag.empty());
+        resized();
+        return;
+    }
+
+    if (engine_ != nullptr)
+    {
+        engine_->setSlotTag(position_, trimmed.toStdString());
     }
 }
 
@@ -222,8 +306,22 @@ void ChainSlotRow::resized()
     fb.items.add(juce::FlexItem().withWidth(8));
     fb.items.add(juce::FlexItem(*editor_button_).withMinWidth(60).withWidth(60));
     fb.items.add(juce::FlexItem().withWidth(8));
+    fb.items.add(juce::FlexItem(*tag_button_).withMinWidth(44).withWidth(44));
+    fb.items.add(juce::FlexItem().withWidth(8));
     fb.items.add(juce::FlexItem(*remove_button_).withMinWidth(60).withWidth(60));
     fb.performLayout(b);
+
+    // Split the title area so the tag sits immediately after the plugin name
+    // rather than at the far end of the flexible column.
+    if (tag_label_->isVisible())
+    {
+        auto title = name_label_->getBounds();
+        const int text_w =
+            juce::GlyphArrangement::getStringWidthInt(name_label_->getFont(), name_label_->getText()) + 12;
+        const int name_w = juce::jlimit(24, juce::jmax(24, title.getWidth() - 40), text_w);
+        name_label_->setBounds(title.removeFromLeft(name_w));
+        tag_label_->setBounds(title);
+    }
 
     // Keep the horizontal meter vertically centred within the row (max 16 px tall).
     if (meter_ != nullptr)
