@@ -84,7 +84,7 @@ Write-Host 'JyGlobalVST - local MSIX build' -ForegroundColor White
 Write-Host "Repo: $repoRoot"
 
 if (-not $Version) { $Version = Get-VersionFromFile -StoreDir $storeDir }
-if (-not $Version) { $Version = '1.0.0.0' }
+if (-not $Version) { $Version = '1.1.0.0' }
 Write-Host "Version: $Version | Config: $Configuration"
 
 # --- SDK tools ---------------------------------------------------------------
