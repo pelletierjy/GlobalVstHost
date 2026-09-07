@@ -187,6 +187,10 @@ public:
     virtual void removeSlot(int position) = 0;
     virtual void moveSlot(int from, int to) = 0;
     virtual void setBypass(int position, bool bypassed) = 0;
+    // Optional user-assigned label for a slot, shown beside the plugin name and
+    // persisted with the chain. Whitespace is trimmed and the tag is truncated
+    // to an implementation-defined maximum; an empty tag clears it.
+    virtual void setSlotTag(int position, const std::string& tag) = 0;
     virtual void setParameter(int position, ParamId param, float value) = 0;
     virtual void openEditor(int position) = 0;
     virtual void closeEditor(int position) = 0;

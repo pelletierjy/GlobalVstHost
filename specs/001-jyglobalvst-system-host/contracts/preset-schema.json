@@ -91,6 +91,11 @@
           "description": "Display-only hint. Host MUST NOT load a plugin binary from this path; resolution is by (uid, vendor, name) only per FR-022g-2."
         },
         "is_bypassed": { "type": "boolean" },
+        "tag": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Optional user-assigned label shown beside the plugin name. Absent or empty means untagged."
+        },
         "state_chunk_b64": {
           "type": "string",
           "maxLength": 22369622,

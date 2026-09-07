@@ -26,6 +26,7 @@
 #include <atomic>
 #include <array>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace jyglobalvst::engine {
@@ -44,6 +45,9 @@ public:
         // reset on success. Plugin is permanently marked failed only after
         // kMaxConsecutiveFailures, preventing spurious startup failures.
         std::atomic<int> failure_count {0};
+        // Optional user-assigned label. UI-thread only: the audio thread never
+        // reads it, so no atomic/lock is needed on the processBlock path.
+        std::string tag;
 
         Slot() = default;
         Slot(const Slot& other)
@@ -53,6 +57,7 @@ public:
             , is_bypassed(other.is_bypassed.load(std::memory_order_relaxed))
             , is_failed(other.is_failed.load(std::memory_order_relaxed))
             , failure_count(0)
+            , tag(other.tag)
         {
         }
         Slot(Slot&& other) noexcept
@@ -62,6 +67,7 @@ public:
             , is_bypassed(other.is_bypassed.load(std::memory_order_relaxed))
             , is_failed(other.is_failed.load(std::memory_order_relaxed))
             , failure_count(0)
+            , tag(std::move(other.tag))
         {
         }
         Slot& operator=(const Slot& other)
@@ -74,6 +80,7 @@ public:
                 is_bypassed.store(other.is_bypassed.load(std::memory_order_relaxed), std::memory_order_relaxed);
                 is_failed.store(other.is_failed.load(std::memory_order_relaxed), std::memory_order_relaxed);
                 failure_count.store(0, std::memory_order_relaxed);
+                tag = other.tag;
             }
             return *this;
         }
@@ -87,6 +94,7 @@ public:
                 is_bypassed.store(other.is_bypassed.load(std::memory_order_relaxed), std::memory_order_relaxed);
                 is_failed.store(other.is_failed.load(std::memory_order_relaxed), std::memory_order_relaxed);
                 failure_count.store(0, std::memory_order_relaxed);
+                tag = std::move(other.tag);
             }
             return *this;
         }
@@ -112,6 +120,13 @@ public:
     // --- Per-slot state mutations (can be called from audio thread) ------
     void setBypass(int position, bool bypassed);
     void setParameter(int position, ParamId param, float value);
+
+    // --- Per-slot tag (UI thread only) -----------------------------------
+    // Maximum stored tag length; longer input is truncated by setTag().
+    static constexpr std::size_t kMaxTagLength = 32;
+    // Trims surrounding whitespace and truncates to kMaxTagLength. An empty
+    // (or whitespace-only) tag clears the slot's tag.
+    void setTag(int position, const std::string& tag);
 
     // --- Snapshot for UI -------------------------------------------------
     std::vector<ChainSlotSnapshot> snapshot() const;

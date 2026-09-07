@@ -53,6 +53,14 @@ public:
 private:
     bool isDraggable() const noexcept;
 
+    // Shows the (initially empty) tag label and puts it straight into edit mode.
+    void beginTagEdit();
+    // Pushes the edited text to the engine, clearing the tag when it is empty.
+    void commitTag(const juce::String& text);
+
+    // Mirrors PluginChain::kMaxTagLength; the engine trims/truncates as well.
+    static constexpr int kMaxTagChars = 32;
+
     IAudioEngine* engine_;
     int position_;
     ChainSlotSnapshot slot_;
@@ -63,7 +71,9 @@ private:
     std::unique_ptr<juce::TextButton> bypass_button_;
     std::unique_ptr<juce::TextButton> remove_button_;
     std::unique_ptr<juce::TextButton> editor_button_;
+    std::unique_ptr<juce::TextButton> tag_button_;
     std::unique_ptr<juce::Label> name_label_;
+    std::unique_ptr<juce::Label> tag_label_;
     std::unique_ptr<HorizontalMeterPanel> meter_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChainSlotRow)

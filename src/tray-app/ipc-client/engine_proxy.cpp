@@ -462,6 +462,11 @@ void IpcEngineProxy::setBypass(int position, bool bypassed)
                 {{"position", position}, {"is_bypassed", bypassed}});
 }
 
+void IpcEngineProxy::setSlotTag(int position, const std::string& tag)
+{
+    sendCommand("chain.set_tag", {{"position", position}, {"tag", tag}});
+}
+
 void IpcEngineProxy::setParameter(int position, ParamId param, float value)
 {
     sendCommand("chain.set_parameter",
