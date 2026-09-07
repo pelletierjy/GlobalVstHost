@@ -48,6 +48,9 @@ public:
         // Optional user-assigned label. UI-thread only: the audio thread never
         // reads it, so no atomic/lock is needed on the processBlock path.
         std::string tag;
+        // True when this slot owns one of the tray popup's quick-toggle buttons.
+        // UI-thread only, same rationale as tag.
+        bool shortcut {false};
 
         Slot() = default;
         Slot(const Slot& other)
@@ -58,6 +61,7 @@ public:
             , is_failed(other.is_failed.load(std::memory_order_relaxed))
             , failure_count(0)
             , tag(other.tag)
+            , shortcut(other.shortcut)
         {
         }
         Slot(Slot&& other) noexcept
@@ -68,6 +72,7 @@ public:
             , is_failed(other.is_failed.load(std::memory_order_relaxed))
             , failure_count(0)
             , tag(std::move(other.tag))
+            , shortcut(other.shortcut)
         {
         }
         Slot& operator=(const Slot& other)
@@ -81,6 +86,7 @@ public:
                 is_failed.store(other.is_failed.load(std::memory_order_relaxed), std::memory_order_relaxed);
                 failure_count.store(0, std::memory_order_relaxed);
                 tag = other.tag;
+                shortcut = other.shortcut;
             }
             return *this;
         }
@@ -95,6 +101,7 @@ public:
                 is_failed.store(other.is_failed.load(std::memory_order_relaxed), std::memory_order_relaxed);
                 failure_count.store(0, std::memory_order_relaxed);
                 tag = std::move(other.tag);
+                shortcut = other.shortcut;
             }
             return *this;
         }
@@ -127,6 +134,13 @@ public:
     // Trims surrounding whitespace and truncates to kMaxTagLength. An empty
     // (or whitespace-only) tag clears the slot's tag.
     void setTag(int position, const std::string& tag);
+
+    // --- Per-slot tray shortcut (UI thread only) -------------------------
+    // At most this many slots may own a tray popup quick-toggle button.
+    static constexpr int kMaxShortcuts = 2;
+    // Returns false (leaving the chain untouched) when enabling would exceed
+    // kMaxShortcuts, or when position is out of range.
+    bool setShortcut(int position, bool enabled);
 
     // --- Snapshot for UI -------------------------------------------------
     std::vector<ChainSlotSnapshot> snapshot() const;

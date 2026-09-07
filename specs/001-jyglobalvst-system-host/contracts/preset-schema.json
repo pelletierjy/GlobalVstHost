@@ -96,6 +96,10 @@
           "maxLength": 32,
           "description": "Optional user-assigned label shown beside the plugin name. Absent or empty means untagged."
         },
+        "shortcut": {
+          "type": "boolean",
+          "description": "True when this slot owns one of the two tray popup quick-toggle buttons. At most two slots may set it."
+        },
         "state_chunk_b64": {
           "type": "string",
           "maxLength": 22369622,

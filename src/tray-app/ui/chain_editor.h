@@ -24,7 +24,10 @@ class ChainSlotRow : public juce::Component
                         , public juce::DragAndDropTarget
 {
 public:
-    ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSnapshot& slot);
+    // shortcuts_full is true when the two tray shortcut buttons are already
+    // owned by other slots, so this row cannot claim one until the user frees it.
+    ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSnapshot& slot,
+                 bool shortcuts_full);
 
     void buttonClicked(juce::Button* button) override;
     void paint(juce::Graphics& g) override;
@@ -65,6 +68,7 @@ private:
     int position_;
     ChainSlotSnapshot slot_;
 
+    bool shortcuts_full_ {false};
     bool drag_over_ {false};
     bool insert_above_ {true};
 
@@ -72,6 +76,7 @@ private:
     std::unique_ptr<juce::TextButton> remove_button_;
     std::unique_ptr<juce::TextButton> editor_button_;
     std::unique_ptr<juce::TextButton> tag_button_;
+    std::unique_ptr<juce::TextButton> shortcut_button_;
     std::unique_ptr<juce::Label> name_label_;
     std::unique_ptr<juce::Label> tag_label_;
     std::unique_ptr<HorizontalMeterPanel> meter_;
@@ -99,8 +104,14 @@ public:
     // Callback invoked when the user clicks the "+" button to add a plugin.
     std::function<void()> onAddPluginRequested;
 
+    // Mirrors PluginChain::kMaxShortcuts; the engine enforces the cap as well.
+    static constexpr int kMaxShortcuts = 2;
+
 private:
     static constexpr int kRowHeight = 40;
+    // Widened over the original 400 to fit the shortcut button without squeezing
+    // the flexible plugin-name column.
+    static constexpr int kMinContentWidth = 460;
 
     IAudioEngine* engine_;
     std::unique_ptr<juce::Component> content_;

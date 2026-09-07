@@ -6,7 +6,6 @@
 #include "about_diagnostics.h"
 
 #include "builtin-effects/builtin_theme.h"
-#include "builtin-effects/builtin_ids.h"
 
 #include "BinaryData.h"
 
@@ -14,9 +13,11 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
+#include <vector>
 
 #include <windows.h>
 #include <shellapi.h>
@@ -26,16 +27,6 @@
 namespace jyglobalvst::tray {
 
 namespace {
-
-int findPluginByUid(const ChainSnapshot& chain, const PluginUid& uid)
-{
-    for (size_t i = 0; i < chain.slots.size(); ++i)
-    {
-        if (chain.slots[i].ref.plugin_uid == uid)
-            return static_cast<int>(i);
-    }
-    return -1;
-}
 
 void StartupLog(const char* msg)
 {
@@ -92,18 +83,29 @@ private:
 class TrayVolumeContent : public juce::Component
 {
 public:
+    // The tray popup hosts at most this many user-assigned quick-toggle buttons.
+    static constexpr int kMaxShortcutButtons = 2;
+
+    // One popup button: a two-letter label taken from the slot's tag or name,
+    // plus whether the plugin is currently active (i.e. not bypassed).
+    struct ShortcutInfo
+    {
+        juce::String label;
+        juce::String tooltip;
+        bool active {false};
+    };
+
     TrayVolumeContent(float initial_gain, bool audio_running,
                       std::function<void(float)> on_change,
                       std::function<bool()> on_toggle_audio,
                       std::function<void()> on_mute_toggle,
-                      std::function<void()> on_toggle_eq_bypass,
-                      std::function<void()> on_toggle_nt_bypass,
-                      bool has_eq, bool has_nt)
+                      std::function<void(int)> on_toggle_shortcut,
+                      const std::vector<ShortcutInfo>& shortcuts)
         : on_change_(std::move(on_change)), on_toggle_audio_(std::move(on_toggle_audio)),
           on_mute_toggle_(std::move(on_mute_toggle)),
-          on_toggle_eq_bypass_(std::move(on_toggle_eq_bypass)),
-          on_toggle_nt_bypass_(std::move(on_toggle_nt_bypass)),
-          pre_mute_volume_(initial_gain), has_eq_(has_eq), has_nt_(has_nt)
+          on_toggle_shortcut_(std::move(on_toggle_shortcut)),
+          pre_mute_volume_(initial_gain),
+          shortcut_count_(juce::jmin(static_cast<int>(shortcuts.size()), kMaxShortcutButtons))
     {
         title_.setText("Master Volume", juce::dontSendNotification);
         title_.setJustificationType(juce::Justification::centred);
@@ -161,28 +163,23 @@ public:
         };
         addAndMakeVisible(mute_button_);
 
-        if (has_eq_)
+        for (int i = 0; i < shortcut_count_; ++i)
         {
-            eq_button_.setButtonText("EQ");
-            eq_button_.setClickingTogglesState(true);
-            eq_button_.onClick = [this]()
+            auto& b = shortcut_buttons_[static_cast<std::size_t>(i)];
+            b.setButtonText(shortcuts[static_cast<std::size_t>(i)].label);
+            // The label is user-derived, so the look-and-feel cannot recognise it
+            // by text; this flag asks for the green/grey state-text treatment.
+            b.getProperties().set("stateText", true);
+            b.setClickingTogglesState(true);
+            b.setToggleState(shortcuts[static_cast<std::size_t>(i)].active,
+                             juce::dontSendNotification);
+            b.setTooltip(shortcuts[static_cast<std::size_t>(i)].tooltip);
+            b.onClick = [this, i]()
             {
-                if (on_toggle_eq_bypass_)
-                    on_toggle_eq_bypass_();
+                if (on_toggle_shortcut_)
+                    on_toggle_shortcut_(i);
             };
-            addAndMakeVisible(eq_button_);
-        }
-
-        if (has_nt_)
-        {
-            nt_button_.setButtonText("VL");
-            nt_button_.setClickingTogglesState(true);
-            nt_button_.onClick = [this]()
-            {
-                if (on_toggle_nt_bypass_)
-                    on_toggle_nt_bypass_();
-            };
-            addAndMakeVisible(nt_button_);
+            addAndMakeVisible(b);
         }
 
         audio_button_.setButtonText(audio_running ? "ON" : "OFF");
@@ -207,14 +204,7 @@ public:
         auto b = getLocalBounds().reduced(6);
         title_.setBounds(b.removeFromTop(20));
 
-        // Layout buttons at bottom based on what's available
-        int button_count = 1;  // audio_button is always present
-        if (has_eq_)
-            button_count++;
-        if (has_nt_)
-            button_count++;
-
-        // Reserve space for buttons
+        // Reserve space for the bottom button row.
         auto button_area = b.removeFromBottom(26);
         b.removeFromBottom(6);
 
@@ -222,15 +212,11 @@ public:
         juce::FlexBox button_fb;
         button_fb.flexDirection = juce::FlexBox::Direction::row;
         button_fb.items.add(juce::FlexItem(audio_button_).withFlex(1.0f));
-        if (has_nt_)
+        for (int i = 0; i < shortcut_count_; ++i)
         {
             button_fb.items.add(juce::FlexItem().withWidth(4));
-            button_fb.items.add(juce::FlexItem(nt_button_).withFlex(1.0f));
-        }
-        if (has_eq_)
-        {
-            button_fb.items.add(juce::FlexItem().withWidth(4));
-            button_fb.items.add(juce::FlexItem(eq_button_).withFlex(1.0f));
+            button_fb.items.add(
+                juce::FlexItem(shortcut_buttons_[static_cast<std::size_t>(i)]).withFlex(1.0f));
         }
         button_fb.items.add(juce::FlexItem().withWidth(4));
         button_fb.items.add(juce::FlexItem(mute_button_).withFlex(1.0f));
@@ -286,17 +272,17 @@ public:
         updateMuteButtonVisual();
     }
 
-    void setEqBypassed(bool bypassed)
+    // Index is the popup button, 0 or 1, not a chain position.
+    void setShortcutActive(int index, bool active)
     {
-        if (has_eq_)
-            eq_button_.setToggleState(!bypassed, juce::dontSendNotification);
+        if (index >= 0 && index < shortcut_count_)
+        {
+            shortcut_buttons_[static_cast<std::size_t>(index)].setToggleState(
+                active, juce::dontSendNotification);
+        }
     }
 
-    void setNtBypassed(bool bypassed)
-    {
-        if (has_nt_)
-            nt_button_.setToggleState(!bypassed, juce::dontSendNotification);
-    }
+    int shortcutCount() const noexcept { return shortcut_count_; }
 
     void setAudioRunning(bool running)
     {
@@ -319,8 +305,7 @@ private:
     juce::Label title_;
     juce::Slider slider_;
     juce::ToggleButton mute_button_;
-    juce::ToggleButton eq_button_;
-    juce::ToggleButton nt_button_;
+    std::array<juce::ToggleButton, kMaxShortcutButtons> shortcut_buttons_;
     juce::ToggleButton audio_button_;
     std::unique_ptr<MeterPanel> meter_input_l_;
     std::unique_ptr<MeterPanel> meter_input_r_;
@@ -331,13 +316,56 @@ private:
     std::function<void(float)> on_change_;
     std::function<bool()> on_toggle_audio_;
     std::function<void()> on_mute_toggle_;
-    std::function<void()> on_toggle_eq_bypass_;
-    std::function<void()> on_toggle_nt_bypass_;
+    std::function<void(int)> on_toggle_shortcut_;
     bool is_muted_ {false};
     float pre_mute_volume_;
-    bool has_eq_;
-    bool has_nt_;
+    int shortcut_count_ {0};
 };
+
+// Positions of the slots that own a tray shortcut button, in chain order and
+// capped at the number of buttons the popup can show.
+std::vector<int> shortcutPositions(const ChainSnapshot& chain)
+{
+    std::vector<int> out;
+    for (const auto& slot : chain.slots)
+    {
+        if (slot.shortcut)
+        {
+            out.push_back(slot.position);
+            if (static_cast<int>(out.size()) >= TrayVolumeContent::kMaxShortcutButtons)
+            {
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+// Button face: the first two characters of the slot's tag, or of its plugin
+// name when untagged, upper-cased to match the popup's other state buttons.
+juce::String shortcutLabel(const ChainSlotSnapshot& slot)
+{
+    juce::String source = juce::String(slot.tag).trim();
+    if (source.isEmpty())
+    {
+        source = juce::String(slot.ref.name).trim();
+    }
+    return source.substring(0, 2).toUpperCase();
+}
+
+std::vector<TrayVolumeContent::ShortcutInfo> buildShortcutInfos(const ChainSnapshot& chain)
+{
+    std::vector<TrayVolumeContent::ShortcutInfo> out;
+    for (const int pos : shortcutPositions(chain))
+    {
+        const auto& slot = chain.slots[static_cast<std::size_t>(pos)];
+        const juce::String name = juce::String(slot.tag).isNotEmpty()
+                                      ? juce::String(slot.tag)
+                                      : juce::String(slot.ref.name);
+        out.push_back({shortcutLabel(slot), name, !slot.is_bypassed});
+    }
+    return out;
+}
 
 LRESULT CALLBACK mainWindowSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                          UINT_PTR /*uIdSubclass*/, DWORD_PTR dwRefData)
@@ -1353,6 +1381,10 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
         engine_->setBypass(0, true);
         engine_->setBypass(1, true);
         engine_->setBypass(2, true);
+        // Give the tray popup its two default quick-toggle buttons; the user can
+        // reassign them from the chain editor.
+        engine_->setSlotShortcut(0, true);
+        engine_->setSlotShortcut(1, true);
         StartupLog("Default plugins loaded (EQ, Volume Leveler, and Compressor in bypass mode)");
     }
 
@@ -1827,23 +1859,9 @@ void MainWindow::showTrayVolumePopup()
                 applyMasterVolume(pre_mute_volume_, true);
             }
         },
-        [this]() { toggleEqBypass(); },
-        [this]() { toggleNtBypass(); },
-        hasEqPlugin(),
-        hasNtPlugin());
+        [this](int index) { toggleShortcutBypass(index); },
+        buildShortcutInfos(engine_->snapshotChain()));
     content->setLookAndFeel(&custom_laf_);
-
-    // Set initial bypass states for EQ and NT plugins
-    const auto chain = engine_->snapshotChain();
-    {
-        const int eq_pos = findPluginByUid(chain, engine::builtin::EQ_UID);
-        if (eq_pos >= 0)
-            content->setEqBypassed(chain.slots[eq_pos].is_bypassed);
-
-        const int nt_pos = findPluginByUid(chain, engine::builtin::NIGHTTIME_UID);
-        if (nt_pos >= 0)
-            content->setNtBypassed(chain.slots[nt_pos].is_bypassed);
-    }
 
     // Update initial meter levels (converted to dB)
     {
@@ -1925,39 +1943,22 @@ bool MainWindow::handleTrayMessage(UINT msg, LPARAM /*wParam*/)
 }
 
 // =========================================================================
-// Helper methods for built-in effect plugins
+// Tray popup shortcut buttons
 // =========================================================================
 
-bool MainWindow::hasEqPlugin() const
+void MainWindow::toggleShortcutBypass(int button_index)
 {
+    // Re-resolve the assignment on every click: the chain may have been
+    // reordered, or a slot removed, since the popup was opened.
     const auto chain = engine_->snapshotChain();
-    return findPluginByUid(chain, engine::builtin::EQ_UID) >= 0;
-}
-
-bool MainWindow::hasNtPlugin() const
-{
-    const auto chain = engine_->snapshotChain();
-    return findPluginByUid(chain, engine::builtin::NIGHTTIME_UID) >= 0;
-}
-
-void MainWindow::toggleEqBypass()
-{
-    const auto chain = engine_->snapshotChain();
-    const int pos = findPluginByUid(chain, engine::builtin::EQ_UID);
-    if (pos >= 0)
+    const auto positions = shortcutPositions(chain);
+    if (button_index < 0 || button_index >= static_cast<int>(positions.size()))
     {
-        engine_->setBypass(pos, !chain.slots[pos].is_bypassed);
+        return;
     }
-}
 
-void MainWindow::toggleNtBypass()
-{
-    const auto chain = engine_->snapshotChain();
-    const int pos = findPluginByUid(chain, engine::builtin::NIGHTTIME_UID);
-    if (pos >= 0)
-    {
-        engine_->setBypass(pos, !chain.slots[pos].is_bypassed);
-    }
+    const int pos = positions[static_cast<std::size_t>(button_index)];
+    engine_->setBypass(pos, !chain.slots[static_cast<std::size_t>(pos)].is_bypassed);
 }
 
 // =========================================================================
@@ -2104,6 +2105,7 @@ void MainWindow::buildUI()
     theme_selector_->addItem("Neon Orange", static_cast<int>(CustomLookAndFeel::ThemeId::NeonOrange));
     theme_selector_->addItem("Neon Red",    static_cast<int>(CustomLookAndFeel::ThemeId::NeonRed));
     theme_selector_->addItem("Monochrome",  static_cast<int>(CustomLookAndFeel::ThemeId::Mono));
+    theme_selector_->addItem("Light",       static_cast<int>(CustomLookAndFeel::ThemeId::Light));
     theme_selector_->setSelectedId(static_cast<int>(CustomLookAndFeel::ThemeId::NeonBlue),
                                    juce::dontSendNotification);
     theme_selector_->addListener(this);
@@ -2894,7 +2896,7 @@ void MainWindow::handleLoadPreset()
                 if (preset_doc.contains("theme_id") && preset_doc["theme_id"].is_number_integer())
                 {
                     const int tid = preset_doc["theme_id"].get<int>();
-                    if (tid >= 1 && tid <= 6)
+                    if (tid >= 1 && tid <= 7)
                     {
                         applyThemeChange(static_cast<CustomLookAndFeel::ThemeId>(tid));
                         theme_selector_->setSelectedId(tid, juce::dontSendNotification);
@@ -2922,7 +2924,7 @@ void MainWindow::handleAbout()
 
     // The running app is the authority; the literal only covers a host with no
     // JUCEApplication instance (unit-test harnesses).
-    juce::String version = "1.0.13.0";
+    juce::String version = "1.1.0.0";
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 
@@ -3190,6 +3192,20 @@ void MainWindow::refreshMeters()
                 linearToDb(frame.input_peak_r), linearToDb(frame.input_rms_r),
                 linearToDb(frame.output_peak_l), linearToDb(frame.output_rms_l),
                 linearToDb(frame.output_peak_r), linearToDb(frame.output_rms_r));
+
+            // Keep the shortcut toggles in step with bypass changes made
+            // elsewhere while the popup is open. A shortcut assigned or cleared
+            // meanwhile still needs the popup reopened to gain or lose a button.
+            if (engine_ != nullptr && popup->shortcutCount() > 0)
+            {
+                const auto chain = engine_->snapshotChain();
+                const auto positions = shortcutPositions(chain);
+                for (int i = 0; i < static_cast<int>(positions.size()); ++i)
+                {
+                    const auto& slot = chain.slots[static_cast<std::size_t>(positions[static_cast<std::size_t>(i)])];
+                    popup->setShortcutActive(i, !slot.is_bypassed);
+                }
+            }
         }
         else
         {

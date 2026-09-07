@@ -145,6 +145,7 @@ public:
     void moveSlot(int from, int to) override;
     void setBypass(int position, bool bypassed) override;
     void setSlotTag(int position, const std::string& tag) override;
+    void setSlotShortcut(int position, bool enabled) override;
     void setParameter(int position, ParamId param, float value) override;
     void openEditor(int position) override;
     void closeEditor(int position) override;
@@ -187,6 +188,9 @@ private:
     // Loads slots+state from a preset JSON doc. Caller must hold control_mutex_.
     // Does not clear the chain or touch device/audio settings.
     void loadChainFromJson(const nlohmann::json& doc, std::vector<MissingPluginInfo>& out_missing);
+    // One-time default for chains saved before tray shortcuts existed: give the
+    // built-in Volume Leveler and Equalizer the two buttons they used to own.
+    void assignDefaultShortcuts();
     void notifyOnUiThread(std::function<void(IAudioEngineListener&)> fn);
 
     friend class DeviceWatchdog;

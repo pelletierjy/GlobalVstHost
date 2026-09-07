@@ -467,6 +467,11 @@ void IpcEngineProxy::setSlotTag(int position, const std::string& tag)
     sendCommand("chain.set_tag", {{"position", position}, {"tag", tag}});
 }
 
+void IpcEngineProxy::setSlotShortcut(int position, bool enabled)
+{
+    sendCommand("chain.set_shortcut", {{"position", position}, {"enabled", enabled}});
+}
+
 void IpcEngineProxy::setParameter(int position, ParamId param, float value)
 {
     sendCommand("chain.set_parameter",

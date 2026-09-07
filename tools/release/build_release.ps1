@@ -8,7 +8,7 @@
     embeds version into manifest, and outputs SHA-256 hashes.
 
 .PARAMETER Version
-    Semantic version to embed (e.g. "0.1.0"). Defaults to the CMake project version.
+    Semantic version to embed (e.g. "1.1.0.0"). Defaults to the CMake project version.
 
 .PARAMETER Configuration
     CMake build configuration: Release or Debug. Default: Release.
@@ -53,7 +53,7 @@ if (-not $Version) {
         $Version = $Matches[1]
     }
     else {
-        $Version = "0.1.0"
+        $Version = "1.1.0.0"
     }
 }
 Write-Host "Building JyGlobalVST v$Version ($Configuration)" -ForegroundColor Cyan

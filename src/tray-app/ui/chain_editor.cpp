@@ -6,6 +6,7 @@
 #include "custom_look_and_feel.h"
 
 #include <windows.h>
+#include <algorithm>
 #include <cstdarg>
 
 namespace jyglobalvst::tray {
@@ -38,10 +39,12 @@ float linearToDb(float linear)
 // ChainSlotRow
 // =========================================================================
 
-ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSnapshot& slot)
+ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSnapshot& slot,
+                           bool shortcuts_full)
     : engine_(engine)
     , position_(position)
     , slot_(slot)
+    , shortcuts_full_(shortcuts_full)
 {
     LogDebug("ChainSlotRow::ctor: position=%d, kind=%s, is_bypassed=%s, is_failed=%s, name='%s'",
              position,
@@ -105,6 +108,13 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
     tag_button_->addListener(this);
     addAndMakeVisible(tag_button_.get());
 
+    shortcut_button_ = std::make_unique<juce::TextButton>(slot_.shortcut ? "SHORTCUT_SET" : "SHORTCUT");
+    shortcut_button_->setTooltip(slot_.shortcut  ? "Remove this plugin's tray shortcut"
+                                 : shortcuts_full_ ? "Two tray shortcuts are already assigned"
+                                                   : "Give this plugin a tray shortcut button");
+    shortcut_button_->addListener(this);
+    addAndMakeVisible(shortcut_button_.get());
+
     remove_button_ = std::make_unique<juce::TextButton>("X");
     remove_button_->addListener(this);
     addAndMakeVisible(remove_button_.get());
@@ -138,8 +148,15 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
         // Placeholder / failed slots keep showing an existing tag but cannot be
         // retagged, matching the other per-slot controls.
         tag_button_->setEnabled(false);
+        shortcut_button_->setEnabled(false);
         tag_label_->setEditable(false, false, false);
         tag_label_->setColour(juce::Label::textColourId, kTextDim);
+    }
+
+    // A row that holds no shortcut cannot claim one while both are taken.
+    if (!slot_.shortcut && shortcuts_full_)
+    {
+        shortcut_button_->setEnabled(false);
     }
 
     setWantsKeyboardFocus(true);
@@ -204,6 +221,32 @@ void ChainSlotRow::buttonClicked(juce::Button* button)
         {
             LogDebug("  -> Tag button clicked, clearing tag");
             engine_->setSlotTag(position_, "");
+        }
+    }
+    else if (button == shortcut_button_.get())
+    {
+        if (slot_.shortcut)
+        {
+            LogDebug("  -> Shortcut button clicked, releasing tray shortcut");
+            engine_->setSlotShortcut(position_, false);
+        }
+        else
+        {
+            // Re-count from the fresh snapshot rather than trusting the flag
+            // captured at construction; the engine rejects a third assignment
+            // anyway, this just keeps the click from being a silent no-op.
+            const int assigned = static_cast<int>(
+                std::count_if(snapshot.slots.begin(), snapshot.slots.end(),
+                              [](const ChainSlotSnapshot& s) { return s.shortcut; }));
+            if (assigned < ChainEditor::kMaxShortcuts)
+            {
+                LogDebug("  -> Shortcut button clicked, claiming tray shortcut");
+                engine_->setSlotShortcut(position_, true);
+            }
+            else
+            {
+                LogDebug("  -> Shortcut button clicked but both shortcuts are taken");
+            }
         }
     }
     else if (button == remove_button_.get())
@@ -307,6 +350,8 @@ void ChainSlotRow::resized()
     fb.items.add(juce::FlexItem(*editor_button_).withMinWidth(60).withWidth(60));
     fb.items.add(juce::FlexItem().withWidth(8));
     fb.items.add(juce::FlexItem(*tag_button_).withMinWidth(44).withWidth(44));
+    fb.items.add(juce::FlexItem().withWidth(8));
+    fb.items.add(juce::FlexItem(*shortcut_button_).withMinWidth(44).withWidth(44));
     fb.items.add(juce::FlexItem().withWidth(8));
     fb.items.add(juce::FlexItem(*remove_button_).withMinWidth(60).withWidth(60));
     fb.performLayout(b);
@@ -505,12 +550,17 @@ void ChainEditor::refreshFromEngine()
     rows_.clear();
 
     const auto snapshot = engine_->snapshotChain();
-    const int w = std::max(getWidth(), 400);
+    const int assigned_shortcuts = static_cast<int>(
+        std::count_if(snapshot.slots.begin(), snapshot.slots.end(),
+                      [](const ChainSlotSnapshot& s) { return s.shortcut; }));
+    const bool shortcuts_full = assigned_shortcuts >= ChainEditor::kMaxShortcuts;
+    const int w = std::max(getWidth(), kMinContentWidth);
 
     int y = 0;
     for (std::size_t i = 0; i < snapshot.slots.size(); ++i)
     {
-        auto row = std::make_unique<ChainSlotRow>(engine_, static_cast<int>(i), snapshot.slots[i]);
+        auto row = std::make_unique<ChainSlotRow>(engine_, static_cast<int>(i), snapshot.slots[i],
+                                                  shortcuts_full);
         row->setBounds(0, y, w, kRowHeight);
         row->onReorderRequest = [this](int from, int to) {
             LogDebug("ChainEditor: moveSlot(%d, %d)", from, to);
@@ -533,7 +583,7 @@ void ChainEditor::refreshFromEngine()
 void ChainEditor::resized()
 {
     juce::Viewport::resized();
-    const int w = std::max(getWidth(), 400);
+    const int w = std::max(getWidth(), kMinContentWidth);
     for (int i = 0; i < static_cast<int>(rows_.size()); ++i)
         rows_[i]->setBounds(0, i * kRowHeight, w, kRowHeight);
     if (add_plugin_button_)

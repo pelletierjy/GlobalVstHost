@@ -96,3 +96,51 @@ TEST(PresetValidatorTest, Base64RoundTrip)
     juce::MemoryBlock result(decoded.data(), decoded.size());
     EXPECT_EQ(result.toString().toStdString(), "hello world");
 }
+
+namespace {
+
+// Minimal well-formed document with a single plugin slot the caller can amend.
+nlohmann::json makeDocWithSlot(const nlohmann::json& extra_slot_fields)
+{
+    nlohmann::json slot;
+    slot["position"] = 0;
+    slot["plugin_uid"] = std::string(32, '0');
+    slot["plugin_vendor"] = "V";
+    slot["plugin_name"] = "P";
+    slot["is_bypassed"] = false;
+    for (auto it = extra_slot_fields.begin(); it != extra_slot_fields.end(); ++it)
+    {
+        slot[it.key()] = it.value();
+    }
+
+    nlohmann::json doc;
+    doc["schema_version"] = 1;
+    doc["preset_name"] = "Test";
+    doc["created_at"] = "2026-06-06T12:00:00Z";
+    doc["updated_at"] = "2026-06-06T12:00:00Z";
+    doc["target_buffer_size"] = 256;
+    doc["slots"] = nlohmann::json::array({slot});
+    return doc;
+}
+
+}  // namespace
+
+TEST(PresetValidatorTest, AcceptsShortcutFlagOnSlot)
+{
+    auto errors = validatePresetDocument(makeDocWithSlot({{"shortcut", true}}), 1024);
+    EXPECT_TRUE(errors.empty());
+}
+
+TEST(PresetValidatorTest, RejectsNonBooleanShortcut)
+{
+    auto errors = validatePresetDocument(makeDocWithSlot({{"shortcut", "yes"}}), 1024);
+    ASSERT_EQ(errors.size(), 1u);
+    EXPECT_NE(errors[0].message.find("boolean"), std::string::npos);
+}
+
+TEST(PresetValidatorTest, StillRejectsUnknownSlotField)
+{
+    auto errors = validatePresetDocument(makeDocWithSlot({{"shortcut_evil", true}}), 1024);
+    ASSERT_EQ(errors.size(), 1u);
+    EXPECT_NE(errors[0].message.find("unknown field"), std::string::npos);
+}

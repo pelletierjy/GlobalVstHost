@@ -20,9 +20,10 @@ constexpr std::array<const char*, 8> kAllowedTopLevel {
     "updated_at",     "target_sample_rate",   "target_buffer_size",
     "target_device_friendly_name",            "slots"};
 
-constexpr std::array<const char*, 8> kAllowedSlotKeys {
+constexpr std::array<const char*, 9> kAllowedSlotKeys {
     "position",       "plugin_uid",    "plugin_vendor",   "plugin_name",
-    "plugin_path_hint", "is_bypassed", "state_chunk_b64", "tag"};
+    "plugin_path_hint", "is_bypassed", "state_chunk_b64", "tag",
+    "shortcut"};
 
 bool isHexUid(const std::string& s)
 {
@@ -116,6 +117,10 @@ void validateSlot(const nlohmann::json& slot, int expected_position, ValidationR
     if (slot.contains("tag") && !slot["tag"].is_string())
     {
         out.addError(path + "/tag", "must be a string");
+    }
+    if (slot.contains("shortcut") && !slot["shortcut"].is_boolean())
+    {
+        out.addError(path + "/shortcut", "must be boolean");
     }
     if (slot.contains("state_chunk_b64"))
     {
