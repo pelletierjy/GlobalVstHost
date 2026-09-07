@@ -275,6 +275,7 @@ nlohmann::json serializePreset(const PluginChain& chain,
         slot["state_chunk_b64"] = base64Encode(state_chunk);
         slot["plugin_path_hint"] = snap.file_path;
         slot["tag"] = snap.tag;
+        slot["shortcut"] = snap.shortcut;
         slots.push_back(std::move(slot));
     }
     doc["slots"] = std::move(slots);

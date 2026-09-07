@@ -19,6 +19,7 @@
 #include "stall_supervisor.h"
 
 #include "../builtin-effects/builtin_effect_registry.h"
+#include "../builtin-effects/builtin_ids.h"
 #include "../chain/preset_serializer.h"
 #include "../vst-host/default_scan_paths.h"
 
@@ -1278,6 +1279,34 @@ void AudioEngineImpl::setSlotTag(int position, const std::string& tag)
     rebumpChain();
 }
 
+void AudioEngineImpl::setSlotShortcut(int position, bool enabled)
+{
+    if (position < 0)
+    {
+        LogDebug("setSlotShortcut: Invalid position %d (negative)", position);
+        return;
+    }
+
+    if (!plugin_chain_)
+    {
+        LogDebug("setSlotShortcut: plugin_chain_ is null");
+        return;
+    }
+
+    if (position >= static_cast<int>(plugin_chain_->snapshot().size()))
+    {
+        LogDebug("setSlotShortcut: Position %d out of bounds", position);
+        return;
+    }
+
+    // A rejected assignment (the two shortcuts are already taken) leaves the
+    // chain untouched, so there is nothing for the UI to redraw.
+    if (plugin_chain_->setShortcut(position, enabled))
+    {
+        rebumpChain();
+    }
+}
+
 void AudioEngineImpl::setParameter(int position, ParamId param, float value)
 {
     if (position < 0)
@@ -1706,6 +1735,9 @@ void AudioEngineImpl::loadChainFromJson(const nlohmann::json& doc,
     }
 
     const auto& slots = doc["slots"];
+    // Chains written before tray shortcuts existed carry no "shortcut" key at
+    // all; those get a one-time default assignment after the loop.
+    bool any_shortcut_key = false;
     for (std::size_t i = 0; i < slots.size(); ++i)
     {
         const auto& slot = slots[i];
@@ -1832,8 +1864,38 @@ void AudioEngineImpl::loadChainFromJson(const nlohmann::json& doc,
         {
             plugin_chain_->setTag(static_cast<int>(i), tag);
         }
+
+        if (slot.contains("shortcut"))
+        {
+            any_shortcut_key = true;
+            if (slot.value("shortcut", false))
+            {
+                plugin_chain_->setShortcut(static_cast<int>(i), true);
+            }
+        }
+    }
+
+    if (!any_shortcut_key)
+    {
+        assignDefaultShortcuts();
     }
     LogDebug("loadChainFromJson() done, restored_slots=%zu, missing=%zu", doc["slots"].size(), out_missing.size());
+}
+
+void AudioEngineImpl::assignDefaultShortcuts()
+{
+    const auto snap = plugin_chain_->snapshot();
+    for (const auto& uid : {builtin::NIGHTTIME_UID, builtin::EQ_UID})
+    {
+        for (const auto& slot : snap)
+        {
+            if (slot.ref.plugin_uid == uid)
+            {
+                plugin_chain_->setShortcut(slot.position, true);
+                break;
+            }
+        }
+    }
 }
 
 void AudioEngineImpl::restoreChain(const std::filesystem::path& path)

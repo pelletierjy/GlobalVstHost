@@ -60,6 +60,7 @@ public:
         NeonOrange = 4,
         Mono       = 5,
         NeonRed    = 6,
+        Light      = 7,
     };
 
     CustomLookAndFeel()
@@ -137,7 +138,7 @@ public:
 
         // State buttons (power / mute / EQ / NT) convey on/off through their
         // green/grey drawing, so they skip the cyan toggle frame.
-        if (button.getToggleState() && !isStateButtonText(button.getButtonText()))
+        if (button.getToggleState() && !isStateButton(button))
         {
             g.setColour(colors_.accentCyan);
             g.drawRoundedRectangle(bounds, radius, 1.5f);
@@ -174,7 +175,7 @@ public:
 
         // State buttons (power / mute / EQ / NT) — e.g. the tray popup toggles —
         // show on/off via green/grey, so they skip the cyan toggle frame.
-        if (button.getToggleState() && !isStateButtonText(button.getButtonText()))
+        if (button.getToggleState() && !isStateButton(button))
         {
             g.setColour(colors_.accentCyan);
             g.drawRoundedRectangle(bounds, radius, 1.5f);
@@ -238,6 +239,14 @@ private:
         {
             drawTagIcon(g, bounds, true, textColour);
         }
+        else if (text == "SHORTCUT")
+        {
+            drawShortcutIcon(g, bounds, false, textColour);
+        }
+        else if (text == "SHORTCUT_SET")
+        {
+            drawShortcutIcon(g, bounds, true, textColour);
+        }
         else if (text == "?")
         {
             drawQuestionIcon(g, bounds, textColour);
@@ -246,7 +255,7 @@ private:
         {
             drawPlusIcon(g, bounds, textColour);
         }
-        else if (text == "EQ" || text == "NT" || text == "VL")
+        else if (isStateTextButton(button))
         {
             // Text state buttons: green when active (toggled on), grey when off —
             // same language as the power/leaf icons, no cyan frame.
@@ -332,7 +341,23 @@ private:
         return t == "ON" || t == "OFF"
             || t == "SPEAKER_ON" || t == "SPEAKER_OFF"
             || t == "TAG" || t == "TAG_SET"
+            || t == "SHORTCUT" || t == "SHORTCUT_SET"
             || t == "EQ" || t == "NT" || t == "VL";
+    }
+
+    // Buttons whose label is user-supplied (the tray popup's shortcut toggles
+    // carry two letters taken from a plugin name or tag) cannot be recognised by
+    // their text, so they flag themselves with this component property instead.
+    static bool isStateTextButton(const juce::Button& b)
+    {
+        const auto t = b.getButtonText();
+        return static_cast<bool>(b.getProperties().getWithDefault("stateText", false))
+            || t == "EQ" || t == "NT" || t == "VL";
+    }
+
+    static bool isStateButton(const juce::Button& b)
+    {
+        return isStateButtonText(b.getButtonText()) || isStateTextButton(b);
     }
 
     // Shared stroke for all vector icons: rounded caps + joints and a common
@@ -491,6 +516,55 @@ private:
             scribble.applyTransform(place);
             g.strokePath(scribble, iconStroke(1.4f));
         }
+    }
+
+    // Shortcut mark: a rounded frame with a diagonal arrow springing out of its
+    // top-right corner, echoing the familiar desktop shortcut overlay. Outlined
+    // grey while the slot owns no tray button; green and filled once assigned.
+    // State reads from colour, so the passed-in text colour is ignored.
+    void drawShortcutIcon(juce::Graphics& g, juce::Rectangle<float> bounds, bool assigned,
+                          juce::Colour /*colour*/) const
+    {
+        const auto c = bounds.getCentre();
+        const float s = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+        const float r = s * 0.52f;
+
+        const juce::Colour markColour = assigned ? kIconActiveGreen : kIconInactiveGrey;
+
+        // Frame, open at the top-right so the arrow reads as leaving it.
+        juce::Path frame;
+        frame.startNewSubPath(c.x + r * 0.15f, c.y - r);
+        frame.lineTo(c.x - r * 0.72f, c.y - r);
+        frame.quadraticTo(c.x - r, c.y - r, c.x - r, c.y - r * 0.72f);
+        frame.lineTo(c.x - r, c.y + r * 0.72f);
+        frame.quadraticTo(c.x - r, c.y + r, c.x - r * 0.72f, c.y + r);
+        frame.lineTo(c.x + r * 0.72f, c.y + r);
+        frame.quadraticTo(c.x + r, c.y + r, c.x + r, c.y + r * 0.72f);
+        frame.lineTo(c.x + r, c.y - r * 0.15f);
+
+        g.setColour(markColour.withAlpha(assigned ? 0.30f : kIconFillAlpha));
+        g.fillPath(frame);
+        g.setColour(markColour);
+        g.strokePath(frame, iconStroke());
+
+        // Diagonal arrow breaking out through the open corner.
+        const float tip_x = c.x + r * 0.92f;
+        const float tip_y = c.y - r * 0.92f;
+        juce::Path shaft;
+        shaft.startNewSubPath(c.x - r * 0.12f, c.y + r * 0.12f);
+        shaft.lineTo(tip_x, tip_y);
+        g.strokePath(shaft, iconStroke());
+
+        juce::Path head;
+        head.startNewSubPath(tip_x - r * 0.62f, tip_y);
+        head.lineTo(tip_x, tip_y);
+        head.lineTo(tip_x, tip_y + r * 0.62f);
+        if (assigned)
+        {
+            head.closeSubPath();
+            g.fillPath(head);
+        }
+        g.strokePath(head, iconStroke(1.4f));
     }
 
     // Universal power symbol (IEC 5009): a ring broken at the top with a stem
@@ -913,6 +987,13 @@ private:
                      C(0xFFE8E8E8), C(0xFF888888),
                      C(0xFF222222), C(0xFF333333), C(0xFF111111),
                      C(0xFF080808), C(0xFFCCCCCC), C(0xFFAAAAAA) };
+
+        case ThemeId::Light:
+            return { C(0xFFF2F4F8), C(0xFFFFFFFF), C(0xFFD3D9E3),
+                     C(0xFF0077C2), C(0xFF2962FF), C(0x400077C2),
+                     C(0xFF1A1F2B), C(0xFF5F6B80),
+                     C(0xFFE7EBF2), C(0xFFD5DCE8), C(0xFFDDE2EA),
+                     C(0xFFE9ECF2), C(0xFFB0009E), C(0xFFD50032) };
 
         default:
             return colorsForTheme(ThemeId::NeonBlue);

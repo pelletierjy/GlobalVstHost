@@ -23,13 +23,13 @@ public:
     // suppress_slots_due_to_preset_override (FR-022e) skips the write entirely: an
     // explicit preset load overrides the auto-save, so the next launch must restore
     // that preset rather than a stale auto-save file.
-    // theme_id is the active ThemeId cast to int (1–6).
+    // theme_id is the active ThemeId cast to int (1–7).
     void write(IAudioEngine* engine, bool suppress_slots_due_to_preset_override,
                int theme_id = 1);
 
     // Deserialize and apply to engine. Returns true if restored.
     // If out_audio_running is non-null, set to the persisted running state.
-    // If out_theme_id is non-null, set to the persisted theme (1–6, default 1).
+    // If out_theme_id is non-null, set to the persisted theme (1–7, default 1).
     bool restore(IAudioEngine* engine, bool* out_audio_running = nullptr,
                  int* out_theme_id = nullptr) const;
 

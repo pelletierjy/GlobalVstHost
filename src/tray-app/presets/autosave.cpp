@@ -75,6 +75,7 @@ void AutoSaveStore::write(IAudioEngine* engine, bool suppress_slots_due_to_prese
         s["is_bypassed"] = slot.is_bypassed;
         s["kind"] = (slot.kind == PluginSlotKind::Placeholder) ? "placeholder" : "plugin";
         s["tag"] = slot.tag;
+        s["shortcut"] = slot.shortcut;
         slots.push_back(std::move(s));
     }
     doc["slots"] = std::move(slots);
@@ -163,6 +164,7 @@ bool AutoSaveStore::restore(IAudioEngine* engine, bool* out_audio_running, int* 
             PluginRef ref;
             bool is_bypassed;
             std::string tag;
+            bool shortcut;
         };
         std::vector<SlotEntry> to_restore;
 
@@ -177,6 +179,7 @@ bool AutoSaveStore::restore(IAudioEngine* engine, bool* out_audio_running, int* 
             entry.position    = s.value("position", 0);
             entry.is_bypassed = s.value("is_bypassed", false);
             entry.tag         = s.value("tag", std::string {});
+            entry.shortcut    = s.value("shortcut", false);
 
             if (s.contains("plugin_uid") && s["plugin_uid"].is_string())
                 entry.ref.plugin_uid = HexStringToPluginUid(s["plugin_uid"].get<std::string>());
@@ -208,6 +211,8 @@ bool AutoSaveStore::restore(IAudioEngine* engine, bool* out_audio_running, int* 
                     engine->setBypass(slot.position, true);
                 if (!slot.tag.empty())
                     engine->setSlotTag(slot.position, slot.tag);
+                if (slot.shortcut)
+                    engine->setSlotShortcut(slot.position, true);
             }
         }
     }
@@ -227,7 +232,7 @@ bool AutoSaveStore::restore(IAudioEngine* engine, bool* out_audio_running, int* 
         if (doc.contains("theme_id") && doc["theme_id"].is_number_integer())
         {
             int tid = doc["theme_id"].get<int>();
-            if (tid >= 1 && tid <= 6)
+            if (tid >= 1 && tid <= 7)
                 *out_theme_id = tid;
         }
     }

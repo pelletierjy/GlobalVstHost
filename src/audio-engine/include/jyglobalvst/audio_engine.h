@@ -191,6 +191,10 @@ public:
     // persisted with the chain. Whitespace is trimmed and the tag is truncated
     // to an implementation-defined maximum; an empty tag clears it.
     virtual void setSlotTag(int position, const std::string& tag) = 0;
+    // Assigns or clears this slot's tray popup quick-toggle button. At most two
+    // slots may hold a shortcut at once; enabling a third is a silent no-op, so
+    // the user must clear one first. Persisted with the chain.
+    virtual void setSlotShortcut(int position, bool enabled) = 0;
     virtual void setParameter(int position, ParamId param, float value) = 0;
     virtual void openEditor(int position) = 0;
     virtual void closeEditor(int position) = 0;

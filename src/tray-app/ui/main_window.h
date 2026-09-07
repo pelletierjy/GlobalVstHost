@@ -165,10 +165,8 @@ private:
     void applyThemeChange(CustomLookAndFeel::ThemeId id);
     void applyTooltips();
     void saveWindowStateIfNeeded();
-    bool hasEqPlugin() const;
-    bool hasNtPlugin() const;
-    void toggleEqBypass();
-    void toggleNtBypass();
+    // Toggles bypass on the plugin behind tray popup button 0 or 1.
+    void toggleShortcutBypass(int button_index);
     void updateMuteButtonVisual(bool muted);
 
     // Timer callback to poll CPU/latency and refresh UI at 10 Hz.

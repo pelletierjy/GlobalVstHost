@@ -215,6 +215,34 @@ void PluginChain::setTag(int position, const std::string& tag)
     (*slots)[position].tag = std::move(trimmed);
 }
 
+bool PluginChain::setShortcut(int position, bool enabled)
+{
+    auto* slots = active_slots_.load(std::memory_order_acquire);
+    if (!slots || position < 0 || position >= static_cast<int>(slots->size()))
+    {
+        return false;
+    }
+
+    if (enabled)
+    {
+        int assigned = 0;
+        for (int i = 0; i < static_cast<int>(slots->size()); ++i)
+        {
+            if (i != position && (*slots)[i].shortcut)
+            {
+                ++assigned;
+            }
+        }
+        if (assigned >= kMaxShortcuts)
+        {
+            return false;
+        }
+    }
+
+    (*slots)[position].shortcut = enabled;
+    return true;
+}
+
 std::vector<ChainSlotSnapshot> PluginChain::snapshot() const
 {
     std::vector<ChainSlotSnapshot> out;
@@ -244,6 +272,7 @@ std::vector<ChainSlotSnapshot> PluginChain::snapshot() const
         snap.is_bypassed = slot.is_bypassed.load(std::memory_order_relaxed);
         snap.is_failed = slot.is_failed.load(std::memory_order_relaxed);
         snap.tag = slot.tag;
+        snap.shortcut = slot.shortcut;
 
         if (slot.instance)
         {
