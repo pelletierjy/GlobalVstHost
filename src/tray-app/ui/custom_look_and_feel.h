@@ -989,11 +989,13 @@ private:
                      C(0xFF080808), C(0xFFCCCCCC), C(0xFFAAAAAA) };
 
         case ThemeId::Light:
-            return { C(0xFFF2F4F8), C(0xFFFFFFFF), C(0xFFD3D9E3),
-                     C(0xFF0077C2), C(0xFF2962FF), C(0x400077C2),
+            // Light grey ground with near-white panels, so the panels read as
+            // raised instead of vanishing the way they do against pure white.
+            return { C(0xFFE4E7EC), C(0xFFF7F8FA), C(0xFFC7CDD8),
+                     C(0xFF0072CE), C(0xFF2962FF), C(0x400072CE),
                      C(0xFF1A1F2B), C(0xFF5F6B80),
-                     C(0xFFE7EBF2), C(0xFFD5DCE8), C(0xFFDDE2EA),
-                     C(0xFFE9ECF2), C(0xFFB0009E), C(0xFFD50032) };
+                     C(0xFFEDEFF4), C(0xFFDCE1EA), C(0xFFCFD5DF),
+                     C(0xFFDDE1E8), C(0xFFAD00A0), C(0xFFD50032) };
 
         default:
             return colorsForTheme(ThemeId::NeonBlue);

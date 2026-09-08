@@ -36,12 +36,31 @@ float magnitudeToDb(float magnitude)
 
 // Bar colour ramp: cyan through the low/mid range, warming to magenta as a band
 // approaches full scale, so hot bands stand out the way the level meters do.
-juce::Colour bandColour(const ThemeColors& theme, float norm)
+// The pair of colours the analyser draws with: `base` for quiet bands, blended
+// towards `hot` as a band approaches full scale.
+struct SpectrumAccents
+{
+    juce::Colour base;
+    juce::Colour hot;
+};
+
+SpectrumAccents spectrumAccents(const ThemeColors& theme, CustomLookAndFeel::ThemeId id)
+{
+    // Monochrome's accents are both near-white, which leaves the analyser
+    // washed out and hard to read against its own grid. That one theme gets a
+    // green spectrum instead; every other theme uses its own accents.
+    if (id == CustomLookAndFeel::ThemeId::Mono)
+        return {juce::Colour(0xFF00E676), juce::Colour(0xFF76FF03)};
+
+    return {theme.accentCyan, theme.magenta};
+}
+
+juce::Colour bandColour(const SpectrumAccents& accents, float norm)
 {
     if (norm <= 0.75f)
-        return theme.accentCyan;
+        return accents.base;
     const float t = juce::jlimit(0.0f, 1.0f, (norm - 0.75f) / 0.25f);
-    return theme.accentCyan.interpolatedWith(theme.magenta, t);
+    return accents.base.interpolatedWith(accents.hot, t);
 }
 
 }  // namespace
@@ -137,11 +156,12 @@ void SpectrumAnalyzer::decayBands()
 void SpectrumAnalyzer::paint(juce::Graphics& g)
 {
     auto* laf = dynamic_cast<CustomLookAndFeel*>(&getLookAndFeel());
-    const ThemeColors theme = (laf != nullptr)
-        ? laf->colors()
-        : ThemeColors{kBgDeep, kBgPanel, kBgPanelBorder, kAccentCyan, kAccentBlue, kAccentGlow,
-                      kTextPrimary, kTextDim, kControlBg, kControlHover, kTrackBg, kMeterBg,
-                      kMagenta, kRedNeon};
+    const ThemeColors theme = (laf != nullptr) ? laf->colors() : ThemeColors{
+        kBgDeep, kBgPanel, kBgPanelBorder, kAccentCyan, kAccentBlue, kAccentGlow,
+        kTextPrimary, kTextDim, kControlBg, kControlHover, kTrackBg, kMeterBg,
+        kMagenta, kRedNeon};
+    const SpectrumAccents accents = spectrumAccents(
+        theme, (laf != nullptr) ? laf->currentTheme() : CustomLookAndFeel::ThemeId::NeonBlue);
 
     auto bounds = getLocalBounds().toFloat();
     g.setColour(theme.meterBg);
@@ -196,16 +216,16 @@ void SpectrumAnalyzer::paint(juce::Graphics& g)
         const float x = plot.getX() + static_cast<float>(i) * slot_w + (slot_w - bar_w) * 0.5f;
 
         // Unlit column, so an idle analyser still shows its shape.
-        g.setColour(theme.accentCyan.withAlpha(0.07f));
+        g.setColour(accents.base.withAlpha(0.07f));
         g.fillRoundedRectangle(juce::Rectangle<float>(x, plot.getY(), bar_w, plot.getHeight()), 1.5f);
 
         if (norm > 0.001f)
         {
             const float h = plot.getHeight() * norm;
             const juce::Rectangle<float> bar(x, plot.getBottom() - h, bar_w, h);
-            const juce::Colour top = bandColour(theme, norm);
+            const juce::Colour top = bandColour(accents, norm);
             g.setGradientFill(juce::ColourGradient(top, bar.getX(), bar.getY(),
-                                                   theme.accentCyan.withAlpha(0.45f),
+                                                   accents.base.withAlpha(0.45f),
                                                    bar.getX(), plot.getBottom(), false));
             g.fillRoundedRectangle(bar, 1.5f);
         }
@@ -213,7 +233,7 @@ void SpectrumAnalyzer::paint(juce::Graphics& g)
         if (peak_norm > 0.001f)
         {
             const float cap_y = plot.getBottom() - plot.getHeight() * peak_norm;
-            g.setColour(bandColour(theme, peak_norm).withAlpha(0.9f));
+            g.setColour(bandColour(accents, peak_norm).withAlpha(0.9f));
             g.fillRect(juce::Rectangle<float>(x, cap_y, bar_w, 1.5f));
         }
     }

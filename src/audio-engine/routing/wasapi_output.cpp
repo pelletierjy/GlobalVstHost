@@ -382,7 +382,18 @@ double WasapiOutput::targetSampleRate() const noexcept
 
 float WasapiOutput::latencyMs() const noexcept
 {
-    return impl_->latency_ms_;
+    // GetStreamLatency() can return 0 for IAudioClient3 shared-mode streams.
+    // Fall back to the buffer-size-based latency, which is what actually
+    // determines the delay in shared mode.
+    if (impl_->latency_ms_ > 0.0f)
+        return impl_->latency_ms_;
+
+    if (impl_->buffer_size_ > 0 && impl_->negotiated_sample_rate_ > 0.0)
+    {
+        return static_cast<float>(impl_->buffer_size_) * 1000.0f /
+               static_cast<float>(impl_->negotiated_sample_rate_);
+    }
+    return 0.0f;
 }
 
 std::size_t WasapiOutput::xrunCount() const noexcept

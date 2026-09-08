@@ -44,6 +44,13 @@ foreach(_src IN LISTS _integration_test_sources)
     jyglobalvst_add_test(${_name} ${_src})
 endforeach()
 
+# polish_accessibility_test includes chain_editor.cpp which depends on
+# HorizontalMeterPanel; add the extra UI source so linkage succeeds.
+if(TARGET polish_accessibility_test)
+    target_sources(polish_accessibility_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/horizontal_meter_panel.cpp")
+endif()
+
 file(GLOB _contract_test_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/contract/*_test.cpp")
 foreach(_src IN LISTS _contract_test_sources)

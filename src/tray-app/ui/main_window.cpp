@@ -2761,6 +2761,11 @@ void MainWindow::applyThemeChange(CustomLookAndFeel::ThemeId id)
         dst.controlHover = src.controlHover;
         dst.trackBg = src.trackBg;
     }
+    // DocumentWindow's constructor pinned the background as a component-level
+    // colour, which wins over the LookAndFeel's. Without re-stamping it here the
+    // window keeps the dark ground it was built with whatever theme is picked.
+    setColour(juce::ResizableWindow::backgroundColourId, custom_laf_.colors().bgDeep);
+
     if (title_label_ != nullptr)
         title_label_->setColour(juce::Label::textColourId, custom_laf_.colors().accentCyan);
     status_label_->setColour(juce::Label::textColourId, custom_laf_.colors().textDim);
@@ -2971,7 +2976,7 @@ void MainWindow::handleAbout()
 
     // The running app is the authority; the literal only covers a host with no
     // JUCEApplication instance (unit-test harnesses).
-    juce::String version = "1.1.1.0";
+    juce::String version = "1.1.2.0";
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 

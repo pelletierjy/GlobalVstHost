@@ -674,11 +674,18 @@ float WasapiCapture::latencyMs() const noexcept
         return 0.0f;
     }
     REFERENCE_TIME latency = 0;
-    if (FAILED(impl_->audio_client_->GetStreamLatency(&latency)))
+    if (SUCCEEDED(impl_->audio_client_->GetStreamLatency(&latency)) && latency > 0)
     {
-        return 0.0f;
+        return static_cast<float>(latency / 10000.0);  // 100 ns units → ms.
     }
-    return static_cast<float>(latency / 10000.0);  // 100 ns units → ms.
+    // Fallback: GetStreamLatency can return 0 for IAudioClient3 shared-mode
+    // streams. The buffer size is what actually determines the delay.
+    if (impl_->buffer_size_ > 0 && impl_->negotiated_sample_rate_ > 0.0)
+    {
+        return static_cast<float>(impl_->buffer_size_) * 1000.0f /
+               static_cast<float>(impl_->negotiated_sample_rate_);
+    }
+    return 0.0f;
 #else
     return 0.0f;
 #endif

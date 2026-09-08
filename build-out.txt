@@ -1,0 +1,267 @@
+MSBuild version 18.8.2+ce25c0108 for .NET Framework
+
+  Checking File Globs
+  1>Checking Build System
+  jyglobalvst_tray_rc_lib.vcxproj -> D:\Repos\GlobalVstHost\build\src\tray-app\jyglobalvst_tray_rc_lib.dir\Release\jyglobalvst_tray_rc_lib.lib
+  gtest.vcxproj -> D:\Repos\GlobalVstHost\build\lib\Release\gtest.lib
+  gtest_main.vcxproj -> D:\Repos\GlobalVstHost\build\lib\Release\gtest_main.lib
+  jyglobalvst_shared.vcxproj -> D:\Repos\GlobalVstHost\build\lib\Release\jyglobalvst_shared.lib
+  jyglobalvst_audio_engine.vcxproj -> D:\Repos\GlobalVstHost\build\lib\Release\jyglobalvst_audio_engine.lib
+  asio_transport_smoke_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\asio_transport_smoke_test.exe
+  audio_validation_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\audio_validation_test.exe
+  builtin_effects_persistence_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\builtin_effects_persistence_test.exe
+  builtin_eq_add_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\builtin_eq_add_test.exe
+  builtin_nighttime_add_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\builtin_nighttime_add_test.exe
+  builtin_registry_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\builtin_registry_test.exe
+  chain_mutation_semantics_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\chain_mutation_semantics_test.exe
+  energy_saver_controller_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\energy_saver_controller_test.exe
+  eq_processor_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\eq_processor_test.exe
+  format_convert_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\format_convert_test.exe
+  gmock.vcxproj -> D:\Repos\GlobalVstHost\build\lib\Release\gmock.lib
+  gmock_main.vcxproj -> D:\Repos\GlobalVstHost\build\lib\Release\gmock_main.lib
+  hardware_loopback_runner.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\hardware_loopback_runner.exe
+  json_validator_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\json_validator_test.exe
+  Generating juce_binarydata_tray_app_icons/JuceLibraryCode/BinaryData1.cpp, juce_binarydata_tray_app_icons/JuceLibraryCode/BinaryData2.cpp, juce_binarydata_tray_app_icons/JuceLibraryCode/BinaryData.h
+  tray_app_icons.vcxproj -> D:\Repos\GlobalVstHost\build\lib\Release\tray_app_icons.lib
+  jyglobalvst_tray.vcxproj -> D:\Repos\GlobalVstHost\build\src\tray-app\jyglobalvst_tray_artefacts\Release\JyGlobalVST.exe
+  lockfree_ring_buffer_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\lockfree_ring_buffer_test.exe
+  loudness_meter_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\loudness_meter_test.exe
+  nighttime_processor_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\nighttime_processor_test.exe
+  polish_accessibility_test.cpp
+D:\Repos\GlobalVstHost\tests\integration\polish_accessibility_test.cpp(74,27): error C2661: 'jyglobalvst::tray::ChainSlotRow::ChainSlotRow': no overloaded function takes 3 arguments [D:\Repos\GlobalVstHost\build\tests\polish_accessibility_test.vcxproj]
+      D:\Repos\GlobalVstHost\tests\integration\polish_accessibility_test.cpp(74,27):
+      while trying to match the argument list '(jyglobalvst::IAudioEngine *, int, _Ty)'
+          with
+          [
+              _Ty=jyglobalvst::ChainSlotSnapshot
+          ]
+  
+D:\Repos\GlobalVstHost\tests\integration\polish_accessibility_test.cpp(88,27): error C2661: 'jyglobalvst::tray::ChainSlotRow::ChainSlotRow': no overloaded function takes 3 arguments [D:\Repos\GlobalVstHost\build\tests\polish_accessibility_test.vcxproj]
+      D:\Repos\GlobalVstHost\tests\integration\polish_accessibility_test.cpp(88,27):
+      while trying to match the argument list '(jyglobalvst::IAudioEngine *, int, _Ty)'
+          with
+          [
+              _Ty=jyglobalvst::ChainSlotSnapshot
+          ]
+  
+D:\Repos\GlobalVstHost\tests\integration\polish_accessibility_test.cpp(103,27): error C2661: 'jyglobalvst::tray::ChainSlotRow::ChainSlotRow': no overloaded function takes 3 arguments [D:\Repos\GlobalVstHost\build\tests\polish_accessibility_test.vcxproj]
+      D:\Repos\GlobalVstHost\tests\integration\polish_accessibility_test.cpp(103,27):
+      while trying to match the argument list '(jyglobalvst::IAudioEngine *, int, _Ty)'
+          with
+          [
+              _Ty=jyglobalvst::ChainSlotSnapshot
+          ]
+  
+D:\Repos\GlobalVstHost\tests\integration\polish_accessibility_test.cpp(118,27): error C2661: 'jyglobalvst::tray::ChainSlotRow::ChainSlotRow': no overloaded function takes 3 arguments [D:\Repos\GlobalVstHost\build\tests\polish_accessibility_test.vcxproj]
+      D:\Repos\GlobalVstHost\tests\integration\polish_accessibility_test.cpp(118,27):
+      while trying to match the argument list '(jyglobalvst::IAudioEngine *, int, _Ty)'
+          with
+          [
+              _Ty=jyglobalvst::ChainSlotSnapshot
+          ]
+  
+  polish_no_network_idle_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\polish_no_network_idle_test.exe
+  polish_service_mode_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\polish_service_mode_test.exe
+  preset_validator_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\preset_validator_test.exe
+  realtime_clock_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+D:\Repos\GlobalVstHost\third_party\juce-src\modules\juce_gui_basics\juce_gui_basics.cpp(1,1): error C1083: Cannot open compiler generated file: 'D:\Repos\GlobalVstHost\build\tests\realtime_clock_test.dir\Release\juce_gui_basics.obj': Permission denied [D:\Repos\GlobalVstHost\build\tests\realtime_clock_test.vcxproj]
+cl : command line  error D8040: error creating or communicating with child process [D:\Repos\GlobalVstHost\build\tests\realtime_clock_test.vcxproj]
+  resampler_quality_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+  resampler_quality_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\resampler_quality_test.exe
+  same_device_guard_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+  same_device_guard_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\same_device_guard_test.exe
+  seh_wrapper_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+  seh_wrapper_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\seh_wrapper_test.exe
+  spsc_queue_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+  spsc_queue_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\spsc_queue_test.exe
+  us1_audio_engine_api_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+  us1_audio_engine_api_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\us1_audio_engine_api_test.exe
+  us1_device_removal_restore_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+  us1_device_removal_restore_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\us1_device_removal_restore_test.exe
+  us1_empty_chain_passthrough_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+  us1_empty_chain_passthrough_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\us1_empty_chain_passthrough_test.exe
+  us1_loopback_capture_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+  us1_loopback_capture_test.vcxproj -> D:\Repos\GlobalVstHost\build\tests\Release\us1_loopback_capture_test.exe
+  us1_single_plugin_routing_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+D:\Repos\GlobalVstHost\third_party\juce-src\modules\juce_graphics\juce_graphics_Harfbuzz.cpp(1,1): error C1083: Cannot open compiler generated file: 'D:\Repos\GlobalVstHost\build\tests\us1_single_plugin_routing_test.dir\Release\juce_graphics_Harfbuzz.obj': Permission denied [D:\Repos\GlobalVstHost\build\tests\us1_single_plugin_routing_test.vcxproj]
+D:\Repos\GlobalVstHost\third_party\juce-src\modules\juce_gui_basics\juce_gui_basics.cpp(1,1): error C1083: Cannot open compiler generated file: 'D:\Repos\GlobalVstHost\build\tests\us1_single_plugin_routing_test.dir\Release\juce_gui_basics.obj': Permission denied [D:\Repos\GlobalVstHost\build\tests\us1_single_plugin_routing_test.vcxproj]
+cl : command line  error D8040: error creating or communicating with child process [D:\Repos\GlobalVstHost\build\tests\us1_single_plugin_routing_test.vcxproj]
+  Building Custom Rule D:/Repos/GlobalVstHost/tests/CMakeLists.txt
+  us1_sleep_wake_test.cpp
+  juce_audio_basics.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_audio_devices.cpp
+  juce_events.cpp
+  juce_audio_formats.cpp
+  juce_audio_processors.cpp
+  juce_audio_processors_ara.cpp
+  juce_audio_processors_lv2_libs.cpp
+  juce_gui_extra.cpp
+  juce_gui_basics.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_data_structures.cpp
+  juce_audio_utils.cpp
+  juce_dsp.cpp
+Attempting to cancel the build...
