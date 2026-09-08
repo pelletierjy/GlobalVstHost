@@ -77,6 +77,34 @@
   th { color: var(--dim); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
   footer { border-top: 1px solid var(--border); padding-top: 20px; color: var(--dim); font-size: 13px; }
   a { color: var(--accent); }
+
+  /* --- Signal path diagram ------------------------------------------- */
+  figure.diagram { margin: 0 0 32px; }
+  figure.diagram svg { width: 100%; height: auto; display: block;
+                       background: var(--panel); border: 1px solid var(--border);
+                       border-radius: 10px; padding: 8px 0; }
+  figure.diagram figcaption { color: var(--dim); font-size: 13px; margin-top: 10px; }
+  .d-box   { fill: var(--bg); stroke: var(--border); stroke-width: 1.5; }
+  .d-host  { fill: rgba(0,229,255,0.07); stroke: var(--accent); stroke-width: 1.5; }
+  .d-inner { fill: var(--panel); stroke: var(--border); stroke-width: 1; }
+  .d-title { fill: var(--text); font: 600 13px "Segoe UI", system-ui, sans-serif; }
+  .d-name  { fill: var(--accent); font: 700 14px "Segoe UI", system-ui, sans-serif; }
+  .d-sub   { fill: var(--dim);  font: 400 11px "Segoe UI", system-ui, sans-serif; }
+  .d-inlab { fill: var(--text); font: 400 11px "Segoe UI", system-ui, sans-serif; }
+  .d-lab   { fill: var(--accent); font: 600 11px "Segoe UI", system-ui, sans-serif; }
+  .d-arrow { stroke: var(--dim); stroke-width: 2; fill: none; }
+  .d-head  { fill: var(--dim); }
+  .d-tap    { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
+  .d-branch { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .d-bhead  { fill: var(--accent); }
+  .d-muted   { fill: rgba(255,82,82,0.10); stroke: #FF5252; stroke-width: 1; }
+  .d-mfill   { fill: #FF8A80; }
+  .d-mstroke { stroke: #FF8A80; stroke-width: 1.8; }
+  .d-mtext   { fill: #FF8A80; font: 600 11px "Segoe UI", system-ui, sans-serif; }
+  .d-live    { fill: rgba(0,230,118,0.10); stroke: #00E676; stroke-width: 1; }
+  .d-lfill   { fill: #69F0AE; }
+  .d-lstroke { stroke: #69F0AE; stroke-width: 1.8; fill: none; }
+  .d-ltext   { fill: #69F0AE; font: 600 11px "Segoe UI", system-ui, sans-serif; }
 </style>
 </head>
 <body>
@@ -89,6 +117,72 @@
     </div>
   </header>
 
+  <figure class="diagram">
+    <svg viewBox="0 0 880 320" role="img"
+         aria-label="Signal path: Windows applications play to the default output device, whose speaker the host mutes. The host taps that same stream by WASAPI loopback, runs it through the plugin chain, and sends it on to a second device whose speaker is the one you hear.">
+
+      <!-- 1. Windows applications -->
+      <rect class="d-box" x="8" y="40" width="150" height="100" rx="8"/>
+      <text class="d-title" x="83" y="80"  text-anchor="middle">Windows apps</text>
+      <text class="d-sub"   x="83" y="100" text-anchor="middle">browser, games,</text>
+      <text class="d-sub"   x="83" y="116" text-anchor="middle">media players</text>
+
+      <!-- apps -> default device, tapped on the way -->
+      <line class="d-arrow" x1="164" y1="90" x2="292" y2="90"/>
+      <polygon class="d-head" points="292,84 300,90 292,96"/>
+      <circle class="d-tap" cx="235" cy="90" r="6"/>
+
+      <!-- 2. Default playback device, speaker muted -->
+      <rect class="d-box" x="300" y="40" width="300" height="100" rx="8"/>
+      <text class="d-title" x="450" y="68" text-anchor="middle">Playback device 1</text>
+      <text class="d-sub"   x="450" y="86" text-anchor="middle">Windows default output</text>
+      <rect class="d-muted" x="340" y="98" width="220" height="28" rx="6"/>
+      <path class="d-mfill" d="M358 106 h-6 v10 h6 l8 7 v-24 z"/>
+      <line class="d-mstroke" x1="372" y1="106" x2="382" y2="116"/>
+      <line class="d-mstroke" x1="382" y1="106" x2="372" y2="116"/>
+      <text class="d-mtext" x="390" y="117">silent while the host runs</text>
+
+      <!-- the tap: branch down into the host -->
+      <path class="d-branch" d="M235 96 V186"/>
+      <polygon class="d-bhead" points="229,186 241,186 235,196"/>
+      <text class="d-lab" x="250" y="146">WASAPI loopback</text>
+      <text class="d-lab" x="250" y="162">capture</text>
+
+      <!-- 3. The host -->
+      <rect class="d-host" x="140" y="196" width="210" height="104" rx="10"/>
+      <text class="d-name" x="245" y="222" text-anchor="middle">Global VST Host</text>
+      <rect class="d-inner" x="154" y="234" width="182" height="28" rx="6"/>
+      <text class="d-inlab" x="245" y="253" text-anchor="middle">VST3 + built-in effects</text>
+      <rect class="d-inner" x="154" y="268" width="182" height="26" rx="6"/>
+      <text class="d-inlab" x="245" y="286" text-anchor="middle">master volume + mute</text>
+
+      <!-- host -> second device -->
+      <text class="d-lab" x="428" y="222" text-anchor="middle">WASAPI shared / exclusive</text>
+      <text class="d-lab" x="428" y="238" text-anchor="middle">or ASIO</text>
+      <line class="d-arrow" x1="356" y1="264" x2="492" y2="264"/>
+      <polygon class="d-head" points="492,258 500,264 492,270"/>
+
+      <!-- 4. Second playback device, the one you hear -->
+      <rect class="d-box" x="500" y="196" width="340" height="104" rx="8"/>
+      <text class="d-title" x="670" y="224" text-anchor="middle">Playback device 2</text>
+      <text class="d-sub"   x="670" y="242" text-anchor="middle">your speakers or headphones</text>
+      <rect class="d-live" x="560" y="258" width="220" height="28" rx="6"/>
+      <path class="d-lfill" d="M578 266 h-6 v10 h6 l8 7 v-24 z"/>
+      <path class="d-lstroke" d="M590 264 a9 9 0 0 1 0 16"/>
+      <path class="d-lstroke" d="M596 260 a13 13 0 0 1 0 24"/>
+      <text class="d-ltext" x="610" y="277">this is what you hear</text>
+    </svg>
+    <figcaption>
+      Two playback devices are involved. Your apps keep playing to the Windows default
+      device, but the host mutes that device's speaker, so the top path ends in silence.
+      The dot is where the host taps the very same stream — WASAPI loopback capture — and
+      the branch carries it down through the plugin chain and out to a second device, whose
+      speaker is the one you actually hear. Capture and output must be different devices;
+      the host refuses to start otherwise. If you capture a microphone or line-in instead,
+      nothing is muted.
+    </figcaption>
+  </figure>
+
   <nav>
     <h2>Contents</h2>
     <ul>
@@ -97,9 +191,11 @@
       <li><a href="#devices">Audio Devices</a></li>
       <li><a href="#chain">The Plugin Chain</a></li>
       <li><a href="#builtin">Built-In Effects</a></li>
+      <li><a href="#meters">Meters &amp; Spectrum</a></li>
       <li><a href="#volume">Master Volume</a></li>
       <li><a href="#presets">Presets</a></li>
       <li><a href="#tray">System Tray &amp; Power</a></li>
+      <li><a href="#appearance">Appearance &amp; Settings</a></li>
       <li><a href="#troubleshooting">Troubleshooting</a></li>
     </ul>
   </nav>
@@ -111,23 +207,37 @@
        device. This lets you apply effects — EQ, dynamics, spatial processing, and more —
        to <em>everything</em> your PC plays, regardless of which application produced it.</p>
     <p>Audio is captured using WASAPI loopback, so no virtual audio driver needs to be
-       installed. Internal processing runs in 32-bit float.</p>
+       installed. Internal processing runs in 32-bit float. You can also capture a real
+       input device — a microphone or line-in — instead of system playback.</p>
+    <p>Output can go out over WASAPI (shared or exclusive) or through an ASIO driver. The
+       two are independent: capturing system audio by loopback while playing out to an ASIO
+       interface is a supported combination.</p>
   </section>
 
   <section id="getting-started">
     <h2>Getting Started</h2>
     <ol>
       <li>Launch the application. On first run it scans for installed VST3 plugins.</li>
-      <li>Choose your <strong>output device</strong> — the speakers or headphones you
-          want to hear the processed audio on.</li>
+      <li>Under <strong>INPUT</strong>, choose the <strong>captured audio device</strong>
+          — normally the Windows default output, the device your apps already play to.</li>
+      <li>Under <strong>OUTPUT</strong>, choose a <em>different</em> device — the
+          speakers or headphones you want to hear the processed audio on.</li>
       <li>Press <strong>Start Audio</strong> to begin capturing and routing system audio.</li>
       <li>Add plugins to the chain and adjust them while audio plays.</li>
     </ol>
+    <div class="note">While audio is running, the captured device is muted for you, so the
+      unprocessed signal is not heard alongside the processed one. Its original mute state is
+      restored when you stop audio or exit.</div>
   </section>
 
   <section id="devices">
     <h2>Audio Devices</h2>
-    <p>The device panel lets you select where audio is captured from and where it is sent.</p>
+    <p>The <strong>AUDIO DEVICE</strong> panel is split into <strong>INPUT</strong> (where
+       audio is captured from) and <strong>OUTPUT</strong> (where it is sent).</p>
+    <p>The input list holds both playback devices, captured by loopback, and real capture
+       devices such as microphones and line inputs. Capture and output must resolve to two
+       different devices; if they are the same, the host refuses to start rather than feed
+       itself.</p>
     <h3>Transport modes</h3>
     <table>
       <tr><th>Mode</th><th>Description</th></tr>
@@ -136,7 +246,11 @@
       <tr><td>ASIO</td><td>Uses an ASIO driver when available. Use <strong>ASIO Settings</strong> to open the driver's control panel.</td></tr>
     </table>
     <p>The buffer size setting trades latency against stability — smaller buffers give
-       lower latency but are more sensitive to CPU spikes.</p>
+       lower latency but are more sensitive to CPU spikes. If a device rejects the size you
+       pick, the app tells you and keeps a size the device accepts.</p>
+    <p>Three sample rates are reported separately: the <strong>captured</strong> rate, the
+       <strong>output</strong> rate, and the <strong>VST</strong> rate the plugin chain runs
+       at. They do not have to match — the host resamples between them.</p>
     <div class="note"><strong>Drift compensation</strong> adapts resampling when the capture
       source and output device run from different clocks. Turn it off when both share the
       same hardware clock (e.g. WASAPI loopback + ASIO on the same USB interface) to avoid
@@ -148,11 +262,16 @@
     <p>The plugin chain is an ordered list of effects. Audio flows through each slot from
        top to bottom.</p>
     <ul>
-      <li><strong>Load Plugin…</strong> — add a VST3 plugin (or a built-in effect) to the chain.</li>
-      <li><strong>Reorder</strong> — move slots up or down to change processing order.</li>
-      <li><strong>Bypass</strong> — temporarily disable a slot without removing it.</li>
-      <li><strong>Editor</strong> — open a plugin's own interface to adjust its parameters.</li>
-      <li><strong>Remove</strong> — delete a slot from the chain.</li>
+      <li><strong>+</strong> — add a VST3 plugin, or a built-in effect, to the chain.</li>
+      <li><strong>Drag a slot</strong> up or down to change the processing order.</li>
+      <li><strong>ON / OFF</strong> — bypass a slot without removing it.</li>
+      <li><strong>E</strong> — open the plugin's own editor to adjust its parameters.</li>
+      <li><strong>Tag</strong> — give the slot a short label of your own (up to 32
+          characters), shown beside the plugin name. Useful when the same plugin appears
+          more than once in the chain.</li>
+      <li><strong>Shortcut</strong> — give the slot one of the two quick-toggle
+          buttons in the tray volume popup. See <a href="#tray">System Tray</a>.</li>
+      <li><strong>X</strong> — delete the slot from the chain.</li>
     </ul>
     <div class="note">If a plugin fails while processing, it is automatically bypassed so
       audio keeps flowing, and a notification appears in the window.</div>
@@ -163,12 +282,15 @@
     <p>Global VST Host ships with built-in effects that appear alongside your VST3 plugins
        and can be added to the chain like any other effect.</p>
 
-    <h3>EQ + Bass Boost</h3>
-    <p>A 10-band graphic equalizer with a dedicated bass-boost control. Drag each band
-       slider to cut or boost that frequency range; use the bass-boost slider for extra
-       low-end. <strong>Flat/Reset</strong> returns all bands to 0 dB.</p>
+    <h3>Equalizer</h3>
+    <p>A 10-band graphic equalizer with bands at 32 Hz, 64, 125, 250, 500 Hz, 1, 2, 4, 8 and
+       16 kHz, each adjustable by ±12 dB. A separate <strong>Bass Boost</strong>
+       slider adds up to 12 dB of extra low end, and an input <strong>Volume</strong> trim
+       (±12 dB) sets the level going into the filters, so you can pull a hot signal
+       down before boosting bands. Each band shows its own level meter.
+       <strong>Flat/Reset</strong> returns all bands to 0 dB.</p>
 
-    <h3>Auto Volume Leveller / Compressor</h3>
+    <h3>Volume Leveler</h3>
     <p>A dynamics processor that evens out loud and quiet passages so you can listen at
        low volume without missing detail or disturbing others. Choose a preset
        (Light, Medium, Strong, Extreme) — stronger presets compress the dynamic range
@@ -177,15 +299,31 @@
        shows a before/after graph illustrating how the selected preset reshapes a
        high-dynamic example signal.</p>
 
+    <h3>Compressor</h3>
+    <p>A conventional compressor with the usual controls — <strong>Threshold</strong>,
+       <strong>Ratio</strong>, <strong>Attack</strong>, <strong>Release</strong> and
+       <strong>Makeup</strong> gain — for when you want to dial in dynamics yourself
+       rather than pick one of the Volume Leveler presets.</p>
+
     <div class="note">The built-in effect editors follow the color theme you select in the
       main window.</div>
+  </section>
+
+  <section id="meters">
+    <h2>Meters &amp; Spectrum</h2>
+    <p>The <strong>LEVELS</strong> panel shows input and output meters side by side, so you
+       can see at a glance whether audio is arriving and whether the chain is producing
+       output. The <strong>SPECTRUM</strong> panel shows a live frequency analysis of the
+       processed signal.</p>
+    <p>The status bar reports engine CPU load and latency while audio runs.</p>
   </section>
 
   <section id="volume">
     <h2>Master Volume</h2>
     <p>The master volume slider controls the overall output gain applied after the plugin
-       chain. Your setting is saved automatically and restored the next time you open the
-       app.</p>
+       chain, and the mute button silences the host's output without stopping the engine.
+       Neither affects the Windows volume of your apps. Your setting is saved automatically
+       and restored the next time you open the app.</p>
   </section>
 
   <section id="presets">
@@ -208,10 +346,34 @@
     <p>Global VST Host lives in the Windows system tray. Closing the window keeps the app
        running in the background so audio processing continues. Right-click the tray icon
        for quick actions.</p>
+    <p><strong>Left-click the tray icon</strong> for a compact volume popup: input and
+       output meters, the master volume slider, a mute button, an ON/OFF button that starts
+       and stops audio, and up to two quick-toggle shortcut buttons.</p>
+    <h3>Shortcut buttons</h3>
+    <p>The two shortcut buttons bypass and un-bypass a plugin of your choosing without
+       opening the main window — green when the plugin is active, grey when bypassed.
+       Assign them with the shortcut button on a chain slot. Only two can be assigned at a
+       time, so clear one before assigning another. The button is labelled with the first
+       two letters of the slot's tag, or of the plugin name when there is no tag. Assignments
+       are saved with your session and with presets, and follow the slot if you reorder the
+       chain.</p>
     <p>Enable <strong>Start minimized to tray</strong> to have the app launch directly to
        the tray without showing the window.</p>
     <p><strong>Energy saver</strong> automatically steps the engine back when no audio is
        playing, reducing CPU usage. It is on by default.</p>
+  </section>
+
+  <section id="appearance">
+    <h2>Appearance &amp; Settings</h2>
+    <p>Open <strong>Settings</strong> from the main window to change:</p>
+    <ul>
+      <li><strong>Theme</strong> — Neon Blue, Neon Purple, Neon Green, Neon Orange,
+          Neon Red, Monochrome or Light. The built-in effect editors follow your choice.</li>
+      <li><strong>Start minimized</strong> — launch straight to the tray.</li>
+      <li><strong>Tooltips</strong> — turn the hover hints on or off.</li>
+    </ul>
+    <p>Preferences, the plugin scan cache and your last session are saved automatically, so
+       the app comes back the way you left it.</p>
   </section>
 
   <section id="troubleshooting">
@@ -219,6 +381,20 @@
     <h3>No sound / no processing</h3>
     <p>Make sure you pressed <strong>Start Audio</strong> and selected a valid output
        device. Confirm system audio is actually playing.</p>
+
+    <h3>I hear the audio twice, or it sounds doubled</h3>
+    <p>Both devices are audible at once. The host mutes the captured device for you; if you
+       unmute it in Windows while the host is running, you will hear the unprocessed signal
+       underneath the processed one. On devices where Windows does not allow the host to set
+       the mute, the app says so and asks you to pick a different pairing.</p>
+
+    <h3>Windows says my speakers are muted</h3>
+    <p>That is the captured device, muted on purpose while the host runs. Stopping audio or
+       exiting the app restores the mute state it had before.</p>
+
+    <h3>The app will not start audio</h3>
+    <p>Capture and output must be two different devices. Selecting the same device for both
+       — including by way of "system default" resolving to it — is blocked.</p>
 
     <h3>Glitches or dropouts (xruns)</h3>
     <p>Increase the buffer size, close CPU-heavy applications, or reduce the number of
