@@ -1,8 +1,14 @@
 # Global VST Host
 
-Route Windows system audio through VST3 effects and built-in processors — no driver, no virtual device, no reboot.
+This is a little tool I needed for myself, and I tried building it just for fun!  It turned out quite good!  Better than all alternatives out there if you need something simple and good-looking. 
+
+It is available on the Microsoft Store for free with no ads!
+
+https://apps.microsoft.com/detail/9ND7HRZGWCWN?hl=en-us&gl=CA&ocid=pdpshare
 
 ## What it does
+
+Route Windows system audio through VST3 effects and built-in processors — no driver, no virtual device, no reboot.
 
 Captures your PC's system audio via WASAPI loopback, runs it through an ordered chain of effects, and plays the result to any output device you choose. Useful immediately even without third-party plugins, thanks to two built-in effects:
 
