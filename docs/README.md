@@ -4,6 +4,8 @@ This is a little tool I needed for myself, and I tried building it just for fun!
 
 It is available on the Microsoft Store for free with no ads!
 
+<img width="2107" height="1095" alt="image" src="https://github.com/user-attachments/assets/10b77ade-520c-410b-ac33-1a87c49599fe" />
+
 https://apps.microsoft.com/detail/9ND7HRZGWCWN?hl=en-us&gl=CA&ocid=pdpshare
 
 ## What it does
