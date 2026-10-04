@@ -21,7 +21,6 @@
 #include <vector>
 
 #include <windows.h>
-#include <appmodel.h>
 #include <shellapi.h>
 #include <commdlg.h>
 #include <commctrl.h>
@@ -47,53 +46,6 @@ void StartupLog(const char* msg)
     catch (...)
     {
     }
-}
-
-// Empty unless this process runs with MSIX package identity (the Store build).
-std::wstring PackageFamilyName()
-{
-    UINT32 length = 0;
-    if (::GetCurrentPackageFamilyName(&length, nullptr) != ERROR_INSUFFICIENT_BUFFER)
-    {
-        return {};
-    }
-
-    std::wstring name(length, L'\0');
-    if (::GetCurrentPackageFamilyName(&length, name.data()) != ERROR_SUCCESS)
-    {
-        return {};
-    }
-
-    name.resize(length > 0 ? length - 1 : 0);
-    return name;
-}
-
-// Folder for files that must also be reachable by processes outside this app -
-// here, the browser that opens the user guide.
-//
-// Under MSIX, writes to %LOCALAPPDATA% are silently redirected into the
-// package's LocalCache, so %LOCALAPPDATA%\JyGlobalVST never appears on disk and
-// a browser handed that path finds nothing. Naming the redirection target
-// directly gives both sides the same real path. Returns an empty path when
-// LOCALAPPDATA is unset.
-std::filesystem::path SharedLocalDir()
-{
-    // Wide, not std::getenv: the path runs through a user profile name, which
-    // need not be representable in the process ANSI code page.
-    const wchar_t* local = ::_wgetenv(L"LOCALAPPDATA");
-    if (local == nullptr)
-    {
-        return {};
-    }
-
-    std::filesystem::path base(local);
-    const auto family = PackageFamilyName();
-    if (!family.empty())
-    {
-        base = base / L"Packages" / family / L"LocalCache" / L"Local";
-    }
-
-    return base / "JyGlobalVST";
 }
 
 constexpr int kTimerHz = 10;  // 10 Hz UI refresh for meters / CPU.
@@ -2994,42 +2946,7 @@ void MainWindow::handleAbout()
 
 void MainWindow::handleHelp()
 {
-    // The user guide is embedded as binary data. Materialise it to a stable
-    // location the default browser can also read, then open it.
-    try
-    {
-        const auto dir = SharedLocalDir();
-        if (dir.empty())
-        {
-            status_label_->setText("Could not open user guide: LOCALAPPDATA is not set",
-                                   juce::dontSendNotification);
-            return;
-        }
-
-        std::filesystem::create_directories(dir);
-        const auto html_path = dir / "userguide.html";
-
-        {
-            std::ofstream ofs(html_path, std::ios::binary | std::ios::trunc);
-            if (!ofs)
-            {
-                status_label_->setText("Could not write user guide to " +
-                                           juce::String(html_path.wstring().c_str()),
-                                       juce::dontSendNotification);
-                return;
-            }
-
-            ofs.write(jyglobalvst::BinaryData::userguide_html,
-                      jyglobalvst::BinaryData::userguide_htmlSize);
-        }
-
-        juce::File(juce::String(html_path.wstring().c_str())).startAsProcess();
-    }
-    catch (const std::exception& e)
-    {
-        status_label_->setText(juce::String("Could not open user guide: ") + e.what(),
-                               juce::dontSendNotification);
-    }
+    juce::URL{"https://pelletierjy.github.io/GlobalVstHost/"}.launchInDefaultBrowser();
 }
 
 void MainWindow::toggleEnergySaver()

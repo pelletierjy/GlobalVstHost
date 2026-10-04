@@ -38,8 +38,7 @@ juce_add_binary_data(tray_app_icons
     HEADER_NAME "BinaryData.h"
     NAMESPACE "jyglobalvst::BinaryData"
     SOURCES
-        ${CMAKE_SOURCE_DIR}/assets/app_icon.png
-        ${CMAKE_SOURCE_DIR}/assets/userguide.html)
+        ${CMAKE_SOURCE_DIR}/assets/app_icon.png)
 
 target_link_libraries(jyglobalvst_tray PRIVATE
     jyglobalvst_audio_engine
