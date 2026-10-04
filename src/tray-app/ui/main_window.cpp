@@ -4,6 +4,7 @@
 
 #include "main_window.h"
 #include "about_diagnostics.h"
+#include "local_dir_resolver.h"
 
 #include "builtin-effects/builtin_theme.h"
 
@@ -49,80 +50,9 @@ void StartupLog(const char* msg)
     }
 }
 
-// Empty unless this process runs with MSIX package identity (the Store build).
-std::wstring PackageFamilyName()
-{
-    UINT32 length = 0;
-    if (::GetCurrentPackageFamilyName(&length, nullptr) != ERROR_INSUFFICIENT_BUFFER)
-    {
-        return {};
-    }
+}  // namespace
 
-    std::wstring name(length, L'\0');
-    if (::GetCurrentPackageFamilyName(&length, name.data()) != ERROR_SUCCESS)
-    {
-        return {};
-    }
-
-    name.resize(length > 0 ? length - 1 : 0);
-    return name;
-}
-
-// Folder for files that must also be reachable by processes outside this app -
-// here, the browser that opens the user guide.
-//
-// Under MSIX, writes to %LOCALAPPDATA% are silently redirected into the
-// package's LocalCache, so %LOCALAPPDATA%\JyGlobalVST never appears on disk and
-// a browser handed that path finds nothing. Naming the redirection target
-// directly gives both sides the same real path. Returns an empty path when
-// LOCALAPPDATA is unset.
-std::filesystem::path SharedLocalDir()
-{
-    // Wide, not std::getenv: the path runs through a user profile name, which
-    // need not be representable in the process ANSI code page.
-    const wchar_t* local = ::_wgetenv(L"LOCALAPPDATA");
-    if (local == nullptr)
-    {
-        return {};
-    }
-
-    std::filesystem::path base(local);
-    const auto family = PackageFamilyName();
-    if (!family.empty())
-    {
-        base = base / L"Packages" / family / L"LocalCache" / L"Local";
-    }
-
-    return base / "JyGlobalVST";
-}
-
-constexpr int kTimerHz = 10;  // 10 Hz UI refresh for meters / CPU.
-constexpr UINT kTrayIconMsg = WM_APP + 1;
-constexpr UINT kTrayIconId  = 1;
-
-// Tiny "in" / "out" marker sat under a meter pair in the tray popup. Drawn as a
-// vector glyph through the LookAndFeel, so it matches the mute / power icons on
-// the same popup rather than reading as a text caption.
-class SignalDirectionIcon : public juce::Component
-{
-public:
-    explicit SignalDirectionIcon(bool is_input) : is_input_(is_input)
-    {
-        setInterceptsMouseClicks(false, false);
-        setTitle(is_input ? "Input" : "Output");
-    }
-
-    void paint(juce::Graphics& g) override
-    {
-        auto* laf = dynamic_cast<CustomLookAndFeel*>(&getLookAndFeel());
-        const juce::Colour colour = (laf != nullptr) ? laf->colors().textDim : kTextDim;
-        CustomLookAndFeel::drawSignalDirectionIcon(g, getLocalBounds().toFloat(),
-                                                   is_input_, colour);
-    }
-
-private:
-    bool is_input_;
-};
+// ============================================================================\n// Panel components (defined in anonymous namespace).\n// ====================================================================
 
 // Small content component shown in a CallOutBox when the tray icon is left-clicked.
 // Holds input/output meters on sides, a vertical master-volume slider in center,
@@ -2998,10 +2928,10 @@ void MainWindow::handleHelp()
     // location the default browser can also read, then open it.
     try
     {
-        const auto dir = SharedLocalDir();
+        const auto dir = sharedLocalDir();
         if (dir.empty())
         {
-            status_label_->setText("Could not open user guide: LOCALAPPDATA is not set",
+            status_label_->setText("Could not open user guide: could not resolve local app-data directory",
                                    juce::dontSendNotification);
             return;
         }
