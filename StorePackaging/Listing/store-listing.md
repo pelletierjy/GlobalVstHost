@@ -142,7 +142,7 @@ other publishers' product titles.
 
 ```
 VST3
-VST host
+audio router
 system audio
 equalizer
 bass boost

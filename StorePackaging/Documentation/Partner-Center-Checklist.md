@@ -123,7 +123,7 @@ Do not add `registryRead` or `registryWrite` — those are not real MSIX capabil
   - Mention VST3 plugin support
   - Note system audio processing capability
 - [ ] **Release notes**: Feature overview and version info
-- [ ] **Keywords**: Relevant search terms (VST, audio, processor, effects, host)
+- [ ] **Keywords**: Relevant search terms (VST3, audio, router, effects, equalizer, bass boost)
 - [x] **Category**: primary `Music`, secondary `Multimedia design > Music production`.
       There is no "Audio" category — see Listing/store-listing.md
 - [ ] **Content rating**: Complete IARC form

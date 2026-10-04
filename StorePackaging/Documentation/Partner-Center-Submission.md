@@ -67,7 +67,7 @@ Complete all sections (see Partner-Center-Checklist.md):
 **Store listings**:
 - Category: Audio/Media or Utilities
 - Age rating: Complete IARC questionnaire
-- Keywords: VST, audio, processor, effects
+- Keywords: VST3, audio, router, equalizer, bass boost
 - Description
 - Screenshots (optional but recommended)
 
@@ -129,7 +129,7 @@ quoted in this repository.
 
 | Field | Value |
 |-------|-------|
-| App Name | JyGlobalVST |
+| App Name | Global VST Host |
 | Publisher | JyGlobalVST |
 | Version | 1.0.0.0 |
 | Package Size | ~150 MB (varies) |
