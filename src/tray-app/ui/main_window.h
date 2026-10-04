@@ -326,7 +326,7 @@ private:
     // content component) is dismissed and destroyed, avoiding a dangling-pointer
     // use-after-free from the periodic meter refresh timer.
     juce::Component::SafePointer<juce::Component> tray_volume_popup_;
-
+    bool open_help_on_first_tick_ {false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
 };
 

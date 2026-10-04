@@ -1495,6 +1495,13 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     StartupLog("scan_dialog created");
     engine_->rescanPlugins(scan_dialog_.get());
     StartupLog("rescanPlugins started");
+
+    if (!rs.help_shown_on_first_launch)
+    {
+        rs.help_shown_on_first_launch = true;
+        roaming_settings_store_.save(rs);
+        open_help_on_first_tick_ = true;
+    }
 }
 
 MainWindow::~MainWindow()
@@ -3092,6 +3099,12 @@ void MainWindow::timerCallback()
     if (++timer_call_count <= 20)
     {
         StartupLog(juce::String("timerCallback #" + juce::String(timer_call_count)).toStdString().c_str());
+    }
+
+    if (open_help_on_first_tick_)
+    {
+        open_help_on_first_tick_ = false;
+        handleHelp();
     }
 
     // Check if initial plugin scan has completed

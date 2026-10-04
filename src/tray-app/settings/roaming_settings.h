@@ -27,8 +27,7 @@ struct RoamingSettings
     float master_volume {1.0f};  // Master output gain (0.0–1.0), persisted across sessions.
     bool energy_saver_enabled {true};  // Auto-suspend the engine during silence (on by default).
     bool tooltips_enabled {true};      // Show descriptive tooltips on UI controls.
-
-    // T013: Driverless audio capture device persistence
+    bool help_shown_on_first_launch {false};
     std::optional<std::string> capture_endpoint_id;     // Loopback source endpoint
     std::optional<std::string> output_endpoint_id;      // Output device endpoint
     bool follow_default_capture {true};                 // When true, resolve capture to system default
@@ -42,10 +41,8 @@ class RoamingSettingsStore
 public:
     RoamingSettingsStore();
 
-    // Load from disk or return defaults if missing/corrupt.
     RoamingSettings load() const;
 
-    // Save to disk, merging with existing unknown fields.
     void save(const RoamingSettings& settings) const;
 
     std::filesystem::path settingsPath() const;
@@ -54,4 +51,4 @@ private:
     std::filesystem::path path_;
 };
 
-}  // namespace jyglobalvst::tray
+}
