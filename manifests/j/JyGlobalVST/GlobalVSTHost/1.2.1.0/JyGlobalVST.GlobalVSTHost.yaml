@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
+# WinGet version manifest (specs/007-winget-distribution, Phase 4).
+# Bump PackageVersion and the folder name together on each release.
+PackageIdentifier: JyGlobalVST.GlobalVSTHost
+PackageVersion: 1.2.1.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.12.0

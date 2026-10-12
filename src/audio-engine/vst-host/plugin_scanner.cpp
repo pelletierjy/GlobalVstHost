@@ -26,15 +26,22 @@ namespace jyglobalvst::engine {
 
 namespace {
 
-void collectVst3Files(const std::filesystem::path& root, std::vector<std::filesystem::path>& out)
+void collectVst3FilesImpl(const std::filesystem::path& root, std::vector<std::filesystem::path>& out)
 {
-    DWORD attr = GetFileAttributesW(root.c_str());
+    // Absolute normalization: a relative scan root would otherwise resolve
+    // against the process working directory, which differs between a normal
+    // launch, a shortcut launch, and an MSIX packaged launch.
+    std::error_code ec;
+    const std::filesystem::path abs_root = std::filesystem::absolute(root, ec);
+    const std::filesystem::path& base = ec ? root : abs_root;
+
+    DWORD attr = GetFileAttributesW(base.c_str());
     if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY) == 0)
     {
         return;
     }
 
-    std::wstring pattern = root.c_str();
+    std::wstring pattern = base.c_str();
     if (!pattern.empty() && pattern.back() != L'\\' && pattern.back() != L'/')
     {
         pattern += L'\\';
@@ -50,13 +57,53 @@ void collectVst3Files(const std::filesystem::path& root, std::vector<std::filesy
 
     do
     {
-        out.emplace_back(root / data.cFileName);
+        out.emplace_back(base / data.cFileName);
     } while (FindNextFile(h, &data));
 
     FindClose(h);
+
+    // One level of vendor subdirectories: <base>\<Vendor>\*.vst3 (the VST3.7
+    // per-user layout). .vst3 directories are never descended into — their
+    // Contents tree holds the module binary, not a separate plugin.
+    const std::wstring sub_pattern = std::wstring(base.c_str()) + L"\\*";
+    WIN32_FIND_DATAW sub_data;
+    const HANDLE hs = FindFirstFileW(sub_pattern.c_str(), &sub_data);
+    if (hs != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            const std::wstring name = sub_data.cFileName;
+            const bool is_bundle =
+                name.size() > 5 && _wcsicmp(name.c_str() + name.size() - 5, L".vst3") == 0;
+            if (is_bundle || (sub_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+            {
+                continue;
+            }
+            const std::filesystem::path sub_dir = base / name;
+            const std::wstring sub_vst3 = std::wstring(sub_dir.c_str()) + L"\\*.vst3";
+            WIN32_FIND_DATAW f2;
+            const HANDLE h2 = FindFirstFileW(sub_vst3.c_str(), &f2);
+            if (h2 != INVALID_HANDLE_VALUE)
+            {
+                do
+                {
+                    out.emplace_back(sub_dir / f2.cFileName);
+                } while (FindNextFile(h2, &f2));
+                FindClose(h2);
+            }
+        } while (FindNextFile(hs, &sub_data));
+        FindClose(hs);
+    }
 }
 
 }  // namespace
+
+std::vector<std::filesystem::path> collectVst3Candidates(const std::filesystem::path& root)
+{
+    std::vector<std::filesystem::path> out;
+    collectVst3FilesImpl(root, out);
+    return out;
+}
 
 PluginScanner::PluginScanner() = default;
 
@@ -123,8 +170,7 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
             break;
         }
 
-        std::vector<std::filesystem::path> files;
-        collectVst3Files(path, files);
+        const std::vector<std::filesystem::path> files = collectVst3Candidates(path);
 
         if (!files.empty() && !loader)
         {

@@ -4,6 +4,8 @@
 
 #include "main_window.h"
 #include "about_diagnostics.h"
+#include "accessibility/uia_notifications.h"
+#include "updates/update_check.h"
 
 #include "builtin-effects/builtin_theme.h"
 
@@ -1787,6 +1789,8 @@ void MainWindow::showTrayContextMenu()
     }
 
     AppendMenu(tray_menu_, MF_SEPARATOR, 0, nullptr);
+    AppendMenu(tray_menu_, MF_STRING, 5, L"Check for Updates...");
+    AppendMenu(tray_menu_, MF_SEPARATOR, 0, nullptr);
     AppendMenu(tray_menu_, MF_STRING, 3, L"Exit");
 
     POINT pt;
@@ -1810,6 +1814,9 @@ void MainWindow::showTrayContextMenu()
     case 4:
         rs.start_minimized_to_tray = !rs.start_minimized_to_tray;
         roaming_settings_store_.save(rs);
+        break;
+    case 5:
+        handleCheckForUpdates();
         break;
     }
 }
@@ -1957,7 +1964,9 @@ void MainWindow::toggleShortcutBypass(int button_index)
     }
 
     const int pos = positions[static_cast<std::size_t>(button_index)];
-    engine_->setBypass(pos, !chain.slots[static_cast<std::size_t>(pos)].is_bypassed);
+    const bool bypassed = ! chain.slots[static_cast<std::size_t>(pos)].is_bypassed;
+    engine_->setBypass(pos, bypassed);
+    notifyBypassToggled(nativeHwnd(), chain.slots[static_cast<std::size_t>(pos)].ref.name, bypassed);
 }
 
 // =========================================================================
@@ -2786,6 +2795,7 @@ void MainWindow::handleLoadPlugin()
                     const auto id = engine_->addPlugin(entry->ref, 0);
                     juce::String display = juce::String(entry->ref.vendor) + " " + juce::String(entry->ref.name);
                     status_label_->setText("Plugin added: " + display, juce::dontSendNotification);
+                    notifyPluginAdded(nativeHwnd(), display.toStdString());
                     (void)id;
                 }
             }
@@ -2928,7 +2938,7 @@ void MainWindow::handleAbout()
 
     // The running app is the authority; the literal only covers a host with no
     // JUCEApplication instance (unit-test harnesses).
-    juce::String version = "1.2.0.0";
+    juce::String version = "1.2.1.0";
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 
@@ -2947,6 +2957,75 @@ void MainWindow::handleAbout()
 void MainWindow::handleHelp()
 {
     juce::URL{"https://pelletierjy.github.io/GlobalVstHost/"}.launchInDefaultBrowser();
+}
+
+void MainWindow::handleCheckForUpdates()
+{
+    const auto rs = roaming_settings_store_.load();
+    if (rs.update_check_endpoint_url.empty())
+    {
+        status_label_->setText("No update endpoint configured", juce::dontSendNotification);
+        return;
+    }
+
+    const std::string current_version =
+        juce::JUCEApplication::getInstance()->getApplicationVersion().toStdString();
+    status_label_->setText("Checking for updates...", juce::dontSendNotification);
+
+    // UpdateCheck::check runs on a detached worker that captures only its
+    // arguments; the local instance may die immediately after this call.
+    UpdateCheck{}.check(
+        rs.update_check_endpoint_url, current_version,
+        [this](UpdateCheckResult result) {
+            juce::MessageManager::callAsync([this, result]() {
+                if (! result.success)
+                {
+                    status_label_->setText(
+                        "Update check failed: " + juce::String(result.error_message),
+                        juce::dontSendNotification);
+                    return;
+                }
+                if (! result.update_available)
+                {
+                    status_label_->setText(
+                        "Up to date (" + juce::String(result.installed_version) + ")",
+                        juce::dontSendNotification);
+                    return;
+                }
+
+                // JUCE 8 dialog API (AlertWindow::showAsync with MessageBoxOptions
+                // works with or without modal loops). Callback receives the
+                // 1-based index of the clicked button.
+                juce::AlertWindow::showAsync(
+                    juce::MessageBoxOptions()
+                        .withIconType(juce::MessageBoxIconType::QuestionIcon)
+                        .withTitle("Update available")
+                        .withMessage("Version " + juce::String(result.latest_version) +
+                                         " is available (installed: " +
+                                         juce::String(result.installed_version) +
+                                         ").\n\nDownload and run the installer now?")
+                        .withButton("Download and Install")
+                        .withButton("Later"),
+                    juce::ModalCallbackFunction::create([this, result](int choice) {
+                        if (choice != 1)
+                        {
+                            status_label_->setText("Update postponed", juce::dontSendNotification);
+                            return;
+                        }
+
+                        status_label_->setText("Downloading update...", juce::dontSendNotification);
+                        UpdateCheck::downloadAndInstall(
+                            result.download_url, [this](bool ok, std::string message) {
+                                juce::MessageManager::callAsync([this, ok, message]() {
+                                    status_label_->setText(
+                                        ok ? "Installer launched: " + juce::String(message)
+                                           : "Update failed: " + juce::String(message),
+                                        juce::dontSendNotification);
+                                });
+                            });
+                    }));
+            });
+        });
 }
 
 void MainWindow::toggleEnergySaver()
@@ -3298,11 +3377,21 @@ void MainWindow::onPluginFailed(const InstanceId& /*id*/, const std::string& rea
     });
 }
 
+HWND MainWindow::nativeHwnd() const
+{
+    if (auto* peer = getPeer())
+    {
+        return static_cast<HWND>(peer->getNativeHandle());
+    }
+    return nullptr;
+}
+
 void MainWindow::onDeviceLost(const EndpointId& lost, const EndpointId& fallback_to)
 {
     juce::MessageManager::callAsync([this, lost, fallback_to]() {
         status_label_->setText("Device lost: " + juce::String(lost) + " → fallback: " + juce::String(fallback_to),
                                juce::dontSendNotification);
+        notifyDeviceDisconnect(nativeHwnd(), lost);
         refreshDeviceLists();
     });
 }
@@ -3312,6 +3401,7 @@ void MainWindow::onDeviceRestored(const EndpointId& restored)
     juce::MessageManager::callAsync([this, restored]() {
         status_label_->setText("Device restored: " + juce::String(restored),
                                juce::dontSendNotification);
+        notifyDeviceRestored(nativeHwnd(), restored);
         refreshDeviceLists();
     });
 }
@@ -3329,6 +3419,7 @@ void MainWindow::onCpuWarning(float rolling_1s_pct)
         status_label_->setText(juce::String::formatted("CPU warning: %.1f %% — consider larger buffer",
                                                         rolling_1s_pct),
                                juce::dontSendNotification);
+        notifyCpuWarning(nativeHwnd(), true);
     });
 }
 
@@ -3343,6 +3434,7 @@ void MainWindow::onPresetPartialLoad(const std::vector<MissingPluginInfo>& missi
     juce::MessageManager::callAsync([this, missing]() {
         juce::String msg = "Preset loaded with missing plugins: " + juce::String((int)missing.size());
         status_label_->setText(msg, juce::dontSendNotification);
+        notifyPresetPartialLoad(nativeHwnd(), static_cast<int>(missing.size()));
     });
 }
 

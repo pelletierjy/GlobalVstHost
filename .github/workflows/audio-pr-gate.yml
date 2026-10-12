@@ -40,7 +40,7 @@ jobs:
           submodules: recursive
 
       - name: Configure CMake with Coverage
-        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_BUILD_DRIVER=OFF -DJYGLOBALVST_ENABLE_COVERAGE=ON
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_ENABLE_COVERAGE=ON
 
       - name: Build Release
         run: cmake --build build --config Release --parallel
@@ -123,15 +123,28 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure CMake
-        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_BUILD_DRIVER=OFF
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
 
       - name: Build Release
         run: cmake --build build --config Release --parallel
 
       - name: Run soak test
+        # --soak-test is implemented in src/tray-app/soak/soak_runner.cpp: runs
+        # the engine headless for the duration, writes build\soak_report.json
+        # (CPU stats + xrun counts), and exits non-zero on xruns or start failure.
+        # The tray binary lives in the JUCE artefacts dir (PRODUCT_NAME
+        # "JyGlobalVST"), not under build\bin.
         run: |
-          .\build\bin\Release\jyglobalvst_tray.exe --soak-test --duration-minutes 30
+          .\build\src\tray-app\jyglobalvst_tray_artefacts\Release\JyGlobalVST.exe --soak-test --duration-minutes 30 --report build\soak_report.json
         continue-on-error: false
+
+      - name: Upload soak report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-report
+          path: build/soak_report.json
+          if-no-files-found: warn
 
   latency-report:
     name: Virtual Loopback Latency
@@ -143,7 +156,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure CMake
-        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_BUILD_DRIVER=OFF
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
 
       - name: Build Release
         run: cmake --build build --config Release --parallel
@@ -155,7 +168,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: latency-report
-          path: build/latency_report.json
+          path: build/tests/latency_report.json
           if-no-files-found: warn
 
   cpu-report:
@@ -168,7 +181,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure CMake
-        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_BUILD_DRIVER=OFF
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
 
       - name: Build Release
         run: cmake --build build --config Release --parallel
@@ -180,5 +193,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cpu-report
-          path: build/cpu_report.json
+          path: build/tests/cpu_report.json
           if-no-files-found: warn

@@ -141,6 +141,9 @@ public:
 
 private:
     void buildUI();
+    // Native window handle for accessibility notifications (UIA); nullptr
+    // when the peer does not exist yet or is gone.
+    HWND nativeHwnd() const;
     void refreshDeviceLists();
     void refreshAsioPairSelector(int maxChannels);
     void updateControlVisibility();

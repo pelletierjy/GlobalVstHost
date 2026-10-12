@@ -9,15 +9,19 @@
 
 #include "json/validators/update_manifest_validator.h"
 #include "json/json_validator.h"
+#include "platform/known_folders.h"
 
 #include <nlohmann/json.hpp>
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <windows.h>
+#include <shellapi.h>
 #include <winhttp.h>
 
 #pragma comment(lib, "winhttp.lib")
@@ -217,8 +221,67 @@ void UpdateCheck::check(const std::string& endpoint_url,
     }).detach();
 }
 
+void UpdateCheck::downloadAndInstall(const std::string& url, InstallCallback callback)
+{
+    std::thread([url, callback]() {
+        std::string error;
+        const std::string bytes = httpsGet(url, error);
+        if (bytes.empty())
+        {
+            callback(false, error.empty() ? "Download failed" : error);
+            return;
+        }
+
+        // Derive a filename from the URL, query string stripped.
+        std::string fname;
+        const auto slash = url.find_last_of('/');
+        fname = (slash == std::string::npos) ? std::string("JyGlobalVST-update.bin") : url.substr(slash + 1);
+        const auto query = fname.find('?');
+        if (query != std::string::npos)
+        {
+            fname = fname.substr(0, query);
+        }
+        if (fname.empty())
+        {
+            fname = "JyGlobalVST-update.bin";
+        }
+
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const fs::path dir = shared::localStateDir() / "updates";
+        fs::create_directories(dir, ec);
+        const fs::path target = dir / fname;
+
+        {
+            std::ofstream out(target, std::ios::binary | std::ios::trunc);
+            if (!out)
+            {
+                callback(false, "Cannot write " + target.string());
+                return;
+            }
+            out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+            if (!out)
+            {
+                callback(false, "Write failed for " + target.string());
+                return;
+            }
+        }
+
+        // Launch the installer; a UAC prompt is expected for per-machine MSIs.
+        const std::wstring wtarget = target.wstring();
+        const HINSTANCE hi =
+            ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        if (reinterpret_cast<INT_PTR>(hi) <= 32)
+        {
+            callback(false, "Failed to launch installer");
+            return;
+        }
+        callback(true, target.string());
+    }).detach();
+}
+
 UpdateCheckResult UpdateCheck::parseResponse(const std::string& body,
-                                            const std::string& current_version)
+                                             const std::string& current_version)
 {
     UpdateCheckResult result;
     result.installed_version = current_version;

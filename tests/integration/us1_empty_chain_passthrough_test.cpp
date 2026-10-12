@@ -8,14 +8,14 @@
 
 #include "loopback_fixture.h"
 
-#include <thread>
 #include <chrono>
+#include <fstream>
+#include <thread>
 
 namespace jyglobalvst::testing {
 
 class US1EmptyChainPassthroughTest : public LoopbackFixture
-{
-};
+{};
 
 TEST_F(US1EmptyChainPassthroughTest, EmptyChainSnapshot)
 {
@@ -151,6 +151,34 @@ TEST_F(US1EmptyChainPassthroughTest, LatencyMeasurementStable)
     const float tolerance = 1.0f;  // 1 ms tolerance
     EXPECT_NEAR(latency1.total_round_trip_ms, latency2.total_round_trip_ms, tolerance);
 
+    StopEngine();
+}
+
+TEST_F(US1EmptyChainPassthroughTest, WritesLatencyReport)
+{
+    // Writes latency_report.json into the test working directory
+    // (build/tests/) for the CI latency-report job to upload. The numbers come
+    // from the engine's own LatencyProfile — real measurements, not constants.
+    StartEngine();
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    const auto latency = engine()->latencyProfile();
+
+    std::ofstream out("latency_report.json", std::ios::trunc);
+    ASSERT_TRUE(out.good());
+    out.precision(4);
+    out << std::fixed;
+    out << "{\n"
+        << "  \"source\": \"engine LatencyProfile (virtual loopback, empty chain)\",\n"
+        << "  \"capture_ms\": " << latency.capture_ms << ",\n"
+        << "  \"resample_ms\": " << latency.resample_ms << ",\n"
+        << "  \"plugin_chain_ms\": " << latency.plugin_chain_ms << ",\n"
+        << "  \"output_ms\": " << latency.output_ms << ",\n"
+        << "  \"total_round_trip_ms\": " << latency.total_round_trip_ms << "\n"
+        << "}\n";
+    out.close();
+
+    EXPECT_GT(latency.total_round_trip_ms, 0.0f);
     StopEngine();
 }
 
