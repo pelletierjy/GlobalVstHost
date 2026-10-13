@@ -174,14 +174,39 @@ std::vector<PresetValidationError> validatePresetDocument(const nlohmann::json& 
                 errors.push_back({"Slot " + std::to_string(i) + " is not an object"});
                 continue;
             }
+            // Unknown slot field check (strict per FR-022g-1) — mirrors the shared
+            // preset validator so both agree on the accepted key set.
+            static const char* kSlotKnown[] = {"position",       "plugin_uid", "plugin_vendor",
+                                                "plugin_name",    "is_bypassed", "state_chunk_b64",
+                                                "plugin_path_hint", "tag",      "shortcut"};
+            for (auto it = slot.begin(); it != slot.end(); ++it)
+            {
+                bool known = false;
+                for (const char* key : kSlotKnown)
+                {
+                    if (it.key() == key)
+                    {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known)
+                {
+                    errors.push_back({"Slot " + std::to_string(i) + " unknown field: " + it.key()});
+                }
+            }
             static const char* kSlotRequired[] = {"position", "plugin_uid", "plugin_vendor",
                                                    "plugin_name", "is_bypassed", "state_chunk_b64"};
             for (const char* key : kSlotRequired)
             {
                 if (!slot.contains(key))
                 {
-                    errors.push_back({"Slot " + std::to_string(i) + " missing field: " + key});
+                    errors.push_back({std::string("Slot ") + std::to_string(i) + " missing field: " + key});
                 }
+            }
+            if (slot.contains("shortcut") && !slot["shortcut"].is_boolean())
+            {
+                errors.push_back({std::string("Slot ") + std::to_string(i) + " shortcut must be boolean"});
             }
             if (slot.contains("state_chunk_b64") && slot["state_chunk_b64"].is_string())
             {

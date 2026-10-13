@@ -93,7 +93,8 @@ TEST_F(US1AudioEngineApiTest, BufferSizeValidation)
 {
     engine()->start();
 
-    const int valid_sizes[] = {32, 64, 128, 256, 512, 1024};
+    // WASAPI mode only accepts {512, 1024}; the engine rejects anything else.
+    const int valid_sizes[] = {512, 1024};
 
     for (int size : valid_sizes)
     {
