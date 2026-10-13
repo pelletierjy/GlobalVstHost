@@ -10,6 +10,20 @@
 #   5. Virtualized-loopback latency measurement (software-only)
 #   6. CPU usage report
 #   7. Code coverage report
+#
+# Parallelization notes:
+# The jobs below are decoupled (no `needs:` chaining) so they all start at t=0.
+# Previously everything was serialized behind a monolithic build-and-test job
+# that also built Debug *before* running the Release tests, so soak/latency/
+# cpu/rt-audit idled for the whole build and then rebuilt Release a second time
+# (~3 h wall clock). Now:
+#   - rt-audit runs immediately (pure static analysis, no build).
+#   - build-and-test builds Release once, runs the test suite + coverage.
+#   - build-debug is a separate parallel job, so Debug never delays Release tests.
+#   - soak/latency/cpu each build their own Release in parallel (they never
+#     consumed build-and-test's output) and start immediately.
+# Wall clock is now bounded by the soak job (build + 30-min soak), the longest
+# single step, rather than the sum of every build.
 
 name: Audio PR Gate
 
@@ -30,7 +44,7 @@ env:
 
 jobs:
   build-and-test:
-    name: Build & Test (Windows)
+    name: Build & Test (Windows, Release)
     runs-on: windows-latest
 
     steps:
@@ -44,9 +58,6 @@ jobs:
 
       - name: Build Release
         run: cmake --build build --config Release --parallel
-
-      - name: Build Debug
-        run: cmake --build build --config Debug --parallel
 
       - name: Run unit + integration + contract tests
         run: ctest --test-dir build -C Release --output-on-failure
@@ -79,7 +90,6 @@ jobs:
   rt-audit:
     name: Real-Time Safety Audit
     runs-on: windows-latest
-    needs: build-and-test
 
     steps:
       - name: Checkout
@@ -112,11 +122,26 @@ jobs:
             exit 1
           }
 
+  build-debug:
+    name: Build (Windows, Debug)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure CMake
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
+
+      - name: Build Debug
+        run: cmake --build build --config Debug --parallel
+
   soak-test:
     name: 30-Min Soak Test
     runs-on: windows-latest
-    needs: build-and-test
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -149,7 +174,6 @@ jobs:
   latency-report:
     name: Virtual Loopback Latency
     runs-on: windows-latest
-    needs: build-and-test
 
     steps:
       - name: Checkout
@@ -174,7 +198,6 @@ jobs:
   cpu-report:
     name: CPU Usage Report
     runs-on: windows-latest
-    needs: build-and-test
 
     steps:
       - name: Checkout
