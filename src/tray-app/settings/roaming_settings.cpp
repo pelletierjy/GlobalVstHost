@@ -70,6 +70,14 @@ RoamingSettings RoamingSettingsStore::load() const
     {
         s.theme = doc["theme"].get<std::string>();
     }
+    if (doc.contains("language") && doc["language"].is_string())
+    {
+        const std::string lang = doc["language"].get<std::string>();
+        if (lang == "system" || lang == "en" || lang == "fr" || lang == "es")
+        {
+            s.language = lang;
+        }
+    }
     if (doc.contains("default_hardware_device_friendly_name"))
     {
         if (doc["default_hardware_device_friendly_name"].is_string())
@@ -131,11 +139,21 @@ RoamingSettings RoamingSettingsStore::load() const
     }
 
     // Preserve unknown fields.
-    static const char* kKnown[] = {"schema_version", "custom_scan_paths", "disabled_default_paths",
-                                    "default_buffer_size", "theme", "default_hardware_device_friendly_name",
-                                    "update_check_endpoint_url", "start_minimized_to_tray", "master_volume",
-                                    "energy_saver_enabled", "tooltips_enabled",
-                                    "capture_endpoint_id", "output_endpoint_id", "follow_default_capture"};
+    static const char* kKnown[] = {"schema_version",
+                                   "custom_scan_paths",
+                                   "disabled_default_paths",
+                                   "default_buffer_size",
+                                   "theme",
+                                   "language",
+                                   "default_hardware_device_friendly_name",
+                                   "update_check_endpoint_url",
+                                   "start_minimized_to_tray",
+                                   "master_volume",
+                                   "energy_saver_enabled",
+                                   "tooltips_enabled",
+                                   "capture_endpoint_id",
+                                   "output_endpoint_id",
+                                   "follow_default_capture"};
     for (auto it = doc.begin(); it != doc.end(); ++it)
     {
         bool known = false;
@@ -164,6 +182,7 @@ void RoamingSettingsStore::save(const RoamingSettings& settings) const
     doc["disabled_default_paths"] = settings.disabled_default_paths;
     doc["default_buffer_size"] = settings.default_buffer_size;
     doc["theme"] = settings.theme;
+    doc["language"] = settings.language;
     doc["default_hardware_device_friendly_name"] = settings.default_hardware_device_friendly_name
                                                        ? nlohmann::json(*settings.default_hardware_device_friendly_name)
                                                        : nlohmann::json(nullptr);

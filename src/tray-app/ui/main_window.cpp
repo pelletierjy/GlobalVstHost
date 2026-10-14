@@ -3,13 +3,14 @@
 // T045 / T062 — Main window with neon/glow theme and FlexBox layout.
 
 #include "main_window.h"
+
 #include "about_diagnostics.h"
 #include "accessibility/uia_notifications.h"
 #include "updates/update_check.h"
 
-#include "builtin-effects/builtin_theme.h"
-
 #include "BinaryData.h"
+#include "builtin-effects/builtin_theme.h"
+#include "i18n/translation.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -23,9 +24,10 @@
 #include <vector>
 
 #include <windows.h>
-#include <shellapi.h>
-#include <commdlg.h>
+
 #include <commctrl.h>
+#include <commdlg.h>
+#include <shellapi.h>
 
 namespace jyglobalvst::tray {
 
@@ -63,7 +65,7 @@ public:
     explicit SignalDirectionIcon(bool is_input) : is_input_(is_input)
     {
         setInterceptsMouseClicks(false, false);
-        setTitle(is_input ? "Input" : "Output");
+        setTitle(is_input ? i18n::tr("Input") : i18n::tr("Output"));
     }
 
     void paint(juce::Graphics& g) override
@@ -108,7 +110,7 @@ public:
           pre_mute_volume_(initial_gain),
           shortcut_count_(juce::jmin(static_cast<int>(shortcuts.size()), kMaxShortcutButtons))
     {
-        title_.setText("Master Volume", juce::dontSendNotification);
+        title_.setText(i18n::tr("Master Volume"), juce::dontSendNotification);
         title_.setJustificationType(juce::Justification::centred);
         addAndMakeVisible(title_);
 
@@ -406,9 +408,9 @@ juce::String endpointDisplayName(const HardwareOutputInfo& info, bool for_input)
     if (for_input)
     {
         if (info.is_loopback)
-            s += "System: ";
+            s += i18n::tr("System: ");
         else
-            s += "Input: ";
+            s += i18n::tr("Input: ");
     }
     s += juce::String(info.friendly_name);
     if (info.transport_kind == TransportKind::Asio)
@@ -595,7 +597,7 @@ public:
           asio_pair_label_(asio_pair_label), asio_pair_(asio_pair),
           asio_settings_(asio_settings)
     {
-        setSectionTitle("AUDIO DEVICE");
+        setSectionTitle(i18n::tr("AUDIO DEVICE"));
         addAndMakeVisible(transport_label_);
         addAndMakeVisible(transport_mode_);
         addAndMakeVisible(input_label_);
@@ -832,7 +834,7 @@ public:
           out_label_(out_label), out_l_(out_l), out_r_(out_r),
           vol_label_(vol_label), volume_(volume), mute_button_(mute_button)
     {
-        setSectionTitle("LEVELS");
+        setSectionTitle(i18n::tr("LEVELS"));
         addAndMakeVisible(in_label_);
         addAndMakeVisible(in_l_);
         addAndMakeVisible(in_r_);
@@ -1017,7 +1019,7 @@ class ChainEditorPanel : public GlassPanel
 public:
     explicit ChainEditorPanel(juce::Component* editor) : editor_(editor)
     {
-        setSectionTitle("PLUGIN CHAIN");
+        setSectionTitle(i18n::tr("PLUGIN CHAIN"));
         addAndMakeVisible(editor_);
     }
 
@@ -1035,7 +1037,7 @@ class SpectrumPanel : public GlassPanel
 public:
     explicit SpectrumPanel(juce::Component* analyzer) : analyzer_(analyzer)
     {
-        setSectionTitle("SPECTRUM");
+        setSectionTitle(i18n::tr("SPECTRUM"));
         addAndMakeVisible(analyzer_);
     }
 
@@ -1182,16 +1184,16 @@ private:
 
 LeafButton::LeafButton() : juce::Button("EnergySaver")
 {
-    setTooltip("Energy Saver: off");
+    setTooltip(i18n::tr("Energy Saver: off"));
 }
 
 void LeafButton::setEnergyState(bool enabled, bool sleeping)
 {
     enabled_ = enabled;
     sleeping_ = sleeping;
-    setTooltip(enabled_ ? (sleeping_ ? "Energy Saver: sleeping (engine idle)"
-                                     : "Energy Saver: on (monitoring)")
-                        : "Energy Saver: off");
+    setTooltip(enabled_ ? (sleeping_ ? i18n::tr("Energy Saver: sleeping (engine idle)")
+                                     : i18n::tr("Energy Saver: on (monitoring)"))
+                        : i18n::tr("Energy Saver: off"));
     repaint();
 }
 
@@ -1238,7 +1240,7 @@ void LeafButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool
 
 PowerButton::PowerButton() : juce::TextButton("ON")
 {
-    setTooltip("Start/Stop audio");
+    setTooltip(i18n::tr("Start/Stop audio"));
     setClickingTogglesState(true);
     setToggleState(false, juce::dontSendNotification);
 }
@@ -1251,7 +1253,7 @@ void PowerButton::setPowerState(bool running)
 
 ResetButton::ResetButton() : juce::Button("Reset")
 {
-    setTooltip("Reset engine");
+    setTooltip(i18n::tr("Reset engine"));
 }
 
 void ResetButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool /*shouldDrawDown*/)
@@ -1290,7 +1292,7 @@ void ResetButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, boo
 
 SettingsButton::SettingsButton() : juce::Button("Settings")
 {
-    setTooltip("Settings");
+    setTooltip(i18n::tr("Settings"));
 }
 
 void SettingsButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool /*shouldDrawDown*/)
@@ -1497,7 +1499,7 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     updateEnergySaverVisual();
 
     // Start a background plugin scan
-    status_label_->setText("Scanning plugins...", juce::dontSendNotification);
+    status_label_->setText(i18n::tr("Scanning plugins..."), juce::dontSendNotification);
     scan_dialog_ = std::make_unique<ScanDialog>(engine_.get());
     StartupLog("scan_dialog created");
     engine_->rescanPlugins(scan_dialog_.get());
@@ -1778,25 +1780,25 @@ void MainWindow::showTrayContextMenu()
 
     auto rs = roaming_settings_store_.load();
     UINT flags = rs.start_minimized_to_tray ? MF_CHECKED : MF_UNCHECKED;
-    AppendMenu(tray_menu_, MF_STRING | flags, 4, L"Start minimized to tray");
+    AppendMenu(tray_menu_, MF_STRING | flags, 4, i18n::trW(L"Start minimized to tray").c_str());
     AppendMenu(tray_menu_, MF_SEPARATOR, 0, nullptr);
 
-    AppendMenu(tray_menu_, MF_STRING, 1, L"Show Global VST Host");
+    AppendMenu(tray_menu_, MF_STRING, 1, i18n::trW(L"Show Global VST Host").c_str());
     AppendMenu(tray_menu_, MF_SEPARATOR, 0, nullptr);
 
     if (audio_running_)
     {
-        AppendMenu(tray_menu_, MF_STRING, 2, L"Stop Audio");
+        AppendMenu(tray_menu_, MF_STRING, 2, i18n::trW(L"Stop Audio").c_str());
     }
     else
     {
-        AppendMenu(tray_menu_, MF_STRING, 2, L"Start Audio");
+        AppendMenu(tray_menu_, MF_STRING, 2, i18n::trW(L"Start Audio").c_str());
     }
 
     AppendMenu(tray_menu_, MF_SEPARATOR, 0, nullptr);
     AppendMenu(tray_menu_, MF_STRING, 5, L"Check for Updates...");
     AppendMenu(tray_menu_, MF_SEPARATOR, 0, nullptr);
-    AppendMenu(tray_menu_, MF_STRING, 3, L"Exit");
+    AppendMenu(tray_menu_, MF_STRING, 3, i18n::trW(L"Exit").c_str());
 
     POINT pt;
     GetCursorPos(&pt);
@@ -1981,16 +1983,16 @@ void MainWindow::toggleShortcutBypass(int button_index)
 void MainWindow::buildUI()
 {
     // --- Labels --------------------------------------------------------------
-    transport_label_ = std::make_unique<juce::Label>(juce::String(), "Mode:");
-    input_label_ = std::make_unique<juce::Label>(juce::String(), "Captured audio device:");
-    output_label_ = std::make_unique<juce::Label>(juce::String(), "Output audio device:");
-    asio_device_label_ = std::make_unique<juce::Label>(juce::String(), "ASIO Device:");
-    asio_pair_label_ = std::make_unique<juce::Label>(juce::String(), "Channels:");
-    buffer_label_ = std::make_unique<juce::Label>(juce::String(), "Buffer:");
-    input_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "Captured sampling rate:");
-    output_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "Output sampling rate:");
-    vst_rate_caption_ = std::make_unique<juce::Label>(juce::String(), "VST sampling rate:");
-    vol_label_ = std::make_unique<juce::Label>(juce::String(), "Vol:");
+    transport_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Mode:"));
+    input_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Captured audio device:"));
+    output_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Output audio device:"));
+    asio_device_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("ASIO Device:"));
+    asio_pair_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Channels:"));
+    buffer_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Buffer:"));
+    input_rate_caption_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Captured sampling rate:"));
+    output_rate_caption_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Output sampling rate:"));
+    vst_rate_caption_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("VST sampling rate:"));
+    vol_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Vol:"));
 
     // --- Transport mode selector -------------------------------------------
     transport_mode_selector_ = std::make_unique<juce::ComboBox>();
@@ -2019,7 +2021,7 @@ void MainWindow::buildUI()
     asio_pair_selector_->addListener(this);
 
     // --- ASIO settings button ----------------------------------------------
-    asio_settings_button_ = std::make_unique<juce::TextButton>("ASIO Settings...");
+    asio_settings_button_ = std::make_unique<juce::TextButton>(i18n::tr("ASIO Settings..."));
     asio_settings_button_->addListener(this);
 
     // --- Buffer size -------------------------------------------------------
@@ -2078,10 +2080,10 @@ void MainWindow::buildUI()
     reset_engine_button_->addListener(this);
 
     // --- Save / Load preset ------------------------------------------------
-    save_preset_button_ = std::make_unique<juce::TextButton>("Save Preset...");
+    save_preset_button_ = std::make_unique<juce::TextButton>(i18n::tr("Save Preset..."));
     save_preset_button_->addListener(this);
 
-    load_preset_button_ = std::make_unique<juce::TextButton>("Load Preset...");
+    load_preset_button_ = std::make_unique<juce::TextButton>(i18n::tr("Load Preset..."));
     load_preset_button_->addListener(this);
 
     // --- Chain editor ------------------------------------------------------
@@ -2092,25 +2094,25 @@ void MainWindow::buildUI()
     spectrum_analyzer_ = std::make_unique<SpectrumAnalyzer>(engine_.get());
 
     // --- Latency / CPU -----------------------------------------------------
-    latency_label_ = std::make_unique<juce::Label>(juce::String{}, "Latency: — ms");
-    cpu_label_ = std::make_unique<juce::Label>(juce::String{}, "CPU");
+    latency_label_ = std::make_unique<juce::Label>(juce::String{}, i18n::tr("Latency: — ms"));
+    cpu_label_ = std::make_unique<juce::Label>(juce::String{}, i18n::tr("CPU"));
     cpu_bar_ = std::make_unique<CpuBar>();
 
     // --- Meters ------------------------------------------------------------
-    meter_input_label_ = std::make_unique<juce::Label>(juce::String{}, "Cap");
+    meter_input_label_ = std::make_unique<juce::Label>(juce::String{}, i18n::tr("Cap"));
     meter_input_l_ = std::make_unique<MeterPanel>();
     meter_input_r_ = std::make_unique<MeterPanel>();
 
-    meter_output_label_ = std::make_unique<juce::Label>(juce::String{}, "Out");
+    meter_output_label_ = std::make_unique<juce::Label>(juce::String{}, i18n::tr("Out"));
     meter_output_l_ = std::make_unique<MeterPanel>();
     meter_output_r_ = std::make_unique<MeterPanel>();
 
     // --- Status label ------------------------------------------------------
-    status_label_ = std::make_unique<juce::Label>(juce::String{}, "Ready");
+    status_label_ = std::make_unique<juce::Label>(juce::String{}, i18n::tr("Ready"));
     status_label_->setColour(juce::Label::textColourId, kTextDim);
 
     // --- Theme selector ----------------------------------------------------
-    theme_label_ = std::make_unique<juce::Label>(juce::String(), "Theme:");
+    theme_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Theme:"));
     theme_selector_ = std::make_unique<juce::ComboBox>();
     theme_selector_->addItem("Neon Blue",   static_cast<int>(CustomLookAndFeel::ThemeId::NeonBlue));
     theme_selector_->addItem("Neon Purple", static_cast<int>(CustomLookAndFeel::ThemeId::NeonPurple));
@@ -2118,23 +2120,37 @@ void MainWindow::buildUI()
     theme_selector_->addItem("Neon Orange", static_cast<int>(CustomLookAndFeel::ThemeId::NeonOrange));
     theme_selector_->addItem("Neon Red",    static_cast<int>(CustomLookAndFeel::ThemeId::NeonRed));
     theme_selector_->addItem("Monochrome",  static_cast<int>(CustomLookAndFeel::ThemeId::Mono));
-    theme_selector_->addItem("Light",       static_cast<int>(CustomLookAndFeel::ThemeId::Light));
+    theme_selector_->addItem(i18n::tr("Light"), static_cast<int>(CustomLookAndFeel::ThemeId::Light));
     theme_selector_->setSelectedId(static_cast<int>(CustomLookAndFeel::ThemeId::NeonBlue),
                                    juce::dontSendNotification);
     theme_selector_->addListener(this);
 
     // --- Start minimized to tray toggle ----------------------------------
-    start_minimized_label_ = std::make_unique<juce::Label>(juce::String(), "Start minimized:");
-    start_minimized_button_ = std::make_unique<juce::ToggleButton>("to tray");
+    start_minimized_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Start minimized:"));
+    start_minimized_button_ = std::make_unique<juce::ToggleButton>(i18n::tr("to tray"));
     auto rs = roaming_settings_store_.load();
     start_minimized_button_->setToggleState(rs.start_minimized_to_tray, juce::dontSendNotification);
     start_minimized_button_->addListener(this);
 
     // --- Tooltips toggle ---------------------------------------------------
-    tooltips_label_ = std::make_unique<juce::Label>(juce::String(), "Tooltips:");
-    tooltips_button_ = std::make_unique<juce::ToggleButton>("enabled");
+    tooltips_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Tooltips:"));
+    tooltips_button_ = std::make_unique<juce::ToggleButton>(i18n::tr("enabled"));
     tooltips_button_->setToggleState(rs.tooltips_enabled, juce::dontSendNotification);
     tooltips_button_->addListener(this);
+
+    // --- Language selector (About → Settings tab) ---------------------------
+    // Built here but not parented, exactly like the theme/start-minimized
+    // controls: the Settings tab reparents it while the dialog is open.
+    // Persisted to RoamingSettings::language; applied on the next launch.
+    language_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Language:"));
+    language_selector_ = std::make_unique<juce::ComboBox>();
+    language_selector_->addItem(i18n::languageDisplayName(i18n::Language::System), 1);
+    language_selector_->addItem(i18n::languageDisplayName(i18n::Language::English), 2);
+    language_selector_->addItem(i18n::languageDisplayName(i18n::Language::French), 3);
+    language_selector_->addItem(i18n::languageDisplayName(i18n::Language::Spanish), 4);
+    language_selector_->setSelectedId(static_cast<int>(i18n::parseLanguage(rs.language)) + 1,
+                                      juce::dontSendNotification);
+    language_selector_->addListener(this);
 
     // --- Tooltip window (global) -------------------------------------------
     tooltip_window_ = std::make_unique<juce::TooltipWindow>(this, 800);
@@ -2252,7 +2268,7 @@ void MainWindow::refreshDeviceLists()
     input_selector_->clear(juce::dontSendNotification);
 
     // Add "Disconnected" option as the first input
-    input_selector_->addItem("Disconnected", 1);
+    input_selector_->addItem(i18n::tr("Disconnected"), 1);
     input_endpoint_ids_.push_back(std::string(kDisconnectedDeviceId));
 
     const auto inputs = engine_->listInputs();
@@ -2290,7 +2306,7 @@ void MainWindow::refreshDeviceLists()
     output_selector_->clear(juce::dontSendNotification);
 
     // Add "Disconnected" option as the first output
-    output_selector_->addItem("Disconnected", 1);
+    output_selector_->addItem(i18n::tr("Disconnected"), 1);
     output_endpoint_ids_.push_back(std::string(kDisconnectedDeviceId));
 
     int output_idx = 2;
@@ -2383,7 +2399,7 @@ void MainWindow::buttonClicked(juce::Button* button)
         engine_->reset();
         audio_running_ = engine_->isRunning();
         audio_toggle_->setPowerState(audio_running_);
-        status_label_->setText("Engine reset", juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Engine reset"), juce::dontSendNotification);
         updateTrayIconAppearance();
     }
     else if (button == asio_settings_button_.get())
@@ -2457,14 +2473,14 @@ void MainWindow::setAudioRunning(bool run)
         engine_->start();
         audio_running_ = true;
         audio_toggle_->setPowerState(true);
-        status_label_->setText("Audio running", juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Audio running"), juce::dontSendNotification);
     }
     else
     {
         engine_->stop();
         audio_running_ = false;
         audio_toggle_->setPowerState(false);
-        status_label_->setText("Audio stopped", juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Audio stopped"), juce::dontSendNotification);
     }
     updateTrayIconAppearance();
     saveSessionState();
@@ -2565,12 +2581,14 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                 }
                 juce::AlertWindow::showMessageBoxAsync(
                     juce::AlertWindow::InfoIcon,
-                    "Device Conflict Resolved",
-                    "WASAPI loopback requires two separate audio interfaces:\n"
-                    "one for capture (system audio) and one for playback (processed output).\n\n"
-                    "The output device has been disconnected. The input will be muted automatically.\n\n"
-                    "Please connect a separate playback device such as USB headphones, an external display with audio output, a DAC, or similar.\n\n"
-                    "Alternatively, you can install a virtual audio cable such as VB-Cable from https://vb-audio.com/Cable/ ",
+                    i18n::tr("Device Conflict Resolved"),
+                    i18n::tr("WASAPI loopback requires two separate audio interfaces:\n"
+                             "one for capture (system audio) and one for playback (processed output).\n\n"
+                             "The output device has been disconnected. The input will be muted automatically.\n\n"
+                             "Please connect a separate playback device such as USB headphones, an external display "
+                             "with audio output, a DAC, or similar.\n\n"
+                             "Alternatively, you can install a virtual audio cable such as VB-Cable from "
+                             "https://vb-audio.com/Cable/ "),
                     "OK");
             }
 
@@ -2621,12 +2639,14 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                 }
                 juce::AlertWindow::showMessageBoxAsync(
                     juce::AlertWindow::InfoIcon,
-                    "Device Conflict Resolved",
-                    "WASAPI loopback requires two separate audio interfaces:\n"
-                    "one for capture (system audio) and one for playback (processed output).\n\n"
-                    "The input device has been disconnected. It will be muted automatically.\n\n"
-                    "Please connect a separate playback device such as USB headphones, an external display with audio output, a DAC, or similar.\n\n"
-                    "Alternatively, you can install a virtual audio cable such as VB-Cable from https://vb-audio.com/Cable/ ",
+                    i18n::tr("Device Conflict Resolved"),
+                    i18n::tr("WASAPI loopback requires two separate audio interfaces:\n"
+                             "one for capture (system audio) and one for playback (processed output).\n\n"
+                             "The input device has been disconnected. It will be muted automatically.\n\n"
+                             "Please connect a separate playback device such as USB headphones, an external display "
+                             "with audio output, a DAC, or similar.\n\n"
+                             "Alternatively, you can install a virtual audio cable such as VB-Cable from "
+                             "https://vb-audio.com/Cable/ "),
                     "OK");
             }
 
@@ -2693,9 +2713,7 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         {
             buffer_selector_->setSelectedId(engine_->bufferSize(), juce::dontSendNotification);
             juce::AlertWindow::showMessageBoxAsync(
-                juce::AlertWindow::WarningIcon,
-                "Buffer Size Not Supported",
-                juce::String(e.what()));
+                juce::AlertWindow::WarningIcon, i18n::tr("Buffer Size Not Supported"), juce::String(e.what()));
         }
     }
     else if (comboBoxThatHasChanged == vst_rate_selector_.get())
@@ -2712,6 +2730,18 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         const auto id = static_cast<CustomLookAndFeel::ThemeId>(theme_selector_->getSelectedId());
         applyThemeChange(id);
         saveSessionState();
+    }
+    else if (comboBoxThatHasChanged == language_selector_.get())
+    {
+        // Persist only: static labels are built once, so the new language is
+        // installed on the next launch (the status line says so).
+        const auto language = static_cast<i18n::Language>(language_selector_->getSelectedId() - 1);
+        auto lang_rs = roaming_settings_store_.load();
+        lang_rs.language = i18n::languageCode(language);
+        roaming_settings_store_.save(lang_rs);
+
+        status_label_->setText(i18n::tr("Language saved — restart Global VST Host to apply"),
+                               juce::dontSendNotification);
     }
 }
 
@@ -2758,30 +2788,53 @@ void MainWindow::applyTooltips()
     const bool enabled = roaming_settings_store_.load().tooltips_enabled;
     const juce::String empty;
 
-    transport_mode_selector_->setTooltip(enabled ? "Select audio transport: WASAPI (loopback) or ASIO" : empty);
-    input_selector_->setTooltip(enabled ? "Capture source: system audio loopback or a specific capture device" : empty);
-    output_selector_->setTooltip(enabled ? "Playback device: where processed audio is sent" : empty);
-    asio_device_selector_->setTooltip(enabled ? "ASIO hardware driver to use" : empty);
-    asio_pair_selector_->setTooltip(enabled ? "Stereo output channel pair" : empty);
-    buffer_selector_->setTooltip(enabled ? "Audio buffer size in samples (larger = more stable, smaller = lower latency)" : empty);
-    vst_rate_selector_->setTooltip(enabled ? "Target sampling rate for the VST plugin chain" : empty);
-    audio_toggle_->setTooltip(enabled ? "Start or stop audio processing" : empty);
-    volume_slider_->setTooltip(enabled ? "Master output volume" : empty);
-    mute_button_->setTooltip(enabled ? "Mute / unmute the output" : empty);
-    reset_engine_button_->setTooltip(enabled ? "Reset the audio engine and reload the plugin chain" : empty);
-    save_preset_button_->setTooltip(enabled ? "Save the current plugin chain and settings to a file" : empty);
-    load_preset_button_->setTooltip(enabled ? "Load a previously saved preset file" : empty);
-    asio_settings_button_->setTooltip(enabled ? "Open the ASIO driver control panel" : empty);
-    theme_selector_->setTooltip(enabled ? "Choose the application colour theme: light, dark, or match the system setting." : empty);
-    theme_label_->setTooltip(enabled ? "Choose the application colour theme: light, dark, or match the system setting." : empty);
-    start_minimized_button_->setTooltip(enabled ? "When enabled, the app starts directly in the system tray without showing the main window." : empty);
-    start_minimized_label_->setTooltip(enabled ? "When enabled, the app starts directly in the system tray without showing the main window." : empty);
-    tooltips_button_->setTooltip(enabled ? "Show helpful popup descriptions when hovering over controls. Turn this off for a cleaner interface." : empty);
-    tooltips_label_->setTooltip(enabled ? "Show helpful popup descriptions when hovering over controls. Turn this off for a cleaner interface." : empty);
-    about_button_->setTooltip(enabled ? "About, diagnostics, and settings" : empty);
-    energy_saver_button_->setTooltip(enabled ? "Toggle energy saver: auto-suspend the VST chain when input is silent to save CPU." : empty);
-    help_button_->setTooltip(enabled ? "Open help documentation" : empty);
-    assistant_button_->setTooltip(enabled ? "Open the AI assistant" : empty);
+    transport_mode_selector_->setTooltip(enabled ? i18n::tr("Select audio transport: WASAPI (loopback) or ASIO")
+                                                 : empty);
+    input_selector_->setTooltip(enabled ? i18n::tr("Capture source: system audio loopback or a specific capture device")
+                                        : empty);
+    output_selector_->setTooltip(enabled ? i18n::tr("Playback device: where processed audio is sent") : empty);
+    asio_device_selector_->setTooltip(enabled ? i18n::tr("ASIO hardware driver to use") : empty);
+    asio_pair_selector_->setTooltip(enabled ? i18n::tr("Stereo output channel pair") : empty);
+    buffer_selector_->setTooltip(
+        enabled ? i18n::tr("Audio buffer size in samples (larger = more stable, smaller = lower latency)") : empty);
+    vst_rate_selector_->setTooltip(enabled ? i18n::tr("Target sampling rate for the VST plugin chain") : empty);
+    audio_toggle_->setTooltip(enabled ? i18n::tr("Start or stop audio processing") : empty);
+    volume_slider_->setTooltip(enabled ? i18n::tr("Master output volume") : empty);
+    mute_button_->setTooltip(enabled ? i18n::tr("Mute / unmute the output") : empty);
+    reset_engine_button_->setTooltip(enabled ? i18n::tr("Reset the audio engine and reload the plugin chain") : empty);
+    save_preset_button_->setTooltip(enabled ? i18n::tr("Save the current plugin chain and settings to a file") : empty);
+    load_preset_button_->setTooltip(enabled ? i18n::tr("Load a previously saved preset file") : empty);
+    asio_settings_button_->setTooltip(enabled ? i18n::tr("Open the ASIO driver control panel") : empty);
+    theme_selector_->setTooltip(
+        enabled ? i18n::tr("Choose the application colour theme: light, dark, or match the system setting.") : empty);
+    theme_label_->setTooltip(
+        enabled ? i18n::tr("Choose the application colour theme: light, dark, or match the system setting.") : empty);
+    language_selector_->setTooltip(
+        enabled ? i18n::tr("Interface language: takes effect the next time you start Global VST Host.") : empty);
+    language_label_->setTooltip(
+        enabled ? i18n::tr("Interface language: takes effect the next time you start Global VST Host.") : empty);
+    start_minimized_button_->setTooltip(
+        enabled ? i18n::tr("When enabled, the app starts directly in the system tray without showing the main window.")
+                : empty);
+    start_minimized_label_->setTooltip(
+        enabled ? i18n::tr("When enabled, the app starts directly in the system tray without showing the main window.")
+                : empty);
+    tooltips_button_->setTooltip(
+        enabled
+            ? i18n::tr(
+                  "Show helpful popup descriptions when hovering over controls. Turn this off for a cleaner interface.")
+            : empty);
+    tooltips_label_->setTooltip(
+        enabled
+            ? i18n::tr(
+                  "Show helpful popup descriptions when hovering over controls. Turn this off for a cleaner interface.")
+            : empty);
+    about_button_->setTooltip(enabled ? i18n::tr("About, diagnostics, and settings") : empty);
+    energy_saver_button_->setTooltip(
+        enabled ? i18n::tr("Toggle energy saver: auto-suspend the VST chain when input is silent to save CPU.")
+                : empty);
+    help_button_->setTooltip(enabled ? i18n::tr("Open help documentation") : empty);
+    assistant_button_->setTooltip(enabled ? i18n::tr("Open the AI assistant") : empty);
 
     // Refresh existing button tooltips that were set in their constructors.
     if (enabled)
@@ -2808,7 +2861,7 @@ void MainWindow::handleLoadPlugin()
                 {
                     const auto id = engine_->addPlugin(entry->ref, 0);
                     juce::String display = juce::String(entry->ref.vendor) + " " + juce::String(entry->ref.name);
-                    status_label_->setText("Plugin added: " + display, juce::dontSendNotification);
+                    status_label_->setText(i18n::tr("Plugin added: ") + display, juce::dontSendNotification);
                     notifyPluginAdded(nativeHwnd(), display.toStdString());
                     (void)id;
                 }
@@ -2833,7 +2886,17 @@ void MainWindow::openPluginFileBrowser()
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = nullptr;
-    ofn.lpstrFilter = L"VST3 Plugins (*.vst3)\0*.vst3\0All Files\0*.*\0";
+    // File-dialog filters are double-NUL-terminated lists, so the pieces are
+    // appended one by one: std::wstring::operator+ stops at the first NUL.
+    std::wstring vst3_filter = i18n::trW(L"VST3 Plugins (*.vst3)");
+    vst3_filter += L'\0';
+    vst3_filter += L"*.vst3";
+    vst3_filter += L'\0';
+    vst3_filter += i18n::trW(L"All Files");
+    vst3_filter += L'\0';
+    vst3_filter += L"*.*";
+    vst3_filter += L'\0';
+    ofn.lpstrFilter = vst3_filter.c_str();
     ofn.lpstrFile = file_name;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
@@ -2859,8 +2922,7 @@ void MainWindow::openPluginFileBrowser()
 
         const auto id = engine_->addPluginFromPath(path, 0);
         auto display_name = std::filesystem::path(path).stem().string();
-        status_label_->setText("Plugin added: " + juce::String(display_name),
-                               juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Plugin added: ") + juce::String(display_name), juce::dontSendNotification);
         (void)id;
     }
 }
@@ -2871,7 +2933,11 @@ void MainWindow::handleSavePreset()
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = nullptr;
-    ofn.lpstrFilter = L"Global VST Host Presets (*.jvst)\0*.jvst\0";
+    std::wstring preset_filter = i18n::trW(L"Global VST Host Presets (*.jvst)");
+    preset_filter += L'\0';
+    preset_filter += L"*.jvst";
+    preset_filter += L'\0';
+    ofn.lpstrFilter = preset_filter.c_str();
     ofn.lpstrFile = file_name;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_OVERWRITEPROMPT;
@@ -2894,7 +2960,7 @@ void MainWindow::handleSavePreset()
             if (pofs) pofs << preset_doc.dump(2);
         }
 
-        status_label_->setText("Preset saved: " + juce::String(path.stem().string()),
+        status_label_->setText(i18n::tr("Preset saved: ") + juce::String(path.stem().string()),
                                juce::dontSendNotification);
     }
 }
@@ -2905,7 +2971,11 @@ void MainWindow::handleLoadPreset()
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = nullptr;
-    ofn.lpstrFilter = L"Global VST Host Presets (*.jvst)\0*.jvst\0";
+    std::wstring preset_filter = i18n::trW(L"Global VST Host Presets (*.jvst)");
+    preset_filter += L'\0';
+    preset_filter += L"*.jvst";
+    preset_filter += L'\0';
+    ofn.lpstrFilter = preset_filter.c_str();
     ofn.lpstrFile = file_name;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
@@ -2934,7 +3004,7 @@ void MainWindow::handleLoadPreset()
         }
 
         engine_->loadPreset(path);
-        status_label_->setText("Preset loaded: " + juce::String(path.stem().string()),
+        status_label_->setText(i18n::tr("Preset loaded: ") + juce::String(path.stem().string()),
                                juce::dontSendNotification);
     }
 }
@@ -2959,6 +3029,8 @@ void MainWindow::handleAbout()
     SettingsControls settings;
     settings.theme_label = theme_label_.get();
     settings.theme_selector = theme_selector_.get();
+    settings.language_label = language_label_.get();
+    settings.language_selector = language_selector_.get();
     settings.start_minimized_label = start_minimized_label_.get();
     settings.start_minimized_button = start_minimized_button_.get();
     settings.tooltips_label = tooltips_label_.get();
@@ -3060,7 +3132,7 @@ void MainWindow::toggleEnergySaver()
     rs.energy_saver_enabled = enable;
     roaming_settings_store_.save(rs);
 
-    status_label_->setText(enable ? "Energy Saver enabled" : "Energy Saver disabled",
+    status_label_->setText(enable ? i18n::tr("Energy Saver enabled") : i18n::tr("Energy Saver disabled"),
                            juce::dontSendNotification);
     updateEnergySaverVisual();
 }
@@ -3080,8 +3152,8 @@ void MainWindow::onEnergySaverStateChanged(bool sleeping)
     updateTrayIconAppearance();
     if (engine_->isEnergySaverEnabled())
     {
-        status_label_->setText(sleeping ? "Energy Saver: engine sleeping (no audio)"
-                                        : "Energy Saver: audio resumed",
+        status_label_->setText(sleeping ? i18n::tr("Energy Saver: engine sleeping (no audio)")
+                                        : i18n::tr("Energy Saver: audio resumed"),
                                juce::dontSendNotification);
     }
 }
@@ -3157,7 +3229,7 @@ void MainWindow::restoreFromAutosave()
         const EndpointId out = engine_->currentOutput();
         if (!out.empty())
         {
-            status_label_->setText("Session restored - starting audio...", juce::dontSendNotification);
+            status_label_->setText(i18n::tr("Session restored - starting audio..."), juce::dontSendNotification);
             juce::MessageManager::callAsync([this]() {
                 StartupLog("callAsync: starting audio");
                 engine_->start();
@@ -3165,24 +3237,25 @@ void MainWindow::restoreFromAutosave()
                 {
                     audio_running_ = true;
                     audio_toggle_->setPowerState(true);
-                    status_label_->setText("Session restored - audio running", juce::dontSendNotification);
+                    status_label_->setText(i18n::tr("Session restored - audio running"), juce::dontSendNotification);
                 }
                 else
                 {
                     audio_running_ = false;
                     audio_toggle_->setPowerState(false);
-                    status_label_->setText("Session restored - failed to start audio", juce::dontSendNotification);
+                    status_label_->setText(i18n::tr("Session restored - failed to start audio"),
+                                           juce::dontSendNotification);
                 }
             });
         }
         else
         {
-            status_label_->setText("Session restored - output device not found", juce::dontSendNotification);
+            status_label_->setText(i18n::tr("Session restored - output device not found"), juce::dontSendNotification);
         }
     }
     else
     {
-        status_label_->setText("Session restored", juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Session restored"), juce::dontSendNotification);
     }
     StartupLog("restoreFromAutosave exit");
 }
@@ -3200,7 +3273,7 @@ void MainWindow::timerCallback()
     {
         StartupLog("timerCallback: scan finished, hiding dialog");
         plugin_scan_complete_ = true;
-        status_label_->setText("Ready", juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Ready"), juce::dontSendNotification);
         scan_dialog_->setVisible(false);
     }
 
@@ -3360,10 +3433,10 @@ void MainWindow::refreshLatencyAndCpu()
     const auto latency = engine_->latencyProfile();
     const auto cpu = engine_->cpuStats();
 
-    latency_label_->setText(juce::String::formatted("Latency: %.2f ms (in %.2f + out %.2f)",
-                                                     latency.total_round_trip_ms,
-                                                     latency.capture_ms,
-                                                     latency.output_ms),
+    latency_label_->setText(juce::String::formatted(i18n::tr("Latency: %.2f ms (in %.2f + out %.2f)"),
+                                                    latency.total_round_trip_ms,
+                                                    latency.capture_ms,
+                                                    latency.output_ms),
                             juce::dontSendNotification);
 
     static_cast<CpuBar*>(cpu_bar_.get())->setValue(cpu.rolling_1s_pct);
@@ -3377,7 +3450,7 @@ void MainWindow::onChainRevision(int new_revision)
 {
     juce::MessageManager::callAsync([this, new_revision]() {
         last_chain_revision_ = new_revision;
-        status_label_->setText("Chain updated (rev " + juce::String(new_revision) + ")",
+        status_label_->setText(i18n::tr("Chain updated (rev ") + juce::String(new_revision) + ")",
                                juce::dontSendNotification);
         if (chain_editor_)
         {
@@ -3390,8 +3463,7 @@ void MainWindow::onChainRevision(int new_revision)
 void MainWindow::onPluginFailed(const InstanceId& /*id*/, const std::string& reason)
 {
     juce::MessageManager::callAsync([this, reason]() {
-        status_label_->setText("Plugin failed: " + juce::String(reason),
-                               juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Plugin failed: ") + juce::String(reason), juce::dontSendNotification);
         if (chain_editor_)
         {
             chain_editor_->refreshFromEngine();
@@ -3411,7 +3483,8 @@ HWND MainWindow::nativeHwnd() const
 void MainWindow::onDeviceLost(const EndpointId& lost, const EndpointId& fallback_to)
 {
     juce::MessageManager::callAsync([this, lost, fallback_to]() {
-        status_label_->setText("Device lost: " + juce::String(lost) + " → fallback: " + juce::String(fallback_to),
+        status_label_->setText(i18n::tr("Device lost: ") + juce::String(lost) + i18n::tr(" → fallback: ") +
+                                   juce::String(fallback_to),
                                juce::dontSendNotification);
         notifyDeviceDisconnect(nativeHwnd(), lost);
         refreshDeviceLists();
@@ -3421,7 +3494,7 @@ void MainWindow::onDeviceLost(const EndpointId& lost, const EndpointId& fallback
 void MainWindow::onDeviceRestored(const EndpointId& restored)
 {
     juce::MessageManager::callAsync([this, restored]() {
-        status_label_->setText("Device restored: " + juce::String(restored),
+        status_label_->setText(i18n::tr("Device restored: ") + juce::String(restored),
                                juce::dontSendNotification);
         notifyDeviceRestored(nativeHwnd(), restored);
         refreshDeviceLists();
@@ -3438,9 +3511,9 @@ void MainWindow::onDeviceListChanged()
 void MainWindow::onCpuWarning(float rolling_1s_pct)
 {
     juce::MessageManager::callAsync([this, rolling_1s_pct]() {
-        status_label_->setText(juce::String::formatted("CPU warning: %.1f %% — consider larger buffer",
-                                                        rolling_1s_pct),
-                               juce::dontSendNotification);
+        status_label_->setText(
+            juce::String::formatted(i18n::tr("CPU warning: %.1f %% — consider larger buffer"), rolling_1s_pct),
+            juce::dontSendNotification);
         notifyCpuWarning(nativeHwnd(), true);
     });
 }
@@ -3454,7 +3527,7 @@ void MainWindow::onMeterFrame(const MeterFrame& frame)
 void MainWindow::onPresetPartialLoad(const std::vector<MissingPluginInfo>& missing)
 {
     juce::MessageManager::callAsync([this, missing]() {
-        juce::String msg = "Preset loaded with missing plugins: " + juce::String((int)missing.size());
+        juce::String msg = i18n::tr("Preset loaded with missing plugins: ") + juce::String((int)missing.size());
         status_label_->setText(msg, juce::dontSendNotification);
         notifyPresetPartialLoad(nativeHwnd(), static_cast<int>(missing.size()));
     });
@@ -3464,7 +3537,7 @@ void MainWindow::onSameDeviceConflict(const EndpointId& device)
 {
     (void)device;
     juce::MessageManager::callAsync([this]() {
-        status_label_->setText("Cannot use same device for capture and output", juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Cannot use same device for capture and output"), juce::dontSendNotification);
     });
 }
 
@@ -3472,7 +3545,7 @@ void MainWindow::onCaptureMuteFallbackRequired(const EndpointId& endpoint)
 {
     (void)endpoint;
     juce::MessageManager::callAsync([this]() {
-        status_label_->setText("Capture device muting unavailable; select a different output device",
+        status_label_->setText(i18n::tr("Capture device muting unavailable; select a different output device"),
                                juce::dontSendNotification);
     });
 }
@@ -3512,7 +3585,7 @@ void MainWindow::onSystemSuspend()
         audio_running_ = false;
         juce::MessageManager::callAsync([this]() {
             audio_toggle_->setPowerState(false);
-            status_label_->setText("Audio stopped (system sleep)", juce::dontSendNotification);
+            status_label_->setText(i18n::tr("Audio stopped (system sleep)"), juce::dontSendNotification);
         });
     }
 }
@@ -3546,7 +3619,7 @@ void MainWindow::onSystemResume()
         }
     });
 
-    status_label_->setText("System resumed; restarting audio...", juce::dontSendNotification);
+    status_label_->setText(i18n::tr("System resumed; restarting audio..."), juce::dontSendNotification);
 }
 
 void MainWindow::restartAfterResume()
@@ -3563,7 +3636,7 @@ void MainWindow::restartAfterResume()
     engine_->start();
     audio_running_ = true;
     audio_toggle_->setPowerState(true);
-    status_label_->setText("Audio running (system resume)", juce::dontSendNotification);
+    status_label_->setText(i18n::tr("Audio running (system resume)"), juce::dontSendNotification);
     updateTrayIconAppearance();
 }
 
@@ -3587,14 +3660,14 @@ void MainWindow::onAudioStalled()
 
     if (++stall_restart_attempts_ > kMaxStallRestartAttempts)
     {
-        status_label_->setText("Audio device is not responding; reselect a device or press Reset",
+        status_label_->setText(i18n::tr("Audio device is not responding; reselect a device or press Reset"),
                                juce::dontSendNotification);
         return;
     }
 
-    status_label_->setText(juce::String::formatted("Audio stalled; restarting engine (attempt %d)",
-                                                   stall_restart_attempts_),
-                           juce::dontSendNotification);
+    status_label_->setText(
+        juce::String::formatted(i18n::tr("Audio stalled; restarting engine (attempt %d)"), stall_restart_attempts_),
+        juce::dontSendNotification);
     engine_->reset();
     refreshDeviceLists();
 }

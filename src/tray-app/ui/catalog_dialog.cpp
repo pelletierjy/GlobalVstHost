@@ -3,7 +3,9 @@
 // Plugin catalog selection dialog.
 
 #include "catalog_dialog.h"
+
 #include "custom_look_and_feel.h"
+#include "i18n/translation.h"
 
 namespace jyglobalvst::tray {
 
@@ -25,9 +27,7 @@ public:
 }  // namespace
 
 CatalogDialog::CatalogDialog(const std::vector<PluginCatalogEntry>& catalog, OnAction on_action)
-    : juce::DialogWindow("Select Plugin", kBgDeep, true, true)
-    , catalog_(catalog)
-    , on_action_(on_action)
+    : juce::DialogWindow(i18n::tr("Select Plugin"), kBgDeep, true, true), catalog_(catalog), on_action_(on_action)
 {
     buildUI();
     centreWithSize(500, 400);
@@ -46,16 +46,16 @@ void CatalogDialog::buildUI()
     list_box_->setOutlineThickness(1);
     content->addAndMakeVisible(list_box_.get());
 
-    add_button_ = std::make_unique<juce::TextButton>("Add");
+    add_button_ = std::make_unique<juce::TextButton>(i18n::tr("Add"));
     add_button_->addListener(this);
     add_button_->setEnabled(false);
     content->addAndMakeVisible(add_button_.get());
 
-    browse_button_ = std::make_unique<juce::TextButton>("Browse...");
+    browse_button_ = std::make_unique<juce::TextButton>(i18n::tr("Browse..."));
     browse_button_->addListener(this);
     content->addAndMakeVisible(browse_button_.get());
 
-    auto* cancel_button = new juce::TextButton("Cancel");
+    auto* cancel_button = new juce::TextButton(i18n::tr("Cancel"));
     cancel_button->addListener(this);
     cancel_button_ = std::unique_ptr<juce::TextButton>(cancel_button);
     content->addAndMakeVisible(cancel_button_.get());
@@ -136,7 +136,7 @@ void CatalogDialog::paintListBoxItem(int rowNumber, juce::Graphics& g, int width
 
     // Add "Built-in" badge for built-in effects
     if (ref.vendor == "JyGlobalVST" && entry.file_path.empty())
-        display_name += " [Built-in]";
+        display_name += i18n::tr(" [Built-in]");
 
     juce::String version_str = juce::String(" v") + juce::String(entry.version);
     juce::String full_text = display_name + version_str;

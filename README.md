@@ -66,6 +66,12 @@ Status changes — device connect/disconnect, CPU warnings, plugin add/remove, p
 
 The tray menu's **Check for Updates...** looks for a newer version on demand (never automatically). If one is found, you can download and run the installer right from the prompt.
 
+## Languages
+
+The interface ships in English, French and Spanish. It follows your Windows display
+language by default; choose one yourself in **About → Settings → Language** (a new
+language applies the next time you start the app).
+
 ## Privacy
 
 No accounts, no telemetry, no analytics, no crash reports, no persistent logging, and no background network activity — the only network use is the update check you trigger yourself and the optional AI Assistant below. Presets and settings stay on your machine.

@@ -48,13 +48,30 @@ foreach(_src IN LISTS _integration_test_sources)
     jyglobalvst_add_test(${_name} ${_src})
 endforeach()
 
-# polish_accessibility_test includes chain_editor.cpp which depends on
-# HorizontalMeterPanel and the UIA notification helpers; add the extra UI
-# sources so linkage succeeds.
+# polish_accessibility_test includes chain_editor.cpp (which now calls
+# i18n::tr) and depends on HorizontalMeterPanel and the UIA notification
+# helpers; add the tray-app include path, the i18n implementation sources,
+# and the extra UI sources so linkage succeeds.
 if(TARGET polish_accessibility_test)
     target_sources(polish_accessibility_test PRIVATE
         "${CMAKE_SOURCE_DIR}/src/tray-app/ui/horizontal_meter_panel.cpp"
-        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/accessibility/uia_notifications.cpp")
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/accessibility/uia_notifications.cpp"
+        "${CMAKE_SOURCE_DIR}/src/tray-app/i18n/translation.cpp"
+        "${CMAKE_SOURCE_DIR}/src/tray-app/i18n/translations_fr.cpp"
+        "${CMAKE_SOURCE_DIR}/src/tray-app/i18n/translations_es.cpp")
+    target_include_directories(polish_accessibility_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app")
+endif()
+
+# i18n_translation_test exercises the FR/ES tables. The i18n implementation
+# lives in the tray app, so compile those sources into the test directly.
+if(TARGET i18n_translation_test)
+    target_sources(i18n_translation_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app/i18n/translation.cpp"
+        "${CMAKE_SOURCE_DIR}/src/tray-app/i18n/translations_fr.cpp"
+        "${CMAKE_SOURCE_DIR}/src/tray-app/i18n/translations_es.cpp")
+    target_include_directories(i18n_translation_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app")
 endif()
 
 # The assistant URL builder is tray-app code but is pure logic; compile it into

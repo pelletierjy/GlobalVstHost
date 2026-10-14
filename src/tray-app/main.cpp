@@ -9,7 +9,9 @@
 
 #include "jyglobalvst/audio_engine.h"
 
+#include "i18n/translation.h"
 #include "platform/session_mutex.h"
+#include "settings/roaming_settings.h"
 #include "soak/soak_runner.h"
 #include "ui/main_window.h"
 
@@ -89,6 +91,11 @@ public:
         }
 
         instance_mutex_ = std::move(mutex);
+
+        // Install the UI language (RoamingSettings::language, default = Windows
+        // user interface language) before the first window is built, so every
+        // label, tooltip and status message is translated from the first frame.
+        i18n::install(i18n::parseLanguage(RoamingSettingsStore{}.load().language));
 
         // Create audio engine.
         auto engine = createAudioEngine();

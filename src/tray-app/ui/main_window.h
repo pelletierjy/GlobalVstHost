@@ -212,6 +212,7 @@ private:
     std::unique_ptr<juce::ComboBox> asio_pair_selector_;
     std::unique_ptr<juce::ComboBox> buffer_selector_;
     std::unique_ptr<juce::ComboBox> theme_selector_;
+    std::unique_ptr<juce::ComboBox> language_selector_;
     std::unique_ptr<juce::ToggleButton> start_minimized_button_;
     std::unique_ptr<juce::ToggleButton> tooltips_button_;
     std::unique_ptr<juce::TooltipWindow> tooltip_window_;
@@ -267,6 +268,7 @@ private:
     std::unique_ptr<juce::ComboBox> vst_rate_selector_;
     std::unique_ptr<juce::Label> vol_label_;
     std::unique_ptr<juce::Label> theme_label_;
+    std::unique_ptr<juce::Label> language_label_;
     std::unique_ptr<juce::Label> start_minimized_label_;
     std::unique_ptr<juce::Label> tooltips_label_;
 

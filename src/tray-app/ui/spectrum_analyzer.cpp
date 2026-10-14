@@ -5,7 +5,9 @@
 // thread is never involved beyond its plain ring writes.
 
 #include "spectrum_analyzer.h"
+
 #include "custom_look_and_feel.h"
+#include "i18n/translation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -67,7 +69,7 @@ juce::Colour bandColour(const SpectrumAccents& accents, float norm)
 
 SpectrumAnalyzer::SpectrumAnalyzer(IAudioEngine* engine) : engine_(engine)
 {
-    setTitle("Spectrum");
+    setTitle(i18n::tr("Spectrum"));
     band_db_.fill(kMinDb);
     peak_db_.fill(kMinDb);
     startTimerHz(kRefreshHz);
