@@ -33,11 +33,15 @@ target_compile_definitions(jyglobalvst_audio_engine PUBLIC
     JUCE_USE_FLAC=0
     JUCE_USE_OGGVORBIS=0
     JUCE_USE_MP3AUDIOFORMAT=0
-    JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_USE_CAMERA=0
     JUCE_STANDALONE_APPLICATION=0
     JUCE_MODAL_LOOPS_PERMITTED=0)
+
+# JUCE_WEB_BROWSER is PRIVATE on purpose: the tray app sets it to 1 to build
+# juce::WebBrowserComponent, and MSVC honours the LAST /D on the command line —
+# a PUBLIC =0 would land after the tray's =1 and silently disable the webview.
+target_compile_definitions(jyglobalvst_audio_engine PRIVATE JUCE_WEB_BROWSER=0)
 
 target_compile_definitions(jyglobalvst_audio_engine PUBLIC JUCE_ASIO=1)
 target_include_directories(jyglobalvst_audio_engine SYSTEM PUBLIC ${ASIO_SDK_PATH}/common)

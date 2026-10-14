@@ -111,7 +111,8 @@ certificate store.
 2. **Windows Only**: No macOS, Linux, or mobile targets
 3. **x64 Only**: 32-bit and ARM64 deferred to future releases
 4. **No Telemetry**: No crash reporting or usage analytics
-5. **No Network**: v1 doesn't use network features (Check for Updates deferred)
+5. **No Background Network**: core features are offline (Check for Updates deferred); the
+   optional, on-demand AI Assistant (ConversiaCore via WebView2) is the only network user
 
 ---
 
@@ -241,6 +242,8 @@ capture. Explain this in the Store listing.
 - No usage analytics
 - No phone-home functionality
 - All telemetry is opt-in (not implemented in v1)
+- The optional, on-demand AI Assistant (ConversiaCore via WebView2) uses the network only
+  while the user has it open — documented feature traffic, not telemetry
 
 ---
 

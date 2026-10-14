@@ -132,9 +132,12 @@ value is stored in the package's private hive rather than the user's real one.
 
 ## Deliberately not declared
 
-- **`networkInternet`** — the app makes no network calls. The spec's "Check for updates"
-  HTTPS GET is not implemented; if it lands, this capability must be added and the privacy
-  policy updated.
+- **`networkInternet`** — the app's own code makes no network calls, and `networkInternet`
+  is a UWP contract capability that does not govern the full-trust desktop WebView2 traffic
+  of the optional, on-demand AI Assistant (declared in the privacy policy; it loads the
+  ConversiaCore tutor over HTTPS only while the user has it open). The spec's "Check for
+  updates" HTTPS GET is not implemented; if it lands, this capability must be re-evaluated
+  and the privacy policy updated.
 - **`webcam`**, **`removableStorage`**, **`userAccountInformation`**, **`audioLibrary`** —
   no code path uses any of these. `audioLibrary` in particular was documented here
   previously against a source file (`file_loader.cpp`) that does not exist.

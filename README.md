@@ -74,7 +74,9 @@ language applies the next time you start the app).
 
 ## Privacy
 
-No telemetry, no crash reports, no persistent logging, and no background network activity — the only network use is the update check you trigger yourself. Presets and settings stay on your machine.
+No accounts, no telemetry, no analytics, no crash reports, no persistent logging, and no background network activity — the only network use is the update check you trigger yourself and the optional AI Assistant below. Presets and settings stay on your machine.
+
+**Optional AI assistant.** The built-in AI Assistant (the "AI" button) is an optional, on-demand feature. Only while you have it open, an embedded browser (Microsoft Edge WebView2) loads the ConversiaCore tutor at https://pelletierjy.github.io/ConversiaCore/ ; chatting with it sends your messages to the ConversiaCore AI proxy (Cloudflare) and its AI providers (Google Gemini, Groq, OpenRouter, DeepSeek, Hugging Face), and queries its Firebase Firestore knowledge base (Google). Chat history is stored locally in the embedded browser's data folder. Nothing is sent or requested when the assistant is closed — every other feature is fully offline.
 
 ## Build
 

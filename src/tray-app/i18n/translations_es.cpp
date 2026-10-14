@@ -128,6 +128,7 @@ countries: es mx ar co cl pe
 "About, diagnostics, and settings" = "Acerca de, diagnóstico y configuración"
 "Toggle energy saver: auto-suspend the VST chain when input is silent to save CPU." = "Ahorrador de energía: suspende la cadena VST automáticamente cuando la entrada está en silencio para ahorrar CPU."
 "Open help documentation" = "Abrir la documentación de ayuda"
+"Open the AI assistant" = "Abrir el asistente de IA"
 "Plugin added: " = "Plugin añadido: "
 "VST3 Plugins (*.vst3)" = "Plugins VST3 (*.vst3)"
 "All Files" = "Todos los archivos"

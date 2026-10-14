@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "assistant_dialog.h"
 #include "catalog_dialog.h"
 #include "chain_editor.h"
 #include "custom_look_and_feel.h"
@@ -162,6 +163,7 @@ private:
     void showRepointPlaceholderDialog(int position);
     void handleAbout();
     void handleHelp();
+    void handleAssistant();
     void toggleEnergySaver();
     void updateEnergySaverVisual();
     void handleCheckForUpdates();
@@ -234,6 +236,7 @@ private:
     std::unique_ptr<SettingsButton> about_button_;
     std::unique_ptr<LeafButton> energy_saver_button_;
     std::unique_ptr<juce::TextButton> help_button_;
+    std::unique_ptr<juce::TextButton> assistant_button_;
     std::unique_ptr<juce::Slider> volume_slider_;
     std::unique_ptr<juce::TextButton> mute_button_;
     float pre_mute_volume_ {1.0f};
@@ -284,6 +287,7 @@ private:
     std::unique_ptr<SpectrumAnalyzer> spectrum_analyzer_;
     std::unique_ptr<ScanDialog> scan_dialog_;
     std::unique_ptr<CatalogDialog> catalog_dialog_;
+    std::unique_ptr<AssistantDialog> assistant_dialog_;
     CustomLookAndFeel custom_laf_;
 
     // Icon image loaded from binary data.

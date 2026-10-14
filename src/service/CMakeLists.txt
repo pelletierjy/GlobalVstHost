@@ -19,6 +19,11 @@ add_executable(jyglobalvst_service
 target_include_directories(jyglobalvst_service PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR})
 
+# jyglobalvst_audio_engine no longer propagates JUCE_WEB_BROWSER (the tray app
+# needs =1); pin the service's previous effective value so its JUCE TUs compile
+# exactly as before.
+target_compile_definitions(jyglobalvst_service PRIVATE JUCE_WEB_BROWSER=0)
+
 target_link_libraries(jyglobalvst_service PRIVATE
     jyglobalvst_audio_engine
     jyglobalvst_shared

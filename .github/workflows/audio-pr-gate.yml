@@ -53,6 +53,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install WebView2 SDK (NuGet)
+        # FindWebView2.cmake globs the current-user NuGet folder for the static
+        # loader; hosted runners do not ship Microsoft.Web.WebView2.
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages" -NonInteractive
+
       - name: Configure CMake with Coverage
         run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON -DJYGLOBALVST_ENABLE_COVERAGE=ON
 
@@ -132,6 +137,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install WebView2 SDK (NuGet)
+        # FindWebView2.cmake globs the current-user NuGet folder for the static
+        # loader; hosted runners do not ship Microsoft.Web.WebView2.
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages" -NonInteractive
+
       - name: Configure CMake
         run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
 
@@ -149,6 +159,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install WebView2 SDK (NuGet)
+        # FindWebView2.cmake globs the current-user NuGet folder for the static
+        # loader; hosted runners do not ship Microsoft.Web.WebView2.
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages" -NonInteractive
 
       - name: Configure CMake
         # Soak only runs the tray exe — skip the ~59 test binaries to cut
@@ -184,6 +199,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install WebView2 SDK (NuGet)
+        # FindWebView2.cmake globs the current-user NuGet folder for the static
+        # loader; hosted runners do not ship Microsoft.Web.WebView2.
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages" -NonInteractive
+
       - name: Configure CMake
         run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
 
@@ -214,6 +234,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install WebView2 SDK (NuGet)
+        # FindWebView2.cmake globs the current-user NuGet folder for the static
+        # loader; hosted runners do not ship Microsoft.Web.WebView2.
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages" -NonInteractive
 
       - name: Configure CMake
         run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON

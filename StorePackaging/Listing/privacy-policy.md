@@ -11,26 +11,40 @@
 
 ## Summary
 
-Global VST Host does not collect, transmit, or share any personal information. It has no
-network functionality, no telemetry, no analytics, and no crash reporting. All data it
-creates stays on your device.
+Global VST Host does not collect, transmit, or share any personal information. Core
+features are fully offline — there is no telemetry, no analytics, and no crash reporting,
+and all data it creates stays on your device. The single exception is the optional,
+on-demand **AI Assistant** (see "Network activity").
 
 ---
 
 ## Information we collect
 
-**None.** No personal information is collected, stored off-device, or transmitted anywhere.
+**None** from the core app. No personal information is collected, stored off-device, or transmitted anywhere.
 
 There is no account, no sign-in, no user identifier sent to us or to any third party, and
 no usage or diagnostic reporting.
 
+**Store data-collection declaration:** "AI assistant chat messages (sent to a third-party
+AI service, on user action only)". If you open the optional AI Assistant and type chat
+messages, those messages are sent to the ConversiaCore AI service so it can reply. They
+are not sent to us, and we do not receive, store, or have access to them.
+
 ## Network activity
 
-Global VST Host performs **no network communication of any kind**. It does not contact our
-servers, check for updates online, load remote content, or connect to third-party services.
+Core features are fully offline: audio capture, the effect chain, presets and settings
+never touch the network.
 
-The application binary imports no HTTP, TLS, or socket library, so it is not capable of
-network communication as shipped.
+The app contains one optional, on-demand network feature: the **AI Assistant** (the "AI"
+button in the title bar). Only while you have it open, an embedded browser (Microsoft Edge
+WebView2) loads the ConversiaCore tutor at https://pelletierjy.github.io/ConversiaCore/
+and, if you chat with it, sends your messages to the ConversiaCore AI proxy (Cloudflare)
+and its AI providers (Google Gemini, Groq, OpenRouter, DeepSeek, Hugging Face), and
+queries its Firebase Firestore knowledge base (Google). ConversiaCore's own privacy
+practices apply to that service. Chat history is stored in the embedded browser's local
+data folder on your device.
+
+When the assistant is closed, the app makes no network requests.
 
 ## Audio processing
 
@@ -125,9 +139,10 @@ Questions about this policy: **g.vst.host.help@outlook.com**
 
 **Verification behind the claims above**, so this can be re-checked rather than trusted:
 
-- *No network activity*: `dumpbin /dependents` on the shipped `JyGlobalVST.exe` lists no
+- *No background network*: `dumpbin /dependents` on the shipped `JyGlobalVST.exe` lists no
   `winhttp.dll`, `wininet.dll`, or `ws2_32.dll` — only COM, GDI/Direct2D, audio, and CRT
-  imports. Re-run this check before each release.
+  imports. The optional AI Assistant's embedded WebView2 runtime loads its networking stack
+  at runtime, and only while the assistant is open. Re-run this check before each release.
 - *Local storage locations*: `src/tray-app/settings/roaming_settings.cpp`,
   `src/tray-app/settings/local_state.cpp`,
   `src/tray-app/presets/preset_folder_init.cpp`,

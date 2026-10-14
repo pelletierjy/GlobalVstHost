@@ -10,6 +10,10 @@ function(jyglobalvst_add_test name)
         jyglobalvst_shared
         GTest::gtest
         GTest::gtest_main)
+    # jyglobalvst_audio_engine no longer propagates JUCE_WEB_BROWSER (the tray app
+    # needs =1); pin the tests' previous effective value so their JUCE TUs compile
+    # exactly as before.
+    target_compile_definitions(${name} PRIVATE JUCE_WEB_BROWSER=0)
     set_target_properties(${name} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
     if(MSVC)
@@ -68,6 +72,15 @@ if(TARGET i18n_translation_test)
         "${CMAKE_SOURCE_DIR}/src/tray-app/i18n/translations_es.cpp")
     target_include_directories(i18n_translation_test PRIVATE
         "${CMAKE_SOURCE_DIR}/src/tray-app")
+endif()
+
+# The assistant URL builder is tray-app code but is pure logic; compile it into
+# its unit test directly (same pattern as polish_accessibility_test above).
+if(TARGET assistant_url_test)
+    target_include_directories(assistant_url_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui")
+    target_sources(assistant_url_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/assistant_url.cpp")
 endif()
 
 file(GLOB _contract_test_sources CONFIGURE_DEPENDS
