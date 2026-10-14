@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+# WinGet installer manifest (specs/007-winget-distribution, Phase 4).
+#
+# RELEASE CHECKLIST for this file:
+#   1. Build the MSI (see .github/workflows/release.yml — it produces
+#      GlobalVSTHost-<version>-x64.msi and prints its SHA256).
+#   2. Replace InstallerSha256 below with the real hash
+#      (Get-FileHash -Algorithm SHA256 GlobalVSTHost-...-x64.msi).
+#      The all-zeros value is an INVALID placeholder and will fail
+#      `winget validate` until replaced.
+#   3. Point InstallerUrl at the tagged GitHub Release asset.
+PackageIdentifier: JyGlobalVST.GlobalVSTHost
+PackageVersion: 1.2.1.0
+InstallerType: wix
+Scope: user
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/pelletierjy/GlobalVstHost/releases/download/v1.2.1.0/GlobalVSTHost-1.2.1.0-x64.msi
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerLocale: en-US
+    MinimumOSVersion: 10.0.18362.0
+ManifestType: installer
+ManifestVersion: 1.12.0

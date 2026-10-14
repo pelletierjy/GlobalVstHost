@@ -27,6 +27,14 @@ class VST3PluginLoader;
 class ScanCache;
 class PluginInstance;
 
+// Enumerates .vst3 bundles under root: top level plus one level of vendor
+// subdirectories (VST3.7 per-user layouts such as VST3\<Vendor>\Plugin.vst3).
+// Never descends INTO a .vst3 bundle — its Contents\x86_64-win tree holds the
+// module binary, not a separate plugin. The root is normalized to an absolute
+// path so packaged (MSIX) launches, where the working directory is not the
+// install directory, resolve identically. Exposed for unit tests.
+std::vector<std::filesystem::path> collectVst3Candidates(const std::filesystem::path& root);
+
 class PluginScanner
 {
 public:

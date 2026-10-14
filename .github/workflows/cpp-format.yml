@@ -1,0 +1,86 @@
+# .github/workflows/cpp-format.yml
+#
+# clang-format gate with per-file grandfathering: a changed file must be
+# clang-format clean UNLESS it was already dirty at the PR base commit
+# (pre-existing drift is tolerated until someone reformats that file). New
+# files must always be clean. Style source of truth: .clang-format.
+
+name: C++ Format Check
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '.clang-format'
+
+jobs:
+  clang-format:
+    name: clang-format (changed files)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check formatting of changed files
+        shell: pwsh
+        run: |
+          # Locate clang-format: PATH first, then the copy bundled with VS.
+          $clang = Get-Command clang-format -ErrorAction SilentlyContinue
+          if ($clang) {
+            $clangFormat = $clang.Source
+          } else {
+            $vsCopy = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\Llvm\*\bin\clang-format.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if (-not $vsCopy) {
+              Write-Error "clang-format not found on PATH or in Visual Studio"
+              exit 1
+            }
+            $clangFormat = $vsCopy.FullName
+          }
+          Write-Host "Using $clangFormat"
+          $styleFile = (Join-Path (Get-Location) ".clang-format")
+
+          $base = "${{ github.event.pull_request.base.sha }}"
+          $files = git diff --name-only --diff-filter=ACMR $base...HEAD -- src tests |
+            Where-Object { $_ -match '\.(cpp|h|hpp)$' }
+
+          if (-not $files) {
+            Write-Host "No C++ files changed; nothing to check."
+            exit 0
+          }
+
+          $failed = @()
+          $grandfathered = 0
+          foreach ($f in $files) {
+            # Was the file already format-dirty at the base commit? If so,
+            # grandfather it: this PR must not be blocked by legacy drift.
+            $baseClean = $true
+            git cat-file -e "${base}:$f" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              $tmp = Join-Path $env:TEMP ("fmt_base_" + ($f -replace '[\\/]', '_'))
+              git show "${base}:$f" | Set-Content -Path $tmp -Encoding utf8
+              & $clangFormat --dry-run --Werror --style="file:$styleFile" $tmp 2>&1 | Out-Null
+              $baseClean = ($LASTEXITCODE -eq 0)
+              Remove-Item $tmp -ErrorAction SilentlyContinue
+            }
+            if (-not $baseClean) {
+              Write-Host "grandfathered (dirty at base): $f"
+              $grandfathered++
+              continue
+            }
+
+            & $clangFormat --dry-run --Werror $f 2>&1 | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+              $failed += $f
+            }
+          }
+
+          if ($failed.Count -gt 0) {
+            Write-Error ("Not clang-format clean (run: clang-format -i <file>):`n  " + ($failed -join "`n  "))
+            exit 1
+          }
+          Write-Host "OK: $($files.Count - $grandfathered) file(s) checked clean, $grandfathered grandfathered."

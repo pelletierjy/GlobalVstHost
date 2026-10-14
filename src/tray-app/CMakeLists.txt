@@ -69,6 +69,7 @@ file(GLOB_RECURSE _tray_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/single-instance/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ipc-client/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/updates/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/soak/*.cpp"
     "${_tray_main}")
 
 # Add custom resource file with icon

@@ -6,6 +6,14 @@
 // where applicable) and reports whether they are the same device.
 // Used to hard-block start() when capture == output (FR-005, FR-014).
 
+//
+// =====================================================================
+// REALTIME CONSTRAINTS (Constitution §V)
+// =====================================================================
+//   • Control thread only: called during start()/device selection, never
+//     from the audio callback.
+// =====================================================================
+
 #pragma once
 
 #include "jyglobalvst/types.h"

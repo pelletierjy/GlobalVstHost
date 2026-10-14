@@ -5,6 +5,14 @@
 // Real implementation requires JUCE ASIO module on Windows. On other hosts
 // this cpp compiles to harmless stubs so the engine still links.
 
+//
+// =====================================================================
+// REALTIME CONSTRAINTS (Constitution §V)
+// =====================================================================
+//   • Control thread only: open()/close()/configure() MUST NOT run from the
+//     audio thread. The audio callback itself is AudioEngineImpl's, unchanged.
+// =====================================================================
+
 #include "asio_transport.h"
 
 #if JUCE_ASIO

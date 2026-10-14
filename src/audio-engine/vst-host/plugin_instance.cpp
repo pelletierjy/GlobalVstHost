@@ -23,16 +23,14 @@ float PluginInstance::getParameter(ParamId param_id) const noexcept
     if (!processor_)
         return 0.0f;
 
-    // JUCE's parameter ID mapping is opaque; for now we do a linear search.
-    // Future: cache parameter descriptor by ID for performance.
-    const auto num_params = processor_->getNumParameters();
-    for (int i = 0; i < num_params; ++i)
+    // ParamId is the parameter index (see setParameter); a direct bounds
+    // check is all that is needed — the previous linear scan compared the
+    // loop counter against the same index and added nothing.
+    const int idx = static_cast<int>(param_id);
+    const int num_params = processor_->getNumParameters();
+    if (idx >= 0 && idx < num_params)
     {
-        // Assume param_id can be cast to int (depends on data-model.md definition).
-        if (i == static_cast<int>(param_id))
-        {
-            return processor_->getParameter(i);
-        }
+        return processor_->getParameter(idx);
     }
     return 0.0f;
 }

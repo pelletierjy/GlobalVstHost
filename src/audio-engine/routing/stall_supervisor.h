@@ -18,6 +18,15 @@
 // Recovery is a stop()/start() cycle on the control thread, which this class
 // deliberately knows nothing about: update() only says "ask for a restart now".
 
+//
+// =====================================================================
+// REALTIME CONSTRAINTS (Constitution §V)
+// =====================================================================
+//   • Pure decision logic: no allocation, no locks, no atomics, no I/O.
+//   • Runs on the engine's low-rate polling thread, never inside the audio
+//     callback; the heartbeat counter it samples lives in the engine.
+// =====================================================================
+
 #pragma once
 
 #include <cstdint>

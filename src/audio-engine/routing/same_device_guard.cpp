@@ -2,6 +2,14 @@
 //
 // T009 — Conflict detection implementation.
 
+//
+// =====================================================================
+// REALTIME CONSTRAINTS (Constitution §V)
+// =====================================================================
+//   • Control thread only: resolves EndpointIds via COM/MMDevice and MUST
+//     NOT run from the audio thread.
+// =====================================================================
+
 #include "same_device_guard.h"
 #include "../../shared/platform/audio_endpoints.h"
 

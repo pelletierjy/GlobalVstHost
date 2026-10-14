@@ -84,7 +84,7 @@ TEST_F(US3SchemaMigrationTest, PresetV1AcceptedV2Rejected)
         doc["preset_name"] = "V1";
         doc["created_at"] = "2026-06-06T00:00:00Z";
         doc["updated_at"] = "2026-06-06T00:00:00Z";
-        doc["target_buffer_size"] = 256;
+        doc["target_buffer_size"] = 512;
         doc["slots"] = nlohmann::json::array();
 
         std::ofstream ofs(v1_path, std::ios::binary);
@@ -103,7 +103,7 @@ TEST_F(US3SchemaMigrationTest, PresetV1AcceptedV2Rejected)
         doc["preset_name"] = "V2";
         doc["created_at"] = "2026-06-06T00:00:00Z";
         doc["updated_at"] = "2026-06-06T00:00:00Z";
-        doc["target_buffer_size"] = 256;
+        doc["target_buffer_size"] = 512;
         doc["slots"] = nlohmann::json::array();
 
         std::ofstream ofs(v2_path, std::ios::binary);

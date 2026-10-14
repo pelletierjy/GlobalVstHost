@@ -47,13 +47,53 @@ constexpr PluginUid COMPRESSOR_UID = PluginUid{
     0x2d, 0x4c, 0x56, 0x4c, 0x52, 0x30, 0x30, 0x00   // -LVLR00\0
 };
 
+constexpr std::array<uint8_t, 16> NOISE_GATE_UID_SEED = {
+    'J', 'Y', 'G', 'L', '-', 'G', 'A', 'T', 'E', '0', '0', '0', '1', '\0', '\0', '\0'
+};
+
+constexpr PluginUid NOISE_GATE_UID = PluginUid{
+    0x4a, 0x59, 0x47, 0x4c, 0x2d, 0x47, 0x41, 0x54,  // JYGL-GAT
+    0x45, 0x30, 0x30, 0x30, 0x31, 0x00, 0x00, 0x00   // E0001\0\0\0
+};
+
+constexpr std::array<uint8_t, 16> STEREO_WIDTH_UID_SEED = {
+    'J', 'Y', 'G', 'L', '-', 'W', 'I', 'D', 'T', 'H', '0', '0', '0', '1', '\0', '\0'
+};
+
+constexpr PluginUid STEREO_WIDTH_UID = PluginUid{
+    0x4a, 0x59, 0x47, 0x4c, 0x2d, 0x57, 0x49, 0x44,  // JYGL-WID
+    0x54, 0x48, 0x30, 0x30, 0x30, 0x31, 0x00, 0x00   // TH0001\0\0
+};
+
+constexpr std::array<uint8_t, 16> LOUDNESS_NORM_UID_SEED = {
+    'J', 'Y', 'G', 'L', '-', 'L', 'O', 'U', 'D', 'N', 'R', 'M', '0', '0', '1', '\0'
+};
+
+constexpr PluginUid LOUDNESS_NORM_UID = PluginUid{
+    0x4a, 0x59, 0x47, 0x4c, 0x2d, 0x4c, 0x4f, 0x55,  // JYGL-LOU
+    0x44, 0x4e, 0x52, 0x4d, 0x30, 0x30, 0x31, 0x00   // DNRM001\0
+};
+
 // Compile-time validation: UID stability and uniqueness.
 static_assert(NIGHTTIME_UID_SEED.size() == 16, "NIGHTTIME_UID_SEED must be exactly 16 bytes");
 static_assert(EQ_UID_SEED.size() == 16, "EQ_UID_SEED must be exactly 16 bytes");
 static_assert(COMPRESSOR_UID_SEED.size() == 16, "COMPRESSOR_UID_SEED must be exactly 16 bytes");
+static_assert(NOISE_GATE_UID_SEED.size() == 16, "NOISE_GATE_UID_SEED must be exactly 16 bytes");
+static_assert(STEREO_WIDTH_UID_SEED.size() == 16, "STEREO_WIDTH_UID_SEED must be exactly 16 bytes");
+static_assert(LOUDNESS_NORM_UID_SEED.size() == 16, "LOUDNESS_NORM_UID_SEED must be exactly 16 bytes");
 static_assert(NIGHTTIME_UID != EQ_UID, "Built-in UIDs must be distinct");
 static_assert(NIGHTTIME_UID != COMPRESSOR_UID, "Built-in UIDs must be distinct");
 static_assert(EQ_UID != COMPRESSOR_UID, "Built-in UIDs must be distinct");
+static_assert(NOISE_GATE_UID != NIGHTTIME_UID && NOISE_GATE_UID != EQ_UID &&
+                  NOISE_GATE_UID != COMPRESSOR_UID,
+              "Built-in UIDs must be distinct");
+static_assert(STEREO_WIDTH_UID != NIGHTTIME_UID && STEREO_WIDTH_UID != EQ_UID &&
+                  STEREO_WIDTH_UID != COMPRESSOR_UID && STEREO_WIDTH_UID != NOISE_GATE_UID,
+              "Built-in UIDs must be distinct");
+static_assert(LOUDNESS_NORM_UID != NIGHTTIME_UID && LOUDNESS_NORM_UID != EQ_UID &&
+                  LOUDNESS_NORM_UID != COMPRESSOR_UID && LOUDNESS_NORM_UID != NOISE_GATE_UID &&
+                  LOUDNESS_NORM_UID != STEREO_WIDTH_UID,
+              "Built-in UIDs must be distinct");
 
 // ============================================================================
 // NIGHT-TIME PROCESSOR PARAMETER IDs
@@ -158,6 +198,68 @@ namespace compressor {
     constexpr float MAKEUP_MIN_DB = 0.0f;
     constexpr float MAKEUP_MAX_DB = 24.0f;
     constexpr float MAKEUP_DEFAULT_DB = 0.0f;
+}
+
+// ============================================================================
+// NOISE GATE PROCESSOR PARAMETER IDs
+// ============================================================================
+
+namespace noise_gate {
+    constexpr int PARAM_THRESHOLD = 0;  // float dB
+    constexpr int PARAM_ATTACK = 1;     // float ms
+    constexpr int PARAM_HOLD = 2;       // float ms
+    constexpr int PARAM_RELEASE = 3;    // float ms
+
+    constexpr int NUM_PARAMETERS = 4;
+
+    constexpr float THRESHOLD_MIN_DB = -80.0f;
+    constexpr float THRESHOLD_MAX_DB = 0.0f;
+    constexpr float THRESHOLD_DEFAULT_DB = -50.0f;
+
+    constexpr float ATTACK_MIN_MS = 0.5f;
+    constexpr float ATTACK_MAX_MS = 100.0f;
+    constexpr float ATTACK_DEFAULT_MS = 5.0f;
+
+    constexpr float HOLD_MIN_MS = 0.0f;
+    constexpr float HOLD_MAX_MS = 500.0f;
+    constexpr float HOLD_DEFAULT_MS = 50.0f;
+
+    constexpr float RELEASE_MIN_MS = 5.0f;
+    constexpr float RELEASE_MAX_MS = 1000.0f;
+    constexpr float RELEASE_DEFAULT_MS = 100.0f;
+}
+
+// ============================================================================
+// STEREO WIDTH PROCESSOR PARAMETER IDs
+// ============================================================================
+
+namespace stereo_width {
+    constexpr int PARAM_WIDTH = 0;  // float 0.0 (mono) … 1.0 (normal) … 2.0 (wide)
+
+    constexpr int NUM_PARAMETERS = 1;
+
+    constexpr float WIDTH_MIN = 0.0f;
+    constexpr float WIDTH_MAX = 2.0f;
+    constexpr float WIDTH_DEFAULT = 1.0f;
+}
+
+// ============================================================================
+// LOUDNESS NORMALIZER PROCESSOR PARAMETER IDs
+// ============================================================================
+
+namespace loudness_normalizer {
+    constexpr int PARAM_TARGET = 0;     // float dB RMS target
+    constexpr int PARAM_MAX_GAIN = 1;   // float dB max boost/cut
+
+    constexpr int NUM_PARAMETERS = 2;
+
+    constexpr float TARGET_MIN_DB = -30.0f;
+    constexpr float TARGET_MAX_DB = -5.0f;
+    constexpr float TARGET_DEFAULT_DB = -18.0f;
+
+    constexpr float MAX_GAIN_MIN_DB = 0.0f;
+    constexpr float MAX_GAIN_MAX_DB = 24.0f;
+    constexpr float MAX_GAIN_DEFAULT_DB = 12.0f;
 }
 
 }  // namespace jyglobalvst::engine::builtin

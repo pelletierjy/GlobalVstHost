@@ -9,12 +9,12 @@
 #include "../integration/loopback_fixture.h"
 
 #include <cmath>
+#include <fstream>
 
 namespace jyglobalvst::testing {
 
 class US4CpuWarningTest : public LoopbackFixture
-{
-};
+{};
 
 TEST_F(US4CpuWarningTest, EmptyChainDoesNotTriggerWarning)
 {
@@ -54,6 +54,32 @@ TEST_F(US4CpuWarningTest, CpuStatsStructurallyValid)
 
     // warning_active must be consistent with threshold.
     EXPECT_EQ(stats.warning_active, stats.rolling_1s_pct >= 5.0f);
+
+    StopEngine();
+}
+
+TEST_F(US4CpuWarningTest, WritesCpuReport)
+{
+    // Writes cpu_report.json into the test working directory (build/tests/)
+    // for the CI cpu-report job to upload. Values are real measurements from
+    // the running engine, taken over a short settle window.
+    StartEngine();
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    const auto stats = engine()->cpuStats();
+
+    std::ofstream out("cpu_report.json", std::ios::trunc);
+    ASSERT_TRUE(out.good());
+    out.precision(4);
+    out << std::fixed;
+    out << "{\n"
+        << "  \"source\": \"engine CpuStats (empty chain, 500 ms settle)\",\n"
+        << "  \"instantaneous_pct\": " << stats.instantaneous_pct << ",\n"
+        << "  \"rolling_1s_pct\": " << stats.rolling_1s_pct << ",\n"
+        << "  \"xrun_count_session\": " << stats.xrun_count_session << ",\n"
+        << "  \"warning_active\": " << (stats.warning_active ? "true" : "false") << "\n"
+        << "}\n";
+    out.close();
 
     StopEngine();
 }

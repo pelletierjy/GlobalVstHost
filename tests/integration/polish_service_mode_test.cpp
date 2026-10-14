@@ -57,14 +57,6 @@ TEST(ServiceMode, InProcessEngineWorksWithoutService)
     auto engine = createAudioEngine();
     ASSERT_NE(engine, nullptr);
 
-    // Basic API smoke test.
-    auto outputs = engine->listOutputs();
-    // At least the default Windows audio endpoint should be visible.
-    EXPECT_FALSE(outputs.empty());
-
-    auto inputs = engine->listInputs();
-    EXPECT_FALSE(inputs.empty());
-
     // Buffer size API.
     engine->setBufferSize(512);
     EXPECT_EQ(engine->bufferSize(), 512);
@@ -73,6 +65,17 @@ TEST(ServiceMode, InProcessEngineWorksWithoutService)
     auto snapshot = engine->snapshotChain();
     EXPECT_EQ(snapshot.chain_revision, 0);
     EXPECT_TRUE(snapshot.slots.empty());
+
+    // Basic API smoke test: at least the default Windows audio endpoint should
+    // be visible — unless the machine exposes none at all (headless CI runners).
+    auto outputs = engine->listOutputs();
+    auto inputs = engine->listInputs();
+    if (outputs.empty() && inputs.empty())
+    {
+        GTEST_SKIP() << "No WASAPI endpoints available (headless CI runner)";
+    }
+    EXPECT_FALSE(outputs.empty());
+    EXPECT_FALSE(inputs.empty());
 }
 
 TEST(ServiceMode, EngineHostModeEnumValuesStable)

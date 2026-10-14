@@ -45,10 +45,12 @@ foreach(_src IN LISTS _integration_test_sources)
 endforeach()
 
 # polish_accessibility_test includes chain_editor.cpp which depends on
-# HorizontalMeterPanel; add the extra UI source so linkage succeeds.
+# HorizontalMeterPanel and the UIA notification helpers; add the extra UI
+# sources so linkage succeeds.
 if(TARGET polish_accessibility_test)
     target_sources(polish_accessibility_test PRIVATE
-        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/horizontal_meter_panel.cpp")
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/horizontal_meter_panel.cpp"
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/accessibility/uia_notifications.cpp")
 endif()
 
 file(GLOB _contract_test_sources CONFIGURE_DEPENDS

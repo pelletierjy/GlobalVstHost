@@ -7,12 +7,15 @@
 //   2. If another instance exists, focus its window and exit.
 //   3. Otherwise, create IAudioEngine, create MainWindow, run message loop.
 
+#include "jyglobalvst/audio_engine.h"
+
+#include "platform/session_mutex.h"
+#include "soak/soak_runner.h"
 #include "ui/main_window.h"
 
-#include "jyglobalvst/audio_engine.h"
-#include "platform/session_mutex.h"
-
 #include <juce_gui_basics/juce_gui_basics.h>
+
+#include <cstdlib>
 
 #include <windows.h>
 
@@ -41,7 +44,7 @@ public:
 #if defined(JYGLOBALVST_VERSION_STRING)
         return JYGLOBALVST_VERSION_STRING;
 #else
-        return "1.2.0.0";
+        return "1.2.1.0";
 #endif
     }
 
@@ -50,8 +53,22 @@ public:
         return false;
     }
 
-    void initialise(const juce::String& /*commandLine*/) override
+    void initialise(const juce::String& commandLine) override
     {
+        // Headless soak mode (--soak-test): run the engine without the window
+        // or the single-instance mutex, write the JSON report, and exit with
+        // the soak verdict as the process exit code.
+        SoakOptions soak_opts;
+        if (parseSoakOptions(commandLine, soak_opts))
+        {
+            const int rc = runSoakTest(soak_opts);
+            setApplicationReturnValue(rc);
+            // Headless CLI mode: terminate decisively. quit() alone is not
+            // reliable here — posted during initialise() it can leave the
+            // message loop (and the process) running indefinitely.
+            std::exit(rc);
+        }
+
         // Single-instance check using session mutex (T015).
         auto mutex = std::make_unique<shared::SessionMutex>("GlobalVSTHost_Instance");
         const auto result = mutex->tryAcquire();

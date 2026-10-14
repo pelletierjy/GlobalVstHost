@@ -16,6 +16,13 @@ class US2LiveReorderTest : public LoopbackFixture
 
 TEST_F(US2LiveReorderTest, ReorderDuringPlaybackDoesNotStopEngine)
 {
+    // "Still running" is asserted via non-zero round-trip latency, which
+    // needs a live output stream (headless CI runners have no endpoints).
+    if (engine()->listOutputs().empty())
+    {
+        GTEST_SKIP() << "No output endpoints available (headless CI runner)";
+    }
+
     StartEngine();
 
     PluginRef ref;

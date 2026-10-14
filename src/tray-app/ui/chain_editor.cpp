@@ -4,6 +4,7 @@
 
 #include "chain_editor.h"
 #include "custom_look_and_feel.h"
+#include "accessibility/uia_notifications.h"
 
 #include <windows.h>
 #include <algorithm>
@@ -12,6 +13,18 @@
 namespace jyglobalvst::tray {
 
 namespace {
+
+HWND rowHwnd(juce::Component& component)
+{
+    if (auto* top = component.getTopLevelComponent())
+    {
+        if (auto* peer = top->getPeer())
+        {
+            return static_cast<HWND>(peer->getNativeHandle());
+        }
+    }
+    return nullptr;
+}
 
 void LogDebug(const char* fmt, ...)
 {
@@ -204,6 +217,7 @@ void ChainSlotRow::buttonClicked(juce::Button* button)
         const bool now_active = bypass_button_->getToggleState();
         bypass_button_->setButtonText(now_active ? "ON" : "OFF");
         engine_->setBypass(position_, !now_active);
+        notifyBypassToggled(rowHwnd(*this), slot_.ref.name, !now_active);
     }
     else if (button == editor_button_.get())
     {
@@ -253,6 +267,7 @@ void ChainSlotRow::buttonClicked(juce::Button* button)
     {
         LogDebug("  -> Remove button clicked");
         engine_->removeSlot(position_);
+        notifyPluginRemoved(rowHwnd(*this), slot_.ref.name);
     }
 }
 
