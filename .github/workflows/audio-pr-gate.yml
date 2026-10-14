@@ -141,14 +141,19 @@ jobs:
   soak-test:
     name: 30-Min Soak Test
     runs-on: windows-latest
-    timeout-minutes: 90
+    # Build (~80-110 min for Release on hosted runners) + 30-min soak +
+    # headroom. 90 min was below the build time alone, so this job was
+    # *always* cancelled before the soak test even started.
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configure CMake
-        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
+        # Soak only runs the tray exe — skip the ~59 test binaries to cut
+        # the build to what this job actually consumes.
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=OFF
 
       - name: Build Release
         run: cmake --build build --config Release --parallel
@@ -183,10 +188,17 @@ jobs:
         run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
 
       - name: Build Release
-        run: cmake --build build --config Release --parallel
+        # Only the one test this job runs — no need for the other ~58
+        # binaries or the tray GUI app.
+        run: cmake --build build --config Release --parallel --target us1_empty_chain_passthrough_test
 
       - name: Run virtual loopback latency test
-        run: ctest --test-dir build -C Release -R "us1_empty_chain_passthrough" --output-on-failure
+        # gtest_discover registers "Suite.Test" names, not source-file names:
+        # the old -R "us1_empty_chain_passthrough" matched zero tests and the
+        # job passed vacuously ("No tests were found!!!"). --no-tests=error
+        # makes a future rename/regression fail loudly instead.
+        # Skips (no artifact) on device-less runners — upload warns, not fails.
+        run: ctest --test-dir build -C Release -R "US1EmptyChainPassthroughTest.WritesLatencyReport" --output-on-failure --no-tests=error
 
       - name: Upload latency report
         uses: actions/upload-artifact@v4
@@ -207,10 +219,13 @@ jobs:
         run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=ON
 
       - name: Build Release
-        run: cmake --build build --config Release --parallel
+        # Only the one test this job runs (writes cpu_report.json).
+        run: cmake --build build --config Release --parallel --target us4_cpu_warning_test
 
       - name: Run CPU warning test
-        run: ctest --test-dir build -C Release -R "us4_cpu_warning" --output-on-failure
+        # Was -R "us4_cpu_warning" — matches no registered test name, so the
+        # job passed without running anything.
+        run: ctest --test-dir build -C Release -R "US4CpuWarningTest.WritesCpuReport" --output-on-failure --no-tests=error
 
       - name: Upload CPU report
         uses: actions/upload-artifact@v4

@@ -48,6 +48,13 @@ TEST_F(US1SinglePluginRoutingTest, ChainSnapshotInitiallyEmpty)
 
 TEST_F(US1SinglePluginRoutingTest, BufferSizeAffectsLatency)
 {
+    // Latency is derived from the live output stream; without an output
+    // endpoint it stays 0 (headless CI runners have no audio endpoints).
+    if (engine()->listOutputs().empty())
+    {
+        GTEST_SKIP() << "No output endpoints available (headless CI runner)";
+    }
+
     StartEngine();
 
     // Set buffer size to the smaller WASAPI-legal value for low latency.

@@ -26,8 +26,12 @@ TEST_F(US1LoopbackCaptureTest, LoopbackInputListContainsRenderEndpoints)
     // that can be opened in loopback mode (captured from).
     const auto inputs = engine()->listInputs();
 
-    // Should have at least the default render endpoint available.
-    ASSERT_GT(inputs.size(), 0) << "No input endpoints available for loopback capture";
+    // Should have at least the default render endpoint available — unless the
+    // machine has no audio endpoints at all (headless CI runners).
+    if (inputs.empty())
+    {
+        GTEST_SKIP() << "No input endpoints available for loopback capture (headless CI runner)";
+    }
 
     // Verify endpoints have valid IDs and friendly names.
     for (const auto& input : inputs)
@@ -42,8 +46,12 @@ TEST_F(US1LoopbackCaptureTest, OutputListContainsRenderEndpoints)
 {
     const auto outputs = engine()->listOutputs();
 
-    // Should have at least one output endpoint.
-    ASSERT_GT(outputs.size(), 0) << "No output endpoints available";
+    // Should have at least one output endpoint — unless the machine has no
+    // audio endpoints at all (headless CI runners).
+    if (outputs.empty())
+    {
+        GTEST_SKIP() << "No output endpoints available (headless CI runner)";
+    }
 
     // Verify endpoints have valid IDs and friendly names.
     for (const auto& output : outputs)
@@ -59,8 +67,10 @@ TEST_F(US1LoopbackCaptureTest, SelectDifferentInputAndOutput)
     const auto inputs = engine()->listInputs();
     const auto outputs = engine()->listOutputs();
 
-    ASSERT_GT(inputs.size(), 0);
-    ASSERT_GT(outputs.size(), 0);
+    if (inputs.size() < 1 || outputs.size() < 1)
+    {
+        GTEST_SKIP() << "Need at least one input and one output";
+    }
 
     // Select first input and first output (if available, they should be different).
     engine()->selectInput(inputs[0].endpoint_id);
