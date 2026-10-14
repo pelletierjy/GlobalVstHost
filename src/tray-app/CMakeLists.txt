@@ -18,7 +18,8 @@ juce_add_gui_app(jyglobalvst_tray
     BUNDLE_ID "io.jyglobalvst.tray"
     VERSION "${PROJECT_VERSION}"
     MICROPHONE_PERMISSION_ENABLED FALSE
-    DOCUMENT_BROWSER_ENABLED FALSE)
+    DOCUMENT_BROWSER_ENABLED FALSE
+    NEEDS_WEBVIEW2 TRUE)
 
 target_include_directories(jyglobalvst_tray PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -50,7 +51,9 @@ target_link_libraries(jyglobalvst_tray PRIVATE
     juce::juce_gui_extra)
 
 target_compile_definitions(jyglobalvst_tray PRIVATE
-    JUCE_WEB_BROWSER=0
+    JUCE_WEB_BROWSER=1
+    JUCE_USE_WIN_WEBVIEW2=1
+    JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
     JUCE_USE_CURL=0
     JUCE_USE_CAMERA=0
     JUCE_DISPLAY_SPLASH_SCREEN=1

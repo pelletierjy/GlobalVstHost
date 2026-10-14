@@ -10,6 +10,10 @@ function(jyglobalvst_add_test name)
         jyglobalvst_shared
         GTest::gtest
         GTest::gtest_main)
+    # jyglobalvst_audio_engine no longer propagates JUCE_WEB_BROWSER (the tray app
+    # needs =1); pin the tests' previous effective value so their JUCE TUs compile
+    # exactly as before.
+    target_compile_definitions(${name} PRIVATE JUCE_WEB_BROWSER=0)
     set_target_properties(${name} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
     if(MSVC)
