@@ -11,8 +11,7 @@ juce::String assistantUrl(bool light_theme)
     // under, so the assistant runs with no RAG grounding — just the host
     // system prompt (see appConfig/GlobalVstHost in the ConversiaCore admin).
     return juce::String{"https://pelletierjy.github.io/ConversiaCore/"} +
-           "?context=GlobalVstHost&subject=Others&gradeLevel=20&theme=" +
-           (light_theme ? "light" : "dark");
+           "?context=GlobalVstHost&subject=Others&gradeLevel=20&theme=" + (light_theme ? "light" : "dark");
 }
 
 }  // namespace jyglobalvst::tray
