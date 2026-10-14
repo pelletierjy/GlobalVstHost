@@ -40,6 +40,14 @@ public:
     static UpdateCheckResult parseResponse(const std::string& body,
                                            const std::string& current_version);
 
+    // Downloads the installer at url on a background thread into
+    // %LocalAppData%\JyGlobalVST\updates\, then launches it (ShellExecuteW).
+    // Callback runs on the worker thread with (success, message): on success
+    // message is the local file path, on failure the reason. No JUCE
+    // dependency — caller dispatches to the UI thread if needed.
+    using InstallCallback = std::function<void(bool success, std::string message)>;
+    static void downloadAndInstall(const std::string& url, InstallCallback callback);
+
 private:
     static int compareSemver(const std::string& a, const std::string& b);
 };

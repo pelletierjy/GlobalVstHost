@@ -108,6 +108,7 @@ nlohmann::json makeDocWithSlot(const nlohmann::json& extra_slot_fields)
     slot["plugin_vendor"] = "V";
     slot["plugin_name"] = "P";
     slot["is_bypassed"] = false;
+    slot["state_chunk_b64"] = "";
     for (auto it = extra_slot_fields.begin(); it != extra_slot_fields.end(); ++it)
     {
         slot[it.key()] = it.value();

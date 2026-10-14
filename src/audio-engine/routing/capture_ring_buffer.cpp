@@ -1,3 +1,11 @@
+//
+// =====================================================================
+// REALTIME CONSTRAINTS (Constitution §V)
+// =====================================================================
+//   • RT-safe: fixed capacity allocated once in the constructor; Write() and
+//     Read() perform no allocation, no locking, and no system calls.
+// =====================================================================
+
 #include "capture_ring_buffer.h"
 #include <algorithm>
 

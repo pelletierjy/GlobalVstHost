@@ -24,7 +24,10 @@ TEST_F(US1DeviceRemovalRestoreTest, DeviceRemovalFallsBackToDefault)
     StartEngine();
 
     const auto outputs = engine()->listOutputs();
-    ASSERT_GT(outputs.size(), 0);
+    if (outputs.empty())
+    {
+        GTEST_SKIP() << "No output endpoints available (headless CI runner)";
+    }
 
     // Select a non-default device (if available).
     EndpointId selected_device = outputs[0].endpoint_id;
@@ -56,7 +59,10 @@ TEST_F(US1DeviceRemovalRestoreTest, DeviceRestoreReconnectsToPreferred)
     StartEngine();
 
     const auto outputs = engine()->listOutputs();
-    ASSERT_GT(outputs.size(), 0);
+    if (outputs.empty())
+    {
+        GTEST_SKIP() << "No output endpoints available (headless CI runner)";
+    }
 
     const auto initial_device = outputs[0].endpoint_id;
     engine()->selectOutput(initial_device);

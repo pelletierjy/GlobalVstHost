@@ -1,0 +1,95 @@
+# .github/workflows/release.yml
+#
+# Specs/007 Phase 3: tag-triggered release. Builds the Release binaries and
+# the WiX MSI (GlobalVSTHost-<version>-x64.msi), computes its SHA256, and
+# attaches both to a GitHub Release. The SHA256 printed in the release notes
+# is what goes into the WinGet installer manifest
+# (manifests/j/JyGlobalVST/GlobalVSTHost/<version>/).
+#
+# Trigger: push a tag like v1.2.0.0, or run manually.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.2.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build MSI & Publish Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.version }}"
+          } else {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+            Write-Error "Bad version: $version"
+            exit 1
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Configure CMake
+        run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=OFF
+
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
+
+      - name: Install WiX Toolset v4
+        shell: pwsh
+        run: dotnet tool install --global wix
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          wix build -arch x64 `
+            -d "JyGlobalVSTExe=build/src/tray-app/jyglobalvst_tray_artefacts/Release/JyGlobalVST.exe" `
+            -d "AudioEngineDll=build/lib/Release/jyglobalvst_audio_engine.dll" `
+            -d "ProductVersion=$version" `
+            -out "build/GlobalVSTHost-$version-x64.msi" `
+            -ext WixUIExtension -ext WixUtilExtension `
+            src/installer/wix/product.wxs
+
+      - name: Compute SHA256
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $msi = "build/GlobalVSTHost-$version-x64.msi"
+          $hash = (Get-FileHash -Algorithm SHA256 $msi).Hash
+          "SHA256 ($msi) = $hash" | Tee-Object -FilePath build/SHA256SUMS.txt
+          "msi_sha256=$hash" >> $env:GITHUB_OUTPUT
+        id: hash
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Global VST Host ${{ steps.version.outputs.version }}
+          body: |
+            Global VST Host ${{ steps.version.outputs.version }}
+
+            MSI SHA256 (for the WinGet manifest):
+            `${{ steps.hash.outputs.msi_sha256 }}`
+
+            Silent install: `msiexec /i GlobalVSTHost-${{ steps.version.outputs.version }}-x64.msi /quiet`
+          files: |
+            build/GlobalVSTHost-${{ steps.version.outputs.version }}-x64.msi
+            build/SHA256SUMS.txt

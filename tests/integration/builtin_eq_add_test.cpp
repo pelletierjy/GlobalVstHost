@@ -15,7 +15,9 @@ TEST(BuiltinEqTest, CatalogListsBothEffects)
         if (entry.ref.vendor == "JyGlobalVST" && entry.file_path.empty())
             builtin_count++;
     }
-    EXPECT_EQ(builtin_count, 3) << "Expected 3 built-in effects (Volume Leveler + EQ + Compressor)";
+    EXPECT_EQ(builtin_count, 6)
+        << "Expected 6 built-in effects (Volume Leveler + EQ + Compressor + Noise Gate + "
+           "Stereo Width + Loudness Normalizer)";
 }
 
 TEST(BuiltinEqTest, AddEqToChain)

@@ -17,7 +17,7 @@ $patterns = @(
     '\.mo\b',
     '\.resx\b',
     '\.resw\b',
-    'gettext\s*\(',
+    '(?-i)gettext\s*\(',
     'wxLocale',
     'juce::TRANS\s*\(',
     'juce::LocalisedStrings'
@@ -29,13 +29,13 @@ $files = Get-ChildItem -Path $Root -Include '*.cpp','*.h','*.hpp','*.py','*.ps1'
     Where-Object {
         $fp = $_.FullName
         # Exclude third_party, build, .git, .specify, .tools, specs, and the audit scripts themselves.
-        $fp -notmatch '\\(third_party|build|\.git|\.specify|\.tools|specs|tests\\audit)\\' -and
+        $fp -notmatch '\\(third_party|build[^\\]*|\.git|\.specify|\.tools|specs|tests\\audit)\\' -and
         $fp -notmatch '\\tasks\.md$'
     }
 
 foreach ($file in $files)
 {
-    $lines = Get-Content $file.FullName
+    $lines = Get-Content -LiteralPath $file.FullName
     for ($i = 0; $i -lt $lines.Count; $i++)
     {
         $line = $lines[$i]
@@ -74,3 +74,7 @@ else
 {
     Write-Host "  STATUS: PASS" -ForegroundColor Green
 }
+
+# Always exit with an explicit code so CI can check $LASTEXITCODE rather than
+# parsing captured output. Report-only FAIL (no -FailOnFind) still exits 0.
+exit 0

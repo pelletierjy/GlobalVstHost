@@ -3,6 +3,9 @@
 #include "nighttime_processor.h"
 #include "eq_processor.h"
 #include "compressor_processor.h"
+#include "noise_gate_processor.h"
+#include "stereo_width_processor.h"
+#include "loudness_normalizer_processor.h"
 
 namespace jyglobalvst::engine {
 
@@ -45,6 +48,39 @@ void BuiltinEffectRegistry::registerBuiltins()
         "Fx",
         []() -> std::unique_ptr<juce::AudioPluginInstance> {
             return std::make_unique<CompressorProcessor>();
+        }
+    });
+
+    // Noise Gate effect
+    descriptors_.push_back(Descriptor{
+        builtin::NOISE_GATE_UID,
+        "Noise Gate",
+        "JyGlobalVST",
+        "Fx",
+        []() -> std::unique_ptr<juce::AudioPluginInstance> {
+            return std::make_unique<NoiseGateProcessor>();
+        }
+    });
+
+    // Stereo Width effect
+    descriptors_.push_back(Descriptor{
+        builtin::STEREO_WIDTH_UID,
+        "Stereo Width",
+        "JyGlobalVST",
+        "Fx",
+        []() -> std::unique_ptr<juce::AudioPluginInstance> {
+            return std::make_unique<StereoWidthProcessor>();
+        }
+    });
+
+    // Loudness Normalizer effect
+    descriptors_.push_back(Descriptor{
+        builtin::LOUDNESS_NORM_UID,
+        "Loudness Normalizer",
+        "JyGlobalVST",
+        "Fx",
+        []() -> std::unique_ptr<juce::AudioPluginInstance> {
+            return std::make_unique<LoudnessNormalizerProcessor>();
         }
     });
 }

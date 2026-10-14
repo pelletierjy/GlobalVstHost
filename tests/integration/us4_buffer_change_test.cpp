@@ -32,6 +32,13 @@ TEST_F(US4BufferChangeTest, SetBufferSizeUpdatesValue)
 
 TEST_F(US4BufferChangeTest, LatencyProfileReflectsBufferSize)
 {
+    // The profile is populated from the live output stream; without an
+    // output endpoint every field stays 0 (headless CI runners).
+    if (engine()->listOutputs().empty())
+    {
+        GTEST_SKIP() << "No output endpoints available (headless CI runner)";
+    }
+
     StartEngine();
 
     // Allow device to settle.

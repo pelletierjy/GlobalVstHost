@@ -48,10 +48,17 @@ TEST_F(US1SinglePluginRoutingTest, ChainSnapshotInitiallyEmpty)
 
 TEST_F(US1SinglePluginRoutingTest, BufferSizeAffectsLatency)
 {
+    // Latency is derived from the live output stream; without an output
+    // endpoint it stays 0 (headless CI runners have no audio endpoints).
+    if (engine()->listOutputs().empty())
+    {
+        GTEST_SKIP() << "No output endpoints available (headless CI runner)";
+    }
+
     StartEngine();
 
-    // Set buffer size to a small value for low latency.
-    engine()->setBufferSize(128);  // 128 samples = ~2.67 ms at 48 kHz
+    // Set buffer size to the smaller WASAPI-legal value for low latency.
+    engine()->setBufferSize(512);  // 512 samples = ~10.67 ms at 48 kHz
 
     const auto latency = engine()->latencyProfile();
     EXPECT_GT(latency.total_round_trip_ms, 0.0f) << "Latency should be measurable";

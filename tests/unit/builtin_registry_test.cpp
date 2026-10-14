@@ -10,7 +10,7 @@ TEST(BuiltinRegistryTest, EntriesContainAllEffects)
     BuiltinEffectRegistry registry;
 
     auto entries = registry.entries();
-    EXPECT_EQ(entries.size(), 3);
+    EXPECT_EQ(entries.size(), 6);
 
     bool found_nighttime = false, found_eq = false, found_compressor = false;
     for (const auto& entry : entries)

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
+# WinGet default-locale manifest (specs/007-winget-distribution, Phase 4).
+PackageIdentifier: JyGlobalVST.GlobalVSTHost
+PackageVersion: 1.2.1.0
+PackageLocale: en-US
+Publisher: Jean-Yves Pelletier
+PublisherUrl: https://github.com/pelletierjy/GlobalVstHost
+PackageName: Global VST Host
+PackageUrl: https://github.com/pelletierjy/GlobalVstHost
+License: Proprietary
+Copyright: Copyright (c) 2026 Jean-Yves Pelletier. All rights reserved.
+ShortDescription: Route Windows system audio through VST3 effects and built-in processors.
+Description: >-
+  Captures your PC's system audio via WASAPI loopback, runs it through an
+  ordered chain of VST3 and built-in effects, and plays the result to any
+  output device you choose. No driver, no virtual device, no reboot. Ships
+  with a compressor and a 10-band EQ so it is useful without third-party
+  plugins.
+Moniker: globalvsthost
+Tags:
+  - audio
+  - dsp
+  - equalizer
+  - system-audio
+  - vst3
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0

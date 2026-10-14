@@ -24,6 +24,16 @@
 //   • tracking → servo active; trim() is the multiplier to apply to the nominal
 //     ratio.
 
+//
+// =====================================================================
+// REALTIME CONSTRAINTS (Constitution §V)
+// =====================================================================
+//   • Pure decision logic: no allocation, no locks, no atomics, no I/O.
+//   • Runs on the control/polling thread (engine drift-servo loop), never
+//     inside the audio callback; the ratio trim it computes is applied by
+//     the engine, not here.
+// =====================================================================
+
 #pragma once
 
 #include <algorithm>

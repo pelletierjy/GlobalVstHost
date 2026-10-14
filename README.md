@@ -12,10 +12,13 @@ https://apps.microsoft.com/detail/9ND7HRZGWCWN?hl=en-us&gl=CA&ocid=pdpshare
 
 Route Windows system audio through VST3 effects and built-in processors — no driver, no virtual device, no reboot.
 
-Captures your PC's system audio via WASAPI loopback, runs it through an ordered chain of effects, and plays the result to any output device you choose. Useful immediately even without third-party plugins, thanks to two built-in effects:
+Routes your PC's system audio via WASAPI loopback through an ordered chain of effects and plays the result to any output device you choose. Useful immediately even without third-party plugins, thanks to its built-in effects:
 
 - **Auto Volume Leveller / Compressor** — stereo compressor/limiter for consistent low-volume listening.
 - **EQ + Bass Boost** — 10-band graphic EQ with a dedicated bass boost.
+- **Noise Gate** — silences background hiss below an adjustable threshold, with attack/hold/release smoothing.
+- **Stereo Width** — mid/side width control, from mono (0) through normal (1) to extra-wide (2).
+- **Loudness Normalizer** — keeps program loudness near a target level, with bounded boost and cut.
 
 ## Requirements
 
@@ -27,7 +30,7 @@ Captures your PC's system audio via WASAPI loopback, runs it through an ordered 
 
 1. Launch the app. It lives in the system tray; click the tray icon to open the window.
 2. Select your **output device**.
-3. Click **Scan Plugins** to discover installed VST3 plugins.
+3. Click **Scan Plugins** to discover installed VST3 plugins — both directly in the standard VST3 folders and in vendor subfolders (for example `VST3\Vendor\Plugin.vst3`).
 4. Add effects to the chain (built-ins or VST3) and adjust them.
 5. Click **Start Audio**. System audio now flows through the chain.
 
@@ -55,9 +58,17 @@ Choose from **32 / 64 / 128 / 256 / 512 / 1024** samples. Lower = lower latency,
 - **CPU** — audio-thread usage. A warning appears if it stays high.
 - **Level meters** — stereo input and output peak/RMS.
 
+## Accessibility
+
+Status changes — device connect/disconnect, CPU warnings, plugin add/remove, preset loads — are announced to screen readers (Narrator, NVDA) via Windows UI Automation.
+
+## Updates
+
+The tray menu's **Check for Updates...** looks for a newer version on demand (never automatically). If one is found, you can download and run the installer right from the prompt.
+
 ## Privacy
 
-No accounts, no telemetry, no analytics, no crash reports, no persistent logging. Presets and settings stay on your machine.
+No accounts, no telemetry, no analytics, no crash reports, no persistent logging, and no background network activity — the only network use is the update check you trigger yourself and the optional AI Assistant below. Presets and settings stay on your machine.
 
 **Optional AI assistant.** The built-in AI Assistant (the "AI" button) is an optional, on-demand feature. Only while you have it open, an embedded browser (Microsoft Edge WebView2) loads the ConversiaCore tutor at https://pelletierjy.github.io/ConversiaCore/ ; chatting with it sends your messages to the ConversiaCore AI proxy (Cloudflare) and its AI providers (Google Gemini, Groq, OpenRouter, DeepSeek, Hugging Face), and queries its Firebase Firestore knowledge base (Google). Chat history is stored locally in the embedded browser's data folder. Nothing is sent or requested when the assistant is closed — every other feature is fully offline.
 

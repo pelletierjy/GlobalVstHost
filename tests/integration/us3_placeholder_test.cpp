@@ -27,7 +27,7 @@ TEST_F(US3PlaceholderTest, MissingPluginBecomesPlaceholder)
     doc["preset_name"] = "Missing";
     doc["created_at"] = "2026-06-06T00:00:00Z";
     doc["updated_at"] = "2026-06-06T00:00:00Z";
-    doc["target_buffer_size"] = 256;
+    doc["target_buffer_size"] = 512;
     nlohmann::json slots = nlohmann::json::array();
     nlohmann::json slot;
     slot["position"] = 0;

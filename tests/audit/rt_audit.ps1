@@ -143,3 +143,9 @@ else
 {
     Write-Host "  STATUS: PASS" -ForegroundColor Green
 }
+
+# Always exit with an explicit code so CI can check $LASTEXITCODE rather than
+# parsing captured output (Write-Host does not populate the output stream, so
+# `$result = script` yields $null). A FAIL without -FailOnFind is report-only
+# and still exits 0; with -FailOnFind the branch above already exited 1.
+exit 0

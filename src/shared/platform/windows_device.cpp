@@ -4,6 +4,8 @@
 #include <random>
 #include <memory>
 #include <audioclient.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
 
 #pragma comment(lib, "ole32.lib")  // For CoCreateGuid
 
@@ -110,13 +112,113 @@ bool WindowsDeviceHelper::DeleteDeviceFromRegistry() {
 }
 
 std::string WindowsDeviceHelper::GetSystemDefaultAudioFormat() {
-    // TODO: Query WASAPI default device format
-    return "48000/32f/2";  // Fallback: 48kHz, 32-bit float, stereo
+    // Default fallback: 48 kHz, 32-bit float, stereo — the WASAPI shared-mode
+    // mix format on most systems. Used only when the endpoint query fails.
+    const std::string kFallback = "48000/32f/2";
+
+    const HRESULT co_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool do_uninit = (co_hr == S_OK);
+    if (FAILED(co_hr) && co_hr != RPC_E_CHANGED_MODE) {
+        return kFallback;
+    }
+
+    std::string result = kFallback;
+    IMMDeviceEnumerator* enumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  reinterpret_cast<void**>(&enumerator));
+    if (SUCCEEDED(hr)) {
+        IMMDevice* device = nullptr;
+        hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+        if (SUCCEEDED(hr)) {
+            IAudioClient* client = nullptr;
+            hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                                  reinterpret_cast<void**>(&client));
+            if (SUCCEEDED(hr)) {
+                WAVEFORMATEX* fmt = nullptr;
+                hr = client->GetMixFormat(&fmt);
+                if (SUCCEEDED(hr) && fmt != nullptr) {
+                    bool is_float = (fmt->wFormatTag == WAVE_FORMAT_IEEE_FLOAT);
+                    if (fmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+                        fmt->cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
+                        const auto* ext = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(fmt);
+                        is_float = IsEqualGUID(ext->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) != 0;
+                    }
+                    std::ostringstream oss;
+                    oss << fmt->nSamplesPerSec << "/"
+                        << fmt->wBitsPerSample << (is_float ? "f" : "i")
+                        << "/" << fmt->nChannels;
+                    result = oss.str();
+                    CoTaskMemFree(fmt);
+                }
+                client->Release();
+            }
+            device->Release();
+        }
+        enumerator->Release();
+    }
+
+    if (do_uninit) {
+        CoUninitialize();
+    }
+    return result;
 }
 
 std::vector<std::string> WindowsDeviceHelper::EnumerateAudioDevices() {
-    // TODO: Enumerate Windows audio devices using IMMDeviceEnumerator
-    return {};
+    // Friendly names of active render endpoints (eConsole state), UTF-8.
+    std::vector<std::string> devices;
+
+    const HRESULT co_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool do_uninit = (co_hr == S_OK);
+    if (FAILED(co_hr) && co_hr != RPC_E_CHANGED_MODE) {
+        return devices;
+    }
+
+    IMMDeviceEnumerator* enumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  reinterpret_cast<void**>(&enumerator));
+    if (SUCCEEDED(hr)) {
+        IMMDeviceCollection* collection = nullptr;
+        hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection);
+        if (SUCCEEDED(hr)) {
+            UINT count = 0;
+            collection->GetCount(&count);
+            for (UINT i = 0; i < count; ++i) {
+                IMMDevice* device = nullptr;
+                if (FAILED(collection->Item(i, &device)) || device == nullptr) {
+                    continue;
+                }
+                IPropertyStore* props = nullptr;
+                if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &props)) && props != nullptr) {
+                    PROPVARIANT name;
+                    PropVariantInit(&name);
+                    if (SUCCEEDED(props->GetValue(PKEY_Device_FriendlyName, &name)) &&
+                        name.vt == VT_LPWSTR && name.pwszVal != nullptr) {
+                        const std::wstring wide(name.pwszVal);
+                        const int size_needed = WideCharToMultiByte(
+                            CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.length()), nullptr, 0,
+                            nullptr, nullptr);
+                        std::string utf8(size_needed, 0);
+                        WideCharToMultiByte(CP_UTF8, 0, wide.c_str(),
+                                            static_cast<int>(wide.length()), &utf8[0], size_needed,
+                                            nullptr, nullptr);
+                        devices.push_back(utf8);
+                    }
+                    PropVariantClear(&name);
+                    props->Release();
+                }
+                device->Release();
+            }
+            collection->Release();
+        }
+        enumerator->Release();
+    }
+
+    if (do_uninit) {
+        CoUninitialize();
+    }
+    return devices;
 }
 
 std::string WindowsDeviceHelper::GetWASAPIErrorMessage(HRESULT hr) {
