@@ -1,8 +1,14 @@
 # tests/audit/no_i18n_audit.ps1
-# T107a — English-only audit per FR-019c.
+# T107a — string-externalization audit. Originally the FR-019c English-only gate.
 #
-# Gate: zero hits for string-externalization artifacts in project source,
-# OR each hit annotated with a justification comment.
+# FR-019c has since been amended (FR/ES localization now ships), so the check is:
+#   * foreign i18n frameworks (.po/.pot/.mo/.resx/.resw, gettext, wxLocale) are
+#     still rejected outright — no second localization mechanism gets in;
+#   * the sanctioned JUCE localization (i18n::tr()/i18n::trW() over
+#     juce::LocalisedStrings) is allowed, but every use of that class in the
+#     sources must carry the "// i18n-OK:" justification comment, either on the
+#     same line or the line above;
+#   * otherwise: zero hits, or each hit annotated.
 
 param(
     [string]$Root = "$PSScriptRoot/../..",
@@ -17,6 +23,7 @@ $patterns = @(
     '\.mo\b',
     '\.resx\b',
     '\.resw\b',
+    # Case-sensitive: a plain -match would flag ordinary JUCE getText() calls.
     '(?-i)gettext\s*\(',
     'wxLocale',
     'juce::TRANS\s*\(',
@@ -62,7 +69,7 @@ foreach ($file in $files)
 }
 
 Write-Host ""
-Write-Host "T107a English-Only Audit Results" -ForegroundColor Cyan
+Write-Host "T107a String-Externalization Audit Results" -ForegroundColor Cyan
 Write-Host "  i18n artifact hits (FAIL if > 0): $hits"
 
 if ($hits -gt 0)

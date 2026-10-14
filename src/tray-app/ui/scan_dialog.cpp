@@ -3,7 +3,9 @@
 // T063 — Scan progress dialog with glass panel styling.
 
 #include "scan_dialog.h"
+
 #include "custom_look_and_feel.h"
+#include "i18n/translation.h"
 
 #include <chrono>
 #include <fstream>
@@ -50,8 +52,7 @@ public:
 } // namespace
 
 ScanDialog::ScanDialog(IAudioEngine* engine)
-    : juce::DialogWindow("Scanning VST3 Plugins", kBgDeep, true, true)
-    , engine_(engine)
+    : juce::DialogWindow(i18n::tr("Scanning VST3 Plugins"), kBgDeep, true, true), engine_(engine)
 {
     ScanLog("constructor start");
     buildUI();
@@ -72,16 +73,16 @@ void ScanDialog::buildUI()
     auto* content = new GlassContent();
 
     status_label_ = std::make_unique<juce::Label>();
-    status_label_->setText("Starting scan...", juce::dontSendNotification);
+    status_label_->setText(i18n::tr("Starting scan..."), juce::dontSendNotification);
     status_label_->setColour(juce::Label::textColourId, kTextPrimary);
     content->addAndMakeVisible(status_label_.get());
 
     count_label_ = std::make_unique<juce::Label>();
-    count_label_->setText("Plugins found: 0", juce::dontSendNotification);
+    count_label_->setText(i18n::tr("Plugins found: 0"), juce::dontSendNotification);
     count_label_->setColour(juce::Label::textColourId, kTextDim);
     content->addAndMakeVisible(count_label_.get());
 
-    cancel_button_ = std::make_unique<juce::TextButton>("Cancel");
+    cancel_button_ = std::make_unique<juce::TextButton>(i18n::tr("Cancel"));
     cancel_button_->addListener(this);
     content->addAndMakeVisible(cancel_button_.get());
 
@@ -124,14 +125,14 @@ void ScanDialog::onScanStarted(int /*total_paths*/)
 {
     ScanLog("onScanStarted");
     juce::ScopedLock lock(status_lock_);
-    pending_status_ = "Scanning...";
+    pending_status_ = i18n::tr("Scanning...");
     plugins_discovered_.store(0);
 }
 
 void ScanDialog::onPathStarted(const std::filesystem::path& path)
 {
     juce::ScopedLock lock(status_lock_);
-    pending_status_ = juce::String("Scanning: ") + juce::String(path.string());
+    pending_status_ = juce::String(i18n::tr("Scanning: ")) + juce::String(path.string());
 }
 
 void ScanDialog::onPluginDiscovered(const PluginCatalogEntry& /*entry*/)
@@ -143,7 +144,7 @@ void ScanDialog::onScanFinished(int /*plugins_discovered*/)
 {
     ScanLog("onScanFinished");
     juce::ScopedLock lock(status_lock_);
-    pending_status_ = "Scan complete.";
+    pending_status_ = i18n::tr("Scan complete.");
     finished_.store(true);
 }
 
@@ -151,7 +152,7 @@ void ScanDialog::onScanCancelled()
 {
     ScanLog("onScanCancelled");
     juce::ScopedLock lock(status_lock_);
-    pending_status_ = "Scan cancelled.";
+    pending_status_ = i18n::tr("Scan cancelled.");
     finished_.store(true);
 }
 
@@ -161,7 +162,7 @@ void ScanDialog::timerCallback()
     {
         ScanLog("timerCallback: finished detected, stopping timer");
         stopTimer();
-        cancel_button_->setButtonText("Close");
+        cancel_button_->setButtonText(i18n::tr("Close"));
         cancel_button_->setEnabled(true);
         return;
     }
@@ -170,8 +171,8 @@ void ScanDialog::timerCallback()
         juce::ScopedLock lock(status_lock_);
         status_label_->setText(pending_status_, juce::dontSendNotification);
     }
-    count_label_->setText(juce::String("Plugins found: ") + juce::String(plugins_discovered_.load()),
-                           juce::dontSendNotification);
+    count_label_->setText(juce::String(i18n::tr("Plugins found: ")) + juce::String(plugins_discovered_.load()),
+                          juce::dontSendNotification);
 }
 
 void ScanDialog::closeButtonPressed()

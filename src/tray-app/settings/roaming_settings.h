@@ -21,6 +21,9 @@ struct RoamingSettings
     std::vector<std::string> disabled_default_paths;
     int default_buffer_size {512};
     std::string theme {"system"};  // "light" | "dark" | "system"
+    // UI language: "system" (follow Windows) | "en" | "fr" | "es".
+    // Installed by i18n::install() at startup; changing it takes effect on restart.
+    std::string language{"system"};
     std::optional<std::string> default_hardware_device_friendly_name;
     std::string update_check_endpoint_url;
     bool start_minimized_to_tray {false};

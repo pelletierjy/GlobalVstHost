@@ -4,8 +4,9 @@
 
 #include "about_diagnostics.h"
 
-#include "custom_look_and_feel.h"
 #include "BinaryData.h"
+#include "custom_look_and_feel.h"
+#include "i18n/translation.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -18,11 +19,11 @@ juce::String hostModeString(EngineHostMode mode)
     switch (mode)
     {
     case EngineHostMode::InProcess:
-        return "In-Process";
+        return i18n::tr("In-Process");
     case EngineHostMode::WindowsService:
-        return "Windows Service";
+        return i18n::tr("Windows Service");
     default:
-        return "Unknown";
+        return i18n::tr("Unknown");
     }
 }
 
@@ -32,24 +33,24 @@ juce::String buildDiagnosticsText(EngineHostMode mode,
 {
     juce::String msg;
     msg << "Global VST Host " << version << "\n\n";
-    msg << "Engine host mode: " << hostModeString(mode) << "\n";
-    msg << "Current output audio device: " << snap.current_output_friendly_name << "\n";
-    msg << "Current captured audio device: " << snap.current_input_friendly_name << "\n";
-    msg << "Buffer size: " << snap.buffer_size << " samples\n";
-    msg << "Sample rate: " << snap.sample_rate << " Hz\n";
-    msg << "Chain revision: " << snap.chain_revision << "\n";
-    msg << "Plugins in chain: " << snap.plugin_count << "\n";
+    msg << i18n::tr("Engine host mode: ") << hostModeString(mode) << "\n";
+    msg << i18n::tr("Current output audio device: ") << snap.current_output_friendly_name << "\n";
+    msg << i18n::tr("Current captured audio device: ") << snap.current_input_friendly_name << "\n";
+    msg << i18n::tr("Buffer size: ") << snap.buffer_size << " samples\n";
+    msg << i18n::tr("Sample rate: ") << snap.sample_rate << " Hz\n";
+    msg << i18n::tr("Chain revision: ") << snap.chain_revision << "\n";
+    msg << i18n::tr("Plugins in chain: ") << snap.plugin_count << "\n";
     msg << "\n";
-    msg << "Latency (ms):\n";
-    msg << "  Capture:  " << juce::String(snap.latency.capture_ms, 2) << "\n";
-    msg << "  Resample: " << juce::String(snap.latency.resample_ms, 2) << "\n";
-    msg << "  Chain:    " << juce::String(snap.latency.plugin_chain_ms, 2) << "\n";
-    msg << "  Output:   " << juce::String(snap.latency.output_ms, 2) << "\n";
+    msg << i18n::tr("Latency (ms):\n");
+    msg << i18n::tr("  Capture:  ") << juce::String(snap.latency.capture_ms, 2) << "\n";
+    msg << i18n::tr("  Resample: ") << juce::String(snap.latency.resample_ms, 2) << "\n";
+    msg << i18n::tr("  Chain:    ") << juce::String(snap.latency.plugin_chain_ms, 2) << "\n";
+    msg << i18n::tr("  Output:   ") << juce::String(snap.latency.output_ms, 2) << "\n";
     msg << "  Total RT: " << juce::String(snap.latency.total_round_trip_ms, 2) << "\n";
     msg << "\n";
-    msg << "CPU: " << juce::String(snap.cpu.rolling_1s_pct, 1) << "% (peak "
+    msg << "CPU: " << juce::String(snap.cpu.rolling_1s_pct, 1) << i18n::tr("% (peak ")
         << juce::String(snap.cpu.instantaneous_pct, 1) << "%)\n";
-    msg << "Xruns this session: " << (juce::int64)snap.cpu.xrun_count_session << "\n";
+    msg << i18n::tr("Xruns this session: ") << (juce::int64)snap.cpu.xrun_count_session << "\n";
     return msg;
 }
 
@@ -120,6 +121,8 @@ public:
     {
         addAndMakeVisible(controls_.theme_label);
         addAndMakeVisible(controls_.theme_selector);
+        addAndMakeVisible(controls_.language_label);
+        addAndMakeVisible(controls_.language_selector);
         addAndMakeVisible(controls_.start_minimized_label);
         addAndMakeVisible(controls_.start_minimized_button);
         addAndMakeVisible(controls_.tooltips_label);
@@ -130,6 +133,8 @@ public:
     {
         removeChildComponent(controls_.theme_label);
         removeChildComponent(controls_.theme_selector);
+        removeChildComponent(controls_.language_label);
+        removeChildComponent(controls_.language_selector);
         removeChildComponent(controls_.start_minimized_label);
         removeChildComponent(controls_.start_minimized_button);
         removeChildComponent(controls_.tooltips_label);
@@ -144,6 +149,12 @@ public:
         controls_.theme_label->setBounds(row1.removeFromLeft(80));
         row1.removeFromLeft(8);
         controls_.theme_selector->setBounds(row1.removeFromLeft(160));
+
+        b.removeFromTop(12);
+        auto rowLang = b.removeFromTop(28);
+        controls_.language_label->setBounds(rowLang.removeFromLeft(80));
+        rowLang.removeFromLeft(8);
+        controls_.language_selector->setBounds(rowLang.removeFromLeft(160));
 
         b.removeFromTop(12);
         auto row2 = b.removeFromTop(28);
@@ -176,8 +187,8 @@ public:
         const auto bg = (laf != nullptr) ? cols.bgDeep : kBgDeep;
 
         tabs_ = std::make_unique<juce::TabbedComponent>(juce::TabbedButtonBar::TabsAtTop);
-        tabs_->addTab("About", bg, new AboutTab(diagnostics, cols), true);
-        tabs_->addTab("Settings", bg, new SettingsTab(settings), true);
+        tabs_->addTab(i18n::tr("About"), bg, new AboutTab(diagnostics, cols), true);
+        tabs_->addTab(i18n::tr("Settings"), bg, new SettingsTab(settings), true);
         addAndMakeVisible(tabs_.get());
 
         ok_button_ = std::make_unique<juce::TextButton>("OK");
@@ -225,7 +236,7 @@ void AboutDiagnostics::show(juce::Component* parent,
     const auto& cols = (laf != nullptr) ? laf->colors() : ThemeColors{};
 
     juce::DialogWindow::LaunchOptions options;
-    options.dialogTitle = "About / Diagnostics";
+    options.dialogTitle = i18n::tr("About / Diagnostics");
     options.content.set(content.release(), true);
     options.componentToCentreAround = parent;
     options.dialogBackgroundColour = (laf != nullptr) ? cols.bgDeep : kBgDeep;

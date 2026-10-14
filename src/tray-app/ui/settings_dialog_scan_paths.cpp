@@ -3,9 +3,12 @@
 // T064 — Scan paths settings implementation with neon theme.
 
 #include "settings_dialog_scan_paths.h"
+
 #include "custom_look_and_feel.h"
+#include "i18n/translation.h"
 
 #include <windows.h>
+
 #include <shlobj.h>
 
 namespace jyglobalvst::tray {
@@ -15,11 +18,11 @@ SettingsDialogScanPaths::SettingsDialogScanPaths()
     list_box_ = std::make_unique<juce::ListBox>("ScanPaths", this);
     addAndMakeVisible(list_box_.get());
 
-    add_button_ = std::make_unique<juce::TextButton>("Add...");
+    add_button_ = std::make_unique<juce::TextButton>(i18n::tr("Add..."));
     add_button_->addListener(this);
     addAndMakeVisible(add_button_.get());
 
-    remove_button_ = std::make_unique<juce::TextButton>("Remove");
+    remove_button_ = std::make_unique<juce::TextButton>(i18n::tr("Remove"));
     remove_button_->addListener(this);
     addAndMakeVisible(remove_button_.get());
 }
@@ -29,7 +32,8 @@ void SettingsDialogScanPaths::buttonClicked(juce::Button* button)
     if (button == add_button_.get())
     {
         BROWSEINFOW bi = {};
-        bi.lpszTitle = L"Select VST3 folder";
+        const std::wstring browse_title = i18n::trW(L"Select VST3 folder");
+        bi.lpszTitle = browse_title.c_str();
         bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_USENEWUI;
         LPITEMIDLIST pidl = SHBrowseForFolderW(&bi);
         if (pidl != nullptr)

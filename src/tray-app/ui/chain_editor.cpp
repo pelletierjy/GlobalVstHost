@@ -3,12 +3,15 @@
 // T062 — Chain editor implementation with neon hover glow.
 
 #include "chain_editor.h"
-#include "custom_look_and_feel.h"
 #include "accessibility/uia_notifications.h"
 
-#include <windows.h>
+#include "custom_look_and_feel.h"
+#include "i18n/translation.h"
+
 #include <algorithm>
 #include <cstdarg>
+
+#include <windows.h>
 
 namespace jyglobalvst::tray {
 
@@ -71,8 +74,8 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
     name_label_ = std::make_unique<juce::Label>();
     // A tagged slot reads as "Equalizer - Volume drop": the separator hangs off
     // the name so the tag label holds nothing but the editable tag text.
-    name_label_->setText(juce::String(slot_.ref.name.empty() ? "Placeholder" : slot_.ref.name)
-                             + (has_tag ? " -" : ""),
+    name_label_->setText(juce::String(slot_.ref.name.empty() ? i18n::tr("Placeholder").toStdString() : slot_.ref.name) +
+                             (has_tag ? " -" : ""),
                          juce::dontSendNotification);
     // The label is display-only; let mouse drags fall through to the row so the
     // row can be grabbed and dragged by its title.
@@ -117,14 +120,14 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
     addAndMakeVisible(editor_button_.get());
 
     tag_button_ = std::make_unique<juce::TextButton>(has_tag ? "TAG_SET" : "TAG");
-    tag_button_->setTooltip(has_tag ? "Clear tag" : "Add a tag");
+    tag_button_->setTooltip(has_tag ? i18n::tr("Clear tag") : i18n::tr("Add a tag"));
     tag_button_->addListener(this);
     addAndMakeVisible(tag_button_.get());
 
     shortcut_button_ = std::make_unique<juce::TextButton>(slot_.shortcut ? "SHORTCUT_SET" : "SHORTCUT");
-    shortcut_button_->setTooltip(slot_.shortcut  ? "Remove this plugin's tray shortcut"
-                                 : shortcuts_full_ ? "Two tray shortcuts are already assigned"
-                                                   : "Give this plugin a tray shortcut button");
+    shortcut_button_->setTooltip(slot_.shortcut    ? i18n::tr("Remove this plugin's tray shortcut")
+                                 : shortcuts_full_ ? i18n::tr("Two tray shortcuts are already assigned")
+                                                   : i18n::tr("Give this plugin a tray shortcut button"));
     shortcut_button_->addListener(this);
     addAndMakeVisible(shortcut_button_.get());
 
