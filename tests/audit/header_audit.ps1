@@ -64,3 +64,7 @@ else
 {
     Write-Host "  STATUS: PASS" -ForegroundColor Green
 }
+
+# Always exit with an explicit code so CI can check $LASTEXITCODE rather than
+# parsing captured output. Report-only FAIL (no -FailOnFind) still exits 0.
+exit 0

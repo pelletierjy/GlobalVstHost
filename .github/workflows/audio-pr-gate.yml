@@ -98,8 +98,8 @@ jobs:
       - name: Run RT-safety audit (T106)
         shell: pwsh
         run: |
-          $result = .\tests\audit\rt_audit.ps1
-          if ($result -ne 0) {
+          ./tests/audit/rt_audit.ps1 -FailOnFind
+          if ($LASTEXITCODE -ne 0) {
             Write-Error "RT-safety audit failed"
             exit 1
           }
@@ -107,8 +107,8 @@ jobs:
       - name: Run header-presence audit (T107)
         shell: pwsh
         run: |
-          $result = .\tests\audit\header_audit.ps1
-          if ($result -ne 0) {
+          & .\tests\audit\header_audit.ps1 -FailOnFind
+          if ($LASTEXITCODE -ne 0) {
             Write-Error "Header audit failed"
             exit 1
           }
@@ -116,8 +116,8 @@ jobs:
       - name: Run no-i18n audit (T107a)
         shell: pwsh
         run: |
-          $result = .\tests\audit\no_i18n_audit.ps1
-          if ($result -ne 0) {
+          & .\tests\audit\no_i18n_audit.ps1 -FailOnFind
+          if ($LASTEXITCODE -ne 0) {
             Write-Error "No-i18n audit failed"
             exit 1
           }

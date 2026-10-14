@@ -13,6 +13,16 @@
 //   • enabled, sleeping  → the moment input rises above the wake threshold,
 //                          transitions back to awake.
 
+//
+// =====================================================================
+// REALTIME CONSTRAINTS (Constitution §V)
+// =====================================================================
+//   • Pure decision logic: no allocation, no locks, no atomics, no I/O.
+//   • Runs on the engine's low-rate polling thread (energySaverThreadLoop),
+//     never inside the audio callback; the atomics the callback reads live
+//     in AudioEngineImpl, not here.
+// =====================================================================
+
 #pragma once
 
 #include <cmath>

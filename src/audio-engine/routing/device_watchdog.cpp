@@ -1,3 +1,11 @@
+//
+// =====================================================================
+// REALTIME CONSTRAINTS (Constitution §V)
+// =====================================================================
+//   • Control thread only: performs COM calls and WideCharToMultiByte
+//     syscalls; MUST NOT run from the audio thread.
+// =====================================================================
+
 #include "device_watchdog.h"
 #include "audio_engine_impl.h"
 #include <comdef.h>
