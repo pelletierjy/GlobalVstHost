@@ -51,6 +51,15 @@ if(TARGET polish_accessibility_test)
         "${CMAKE_SOURCE_DIR}/src/tray-app/ui/horizontal_meter_panel.cpp")
 endif()
 
+# The assistant URL builder is tray-app code but is pure logic; compile it into
+# its unit test directly (same pattern as polish_accessibility_test above).
+if(TARGET assistant_url_test)
+    target_include_directories(assistant_url_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui")
+    target_sources(assistant_url_test PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/tray-app/ui/assistant_url.cpp")
+endif()
+
 file(GLOB _contract_test_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/contract/*_test.cpp")
 foreach(_src IN LISTS _contract_test_sources)
