@@ -4,12 +4,13 @@
 
 #include "plugin_editor_window.h"
 
+#include "i18n/translation.h"
+
 namespace jyglobalvst::tray {
 
 PluginEditorWindow::PluginEditorWindow(juce::AudioProcessorEditor* editor, const juce::String& plugin_name)
-    : juce::DocumentWindow(plugin_name + " — Editor",
-                           juce::Colours::darkgrey,
-                           juce::DocumentWindow::closeButton)
+    : juce::DocumentWindow(
+          plugin_name + i18n::tr(" — Editor"), juce::Colours::darkgrey, juce::DocumentWindow::closeButton)
 {
     if (!editor)
     {

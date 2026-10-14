@@ -40,6 +40,8 @@ struct SettingsControls
 {
     juce::Label* theme_label {nullptr};
     juce::ComboBox* theme_selector {nullptr};
+    juce::Label* language_label{nullptr};
+    juce::ComboBox* language_selector{nullptr};
     juce::Label* start_minimized_label {nullptr};
     juce::ToggleButton* start_minimized_button {nullptr};
     juce::Label* tooltips_label {nullptr};
