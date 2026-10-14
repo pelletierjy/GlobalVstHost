@@ -103,10 +103,17 @@ DESIGNED FOR EVERYDAY LISTENING
 
 PRIVATE BY DESIGN
 
-Global VST Host performs no network communication whatsoever. No accounts, no
+Global VST Host works offline. Every core feature — audio capture, the effect
+chain, presets, settings — runs with no network access at all. No accounts, no
 telemetry, no analytics, no crash reporting, no background update checks or
 pings of any kind. Your settings and presets stay on your machine, in your own
 user profile.
+
+The one exception is the optional, on-demand **AI Assistant** (the "AI" button):
+only while you have it open, an embedded browser (Microsoft Edge WebView2)
+loads the ConversiaCore tutor at https://pelletierjy.github.io/ConversiaCore/ ,
+and chatting with it sends your messages to that service's AI proxy and
+providers. Nothing is sent or requested when the assistant is closed.
 
 It captures the audio your computer is playing, processes it in memory, and passes
 it straight to your output device. Audio is never recorded, saved to disk, or sent
@@ -301,7 +308,7 @@ generic device names if convenient.
 | Live latency and CPU readout | `main_window.cpp:2931` formats real values (`"Latency: %.2f ms (in %.2f + out %.2f)"`); CPU label at `1892` |
 | Tray-only, no taskbar window | Verified on the installed package: process runs with `MainWindowHandle = 0` until the tray icon is clicked |
 | Energy saver, on by default | `roaming_settings.h:28` — `bool energy_saver_enabled {true}` |
-| **No network communication** | Shipped `JyGlobalVST.exe` imports no `winhttp`/`wininet`/`ws2_32` — confirmed by `dumpbin /dependents` |
+| **No background network** | No network traffic unless the user opens the optional AI Assistant (Microsoft Edge WebView2, on demand); `dumpbin /dependents` on the shipped `JyGlobalVST.exe` still lists no `winhttp`/`wininet`/`ws2_32` imports — the WebView2 runtime loads its networking stack only at runtime, and only while the assistant is open. No telemetry, no accounts, no update checks |
 | x64 only, Windows 10 1909+ | `AppxManifest.xml` `MinVersion=10.0.18363.0`, `ProcessorArchitecture=x64` |
 | VST3 only, no VST2 | No VST2 support in `src/audio-engine/vst-host/` |
 | Additional VST3 folder configurable in Settings | `src/tray-app/ui/settings_dialog_scan_paths.cpp` — `addPath()`, backed by a folder-browse `FileChooser` |

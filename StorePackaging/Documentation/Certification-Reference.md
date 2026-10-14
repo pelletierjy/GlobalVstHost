@@ -61,9 +61,10 @@ expected justification wording against Partner Center's guidance.
 ### 4. Privacy policy requirement
 
 Very likely required given the `microphone` declaration. Confirm the current rule, then
-write and host one. The app performs no network activity and no telemetry, which makes the
-policy short — but it should explain that loopback captures system audio output, not
-microphone input.
+write and host one. The app performs no background network activity and no telemetry (the
+optional, on-demand AI Assistant uses the network only while the user has it open, which
+the policy must describe), which keeps the policy short — but it should explain that
+loopback captures system audio output, not microphone input.
 
 ### 5. Accepted upload format
 

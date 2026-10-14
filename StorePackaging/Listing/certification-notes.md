@@ -74,9 +74,13 @@ THIRD-PARTY VST3 PLUGIN SUPPORT
 Loading user-installed VST3 plugins is the app's described primary purpose and
 is stated at the beginning of the Store description.
 
-  - The app does not download, install, or distribute any plugin, and performs
-    no network communication of any kind. The shipped binary imports no HTTP,
-    TLS, or socket library.
+  - The app does not download, install, or distribute any plugin, and the
+    plugin subsystem makes no network calls of any kind. The only
+    network use in the app is the optional, on-demand AI Assistant (see
+    PRIVACY below); when it is closed, the app makes no network requests. The
+    shipped binary's import table lists no HTTP, TLS, or socket library (the
+    WebView2 runtime loads its networking stack at runtime, only while the
+    assistant is open).
   - It only enumerates and loads VST3 plugins ALREADY installed on the machine
     by the user, from the standard location
     (C:\Program Files\Common Files\VST3) or a folder the user selects.
@@ -91,8 +95,19 @@ uses the WASAPI loopback interface built into Windows.
 
 PRIVACY
 
-No personal information is collected, stored off-device, or transmitted. No
-telemetry, analytics, or crash reporting. Privacy policy: <PRIVACY POLICY URL>
+No personal information is collected, stored off-device, or transmitted by the
+core app. No telemetry, analytics, or crash reporting. The only exception is
+the optional, on-demand AI Assistant (the "AI" button): only while the user has
+it open, an embedded browser (Microsoft Edge WebView2) loads the ConversiaCore
+tutor at https://pelletierjy.github.io/ConversiaCore/ and, if the user chats
+with it, sends those messages to the ConversiaCore AI proxy and its AI
+providers, and queries its Firebase Firestore knowledge base. Nothing is sent
+when the assistant is closed.
+
+Store data-collection declaration: "AI assistant chat messages (sent to a
+third-party AI service, on user action only)".
+
+Privacy policy: <PRIVACY POLICY URL>
 
 SYSTEM REQUIREMENTS
 
