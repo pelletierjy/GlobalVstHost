@@ -901,9 +901,10 @@ class HeaderComponent : public juce::Component
 public:
     HeaderComponent(juce::ImageComponent* logo, juce::Label* title,
                     ResetButton* reset, PowerButton* audio_toggle,
-                    SettingsButton* about, juce::Button* energy_saver, juce::TextButton* help)
+                    SettingsButton* about, juce::Button* energy_saver, juce::TextButton* help,
+                    juce::TextButton* assistant)
         : logo_(logo), title_(title), reset_(reset), audio_toggle_(audio_toggle),
-          about_(about), energy_saver_(energy_saver), help_(help)
+          about_(about), energy_saver_(energy_saver), help_(help), assistant_(assistant)
     {
         addAndMakeVisible(logo_);
         addAndMakeVisible(title_);
@@ -912,6 +913,7 @@ public:
         addAndMakeVisible(about_);
         addAndMakeVisible(energy_saver_);
         addAndMakeVisible(help_);
+        addAndMakeVisible(assistant_);
     }
 
     void resized() override
@@ -930,8 +932,10 @@ public:
         fb.items.add(juce::FlexItem().withWidth(6));
         fb.items.add(juce::FlexItem(*about_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
-        // Green leaf toggle, sits immediately left of the "?" button.
+        // Green leaf toggle, sits immediately left of the "AI" button.
         fb.items.add(juce::FlexItem(*energy_saver_).withMinWidth(34).withWidth(34).withMinHeight(28).withHeight(28));
+        fb.items.add(juce::FlexItem().withWidth(6));
+        fb.items.add(juce::FlexItem(*assistant_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
         fb.items.add(juce::FlexItem(*help_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.performLayout(b);
@@ -945,6 +949,7 @@ private:
     SettingsButton* about_;
     juce::Button* energy_saver_;
     juce::TextButton* help_;
+    juce::TextButton* assistant_;
 };
 
 
@@ -2137,6 +2142,10 @@ void MainWindow::buildUI()
     help_button_ = std::make_unique<juce::TextButton>("?");
     help_button_->addListener(this);
 
+    // --- AI Assistant button ----------------------------------------------
+    assistant_button_ = std::make_unique<juce::TextButton>("AI");
+    assistant_button_->addListener(this);
+
     // --- Header logo -------------------------------------------------------
     auto* logo_comp = new juce::ImageComponent();
     if (app_icon_image_.isValid())
@@ -2156,7 +2165,7 @@ void MainWindow::buildUI()
     auto* header = new HeaderComponent(logo_comp, title_label_,
                                        reset_engine_button_.get(), audio_toggle_.get(),
                                        about_button_.get(), energy_saver_button_.get(),
-                                       help_button_.get());
+                                       help_button_.get(), assistant_button_.get());
 
     // --- Panels ------------------------------------------------------------
     auto* device_panel = new DevicePanel(
@@ -2386,6 +2395,10 @@ void MainWindow::buttonClicked(juce::Button* button)
     else if (button == help_button_.get())
     {
         handleHelp();
+    }
+    else if (button == assistant_button_.get())
+    {
+        handleAssistant();
     }
     else if (button == start_minimized_button_.get())
     {
@@ -2759,6 +2772,7 @@ void MainWindow::applyTooltips()
     about_button_->setTooltip(enabled ? "About, diagnostics, and settings" : empty);
     energy_saver_button_->setTooltip(enabled ? "Toggle energy saver: auto-suspend the VST chain when input is silent to save CPU." : empty);
     help_button_->setTooltip(enabled ? "Open help documentation" : empty);
+    assistant_button_->setTooltip(enabled ? "Open the AI assistant" : empty);
 
     // Refresh existing button tooltips that were set in their constructors.
     if (enabled)
@@ -2947,6 +2961,14 @@ void MainWindow::handleAbout()
 void MainWindow::handleHelp()
 {
     juce::URL{"https://pelletierjy.github.io/GlobalVstHost/"}.launchInDefaultBrowser();
+}
+
+void MainWindow::handleAssistant()
+{
+    // Recreated on each open (same pattern as the catalog dialog) so the dialog
+    // always reflects the currently selected theme.
+    const bool light_theme = custom_laf_.currentTheme() == CustomLookAndFeel::ThemeId::Light;
+    assistant_dialog_ = std::make_unique<AssistantDialog>(light_theme);
 }
 
 void MainWindow::toggleEnergySaver()
