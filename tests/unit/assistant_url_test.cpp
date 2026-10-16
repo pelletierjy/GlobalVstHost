@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 using jyglobalvst::tray::assistantUrl;
+using jyglobalvst::tray::clientInjectionScript;
 
 TEST(AssistantUrlTest, DarkThemeUsesExactDeployedConversiaCoreUrl)
 {
@@ -26,4 +27,33 @@ TEST(AssistantUrlTest, LightThemeUsesLightPalette)
     EXPECT_EQ(assistantUrl(true).toStdString(),
               "https://pelletierjy.github.io/ConversiaCore/?context=GlobalVstHost"
               "&subject=Others&gradeLevel=20&theme=light");
+}
+
+// --- ConversiaCore client-credential injection (feature 002-secure-embed-telemetry) ---
+
+TEST(ClientInjectionScriptTest, EmptyKeyOrRemoteIdYieldsNoInjection)
+{
+    EXPECT_TRUE(clientInjectionScript("globalvsthost", "").isEmpty());
+    EXPECT_TRUE(clientInjectionScript("", "cvk_globalvsthost_abc").isEmpty());
+    EXPECT_TRUE(clientInjectionScript("", "").isEmpty());
+}
+
+TEST(ClientInjectionScriptTest, ValidCredentialsProduceTheWidgetGlobal)
+{
+    const auto script = clientInjectionScript("globalvsthost", "cvk_globalvsthost_AbC123");
+    EXPECT_EQ(script.toStdString(),
+              "window.conversiaClient = { version: 1, remoteId: \"globalvsthost\", "
+              "key: \"cvk_globalvsthost_AbC123\" };");
+}
+
+TEST(ClientInjectionScriptTest, LaunchUrlNeverCarriesTheCredential)
+{
+    // FR-020: the credential travels via runtime injection only — never in a URL.
+    for (const bool light : { false, true })
+    {
+        const auto url = assistantUrl(light).toStdString();
+        EXPECT_EQ(url.find("cvk_"), std::string::npos);
+        EXPECT_EQ(url.find("key="), std::string::npos);
+        EXPECT_EQ(url.find("remoteId="), std::string::npos);
+    }
 }
