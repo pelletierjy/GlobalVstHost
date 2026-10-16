@@ -35,6 +35,14 @@ void AssistantDialog::buildUI(bool light_theme)
         browser_ = std::make_unique<juce::WebBrowserComponent>(options);
         content->addAndMakeVisible(browser_.get());
         browser_->goToURL(assistantUrl(light_theme));
+        // Inject the ConversiaCore client credential at runtime through the browser bridge
+        // (never in the launch URL — FR-020). goToURL returns while the page is still
+        // fetching, and the widget reads window.conversiaClient lazily on its first AI
+        // request, so this lands well before any credential is needed.
+        if (const auto script = assistantClientInjectionScript(); script.isNotEmpty())
+            browser_->evaluateJavascript(script);
+        // NOTE: the default-browser fallback below cannot inject — without a credential that
+        // path surfaces the widget's friendly "not configured" message rather than an error.
     }
     else
     {
