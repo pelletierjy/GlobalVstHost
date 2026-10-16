@@ -7,16 +7,19 @@ namespace jyglobalvst::tray {
 namespace {
 
 // Operator-issued embedding credential (ConversiaCore feature 002-secure-embed-telemetry).
-// Before releasing an app build, fill kConversiaClientKey with the one-time key printed by:
-//   node tools/conversia-admin/index.js client add --remote-id globalvsthost
-// (ConversiaCore repo). Deploy order: register client → ship this injection → deploy the
-// gated worker — see ConversiaCore specs/002-secure-embed-telemetry/release-notes.md.
-// An empty key means "not issued yet": no injection happens and the assistant shows the
+// NEVER committed to source: the value is provided at build time —
+//   cmake -B build -A x64 -DJYGLOBALVST_CONVERSIA_CLIENT_KEY=cvk_globalvsthost_...
+// (or the JYGLOBALVST_CONVERSIA_CLIENT_KEY environment variable; release CI reads it from
+// the JYGLOBALVST_CONVERSIA_CLIENT_KEY repo secret — same pattern as JYGLOBALVST_ASIO_SDK_PATH).
+// An empty value means "not provided": no injection happens and the assistant shows the
 // widget's friendly "not configured / not authorized" message.
 constexpr const char* kConversiaRemoteId = "globalvsthost";
-constexpr const char* kConversiaClientKey = "cvk_globalvsthost_CfjXpP9bSlB1eqGQ_oy73o2nmkTKPFi7o0gQmwhnP0o";
 
 }  // namespace
+
+#ifndef JYGLOBALVST_CONVERSIA_CLIENT_KEY
+#define JYGLOBALVST_CONVERSIA_CLIENT_KEY ""
+#endif
 
 juce::String assistantUrl(bool light_theme)
 {
@@ -40,7 +43,7 @@ juce::String clientInjectionScript(const juce::String& remote_id, const juce::St
 
 juce::String assistantClientInjectionScript()
 {
-    return clientInjectionScript(kConversiaRemoteId, kConversiaClientKey);
+    return clientInjectionScript(kConversiaRemoteId, JYGLOBALVST_CONVERSIA_CLIENT_KEY);
 }
 
 }  // namespace jyglobalvst::tray

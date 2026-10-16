@@ -53,6 +53,11 @@ jobs:
         run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages" -NonInteractive
 
       - name: Configure CMake
+        env:
+          # Bakes the ConversiaCore embedding credential into the assistant (see
+          # src/tray-app/ui/assistant_url.cpp). Value lives only in the repo secret —
+          # never in source. Missing secret -> assistant degrades gracefully.
+          JYGLOBALVST_CONVERSIA_CLIENT_KEY: ${{ secrets.JYGLOBALVST_CONVERSIA_CLIENT_KEY }}
         run: cmake -B build -A x64 -DJYGLOBALVST_BUILD_TESTS=OFF
 
       - name: Build Release
