@@ -65,6 +65,18 @@ target_compile_definitions(jyglobalvst_tray PRIVATE
     # drift from the CMake/installer/Store version the way a literal in main.cpp did.
     JYGLOBALVST_VERSION_STRING="${PROJECT_VERSION}")
 
+# ConversiaCore embedding credential (see ui/assistant_url.cpp). Supplied at configure
+# time from the CMake cache or the environment — same pattern as JYGLOBALVST_ASIO_SDK_PATH.
+# Release CI feeds it from the JYGLOBALVST_CONVERSIA_CLIENT_KEY repo secret; it is NEVER
+# committed to source. Empty -> the assistant degrades with the widget's friendly message.
+if(NOT DEFINED JYGLOBALVST_CONVERSIA_CLIENT_KEY AND DEFINED ENV{JYGLOBALVST_CONVERSIA_CLIENT_KEY})
+    set(JYGLOBALVST_CONVERSIA_CLIENT_KEY "$ENV{JYGLOBALVST_CONVERSIA_CLIENT_KEY}")
+endif()
+if(JYGLOBALVST_CONVERSIA_CLIENT_KEY)
+    target_compile_definitions(jyglobalvst_tray PRIVATE
+        JYGLOBALVST_CONVERSIA_CLIENT_KEY="${JYGLOBALVST_CONVERSIA_CLIENT_KEY}")
+endif()
+
 file(GLOB_RECURSE _tray_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/presets/*.cpp"
