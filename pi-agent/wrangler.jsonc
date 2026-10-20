@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pi-globalvsthost",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-23",
+  // nodejs_compat: process.env for provider API keys (pi-ai reads e.g. DEEPSEEK_API_KEY)
+  // global_fetch_strictly_public: /federation fetches peer workers over the public
+  // internet — without it, same-zone worker-to-worker fetch() fails with 1042.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  // One Durable Object (SQLite-backed; Pi Durable harness + mission-control tables).
+  "durable_objects": {
+    "bindings": [{ "name": "PiAgent", "class_name": "PiAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PiAgent"] }],
+
+  // Custom domains (pi-globalvsthost.jyp.solutions): requires the jyp.solutions zone on this
+  // Cloudflare account (delegate NS to the assigned Cloudflare pi-globalvsthostservers first).
+  // When active, re-add and redeploy:
+  // "routes": [{ "pattern": "pi-globalvsthost.jyp.solutions", "custom_domain": true }],
+
+  "vars": {
+    "AGENT_NAME": "globalvsthost",
+    // Hub only: the four project workers. Switch URLs to *.jyp.solutions once
+    // the zone is active.
+    "PEERS": "[]"
+  },
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
