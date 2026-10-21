@@ -20,6 +20,7 @@
 #include "../vst-host/seh_wrapper.h"
 
 #include <algorithm>
+
 #include <windows.h>
 
 namespace jyglobalvst::engine {
@@ -325,8 +326,7 @@ std::shared_ptr<PlaceholderInstance> PluginChain::getSlotPlaceholder(int positio
     return (*slots)[position].placeholder;
 }
 
-void PluginChain::readSlotOutputLevels(std::vector<float>& peaks,
-                                       std::vector<float>& rms) const
+void PluginChain::readSlotOutputLevels(std::vector<float>& peaks, std::vector<float>& rms) const
 {
     const auto* slots = activeSlots();
     if (!slots)
@@ -350,6 +350,30 @@ void PluginChain::readSlotOutputLevels(std::vector<float>& peaks,
     }
 }
 
+int PluginChain::totalLatencySamples() const
+{
+    const auto* slots = activeSlots();
+    if (!slots)
+    {
+        return 0;
+    }
+
+    int total = 0;
+    for (const auto& slot : *slots)
+    {
+        if (slot.placeholder || !slot.instance || slot.is_bypassed.load(std::memory_order_relaxed) ||
+            slot.is_failed.load(std::memory_order_relaxed))
+        {
+            continue;
+        }
+        if (auto* processor = slot.instance->processor())
+        {
+            total += processor->getLatencySamples();
+        }
+    }
+    return total;
+}
+
 void PluginChain::prepareToPlay(double sample_rate, int samples_per_block)
 {
     OutputDebugStringA("[PluginChain] prepareToPlay: starting\n");
@@ -357,8 +381,11 @@ void PluginChain::prepareToPlay(double sample_rate, int samples_per_block)
     samples_per_block_ = samples_per_block;
 
     char buf[256];
-    sprintf_s(buf, sizeof(buf), "[PluginChain] prepareToPlay: sample_rate=%f, buffer_size=%d\n",
-              sample_rate, samples_per_block);
+    sprintf_s(buf,
+              sizeof(buf),
+              "[PluginChain] prepareToPlay: sample_rate=%f, buffer_size=%d\n",
+              sample_rate,
+              samples_per_block);
     OutputDebugStringA(buf);
 
     const auto* slots = activeSlots();
@@ -371,8 +398,11 @@ void PluginChain::prepareToPlay(double sample_rate, int samples_per_block)
         auto& slot = (*slots)[i];
         if (slot.instance)
         {
-            sprintf_s(buf, sizeof(buf), "[PluginChain] prepareToPlay: plugin %d - %s\n",
-                      i, slot.instance->descriptor().name.c_str());
+            sprintf_s(buf,
+                      sizeof(buf),
+                      "[PluginChain] prepareToPlay: plugin %d - %s\n",
+                      i,
+                      slot.instance->descriptor().name.c_str());
             OutputDebugStringA(buf);
             if (SEHPluginWrapper::prepareToPlaySafe(slot.instance->processor(), sample_rate, samples_per_block))
             {
@@ -388,8 +418,11 @@ void PluginChain::prepareToPlay(double sample_rate, int samples_per_block)
             }
             else
             {
-                sprintf_s(buf, sizeof(buf), "[PluginChain] prepareToPlay FAILED for plugin %d - %s\n",
-                          i, slot.instance->descriptor().name.c_str());
+                sprintf_s(buf,
+                          sizeof(buf),
+                          "[PluginChain] prepareToPlay FAILED for plugin %d - %s\n",
+                          i,
+                          slot.instance->descriptor().name.c_str());
                 OutputDebugStringA(buf);
             }
         }
@@ -434,9 +467,8 @@ void PluginChain::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     for (auto& slot : *slots)
     {
         // Placeholders are audio-transparent (skipped).
-        if (slot.placeholder || !slot.instance
-            || slot.is_bypassed.load(std::memory_order_relaxed)
-            || slot.is_failed.load(std::memory_order_relaxed))
+        if (slot.placeholder || !slot.instance || slot.is_bypassed.load(std::memory_order_relaxed) ||
+            slot.is_failed.load(std::memory_order_relaxed))
         {
             ++slot_index;
             continue;
@@ -463,10 +495,8 @@ void PluginChain::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
             if (slot_index < kMaxMeteredSlots)
             {
                 const int n = buffer.getNumSamples();
-                slot_output_peak_[slot_index].store(buffer.getMagnitude(0, 0, n),
-                                                     std::memory_order_relaxed);
-                slot_output_rms_[slot_index].store(buffer.getRMSLevel(0, 0, n),
-                                                    std::memory_order_relaxed);
+                slot_output_peak_[slot_index].store(buffer.getMagnitude(0, 0, n), std::memory_order_relaxed);
+                slot_output_rms_[slot_index].store(buffer.getRMSLevel(0, 0, n), std::memory_order_relaxed);
             }
         }
         ++slot_index;
@@ -520,18 +550,14 @@ int PluginChain::getCurrentProgram()
     return 0;
 }
 
-void PluginChain::setCurrentProgram(int /*index*/)
-{
-}
+void PluginChain::setCurrentProgram(int /*index*/) {}
 
 const juce::String PluginChain::getProgramName(int /*index*/)
 {
     return {};
 }
 
-void PluginChain::changeProgramName(int /*index*/, const juce::String& /*newName*/)
-{
-}
+void PluginChain::changeProgramName(int /*index*/, const juce::String& /*newName*/) {}
 
 void PluginChain::getStateInformation(juce::MemoryBlock& /*destData*/)
 {
