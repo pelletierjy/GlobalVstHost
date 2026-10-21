@@ -1,5 +1,10 @@
 name: MSIX Store Package
 
+# The draft-release step (softprops/action-gh-release) creates/updates a release:
+# without this, the default GITHUB_TOKEN is read-only -> 403.
+permissions:
+  contents: write
+
 on:
   push:
     tags:
