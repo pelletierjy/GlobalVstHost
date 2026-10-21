@@ -67,11 +67,13 @@ jobs:
         shell: pwsh
         run: dotnet tool install --global wix
 
-      # WiX v7 refuses every command until the OSMF EULA is accepted; this writes
-      # the acceptance marker to the runner profile for all later wix calls.
+      # WiX v7 refuses every command until the OSMF EULA is accepted (WIX7015).
+      # Official per-user acceptance for CI: writes a marker for later wix calls.
+      # Note: the OSMF fee applies to organizations with >$10k annual revenue;
+      # accepting here represents the repository owner's declaration.
       - name: Accept WiX OSMF EULA
         shell: pwsh
-        run: wix --accept-eula
+        run: wix eula accept wix7
 
       - name: Install WiX extensions
         shell: pwsh
