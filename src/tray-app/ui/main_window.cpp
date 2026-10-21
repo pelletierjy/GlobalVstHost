@@ -6,11 +6,11 @@
 
 #include "about_diagnostics.h"
 #include "accessibility/uia_notifications.h"
-#include "updates/update_check.h"
-
 #include "BinaryData.h"
 #include "builtin-effects/builtin_theme.h"
+#include "engine_settings_guard.h"
 #include "i18n/translation.h"
+#include "updates/update_check.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -48,13 +48,12 @@ void StartupLog(const char* msg)
         }
     }
     catch (...)
-    {
-    }
+    {}
 }
 
 constexpr int kTimerHz = 10;  // 10 Hz UI refresh for meters / CPU.
 constexpr UINT kTrayIconMsg = WM_APP + 1;
-constexpr UINT kTrayIconId  = 1;
+constexpr UINT kTrayIconId = 1;
 
 // Tiny "in" / "out" marker sat under a meter pair in the tray popup. Drawn as a
 // vector glyph through the LookAndFeel, so it matches the mute / power icons on
@@ -72,8 +71,7 @@ public:
     {
         auto* laf = dynamic_cast<CustomLookAndFeel*>(&getLookAndFeel());
         const juce::Colour colour = (laf != nullptr) ? laf->colors().textDim : kTextDim;
-        CustomLookAndFeel::drawSignalDirectionIcon(g, getLocalBounds().toFloat(),
-                                                   is_input_, colour);
+        CustomLookAndFeel::drawSignalDirectionIcon(g, getLocalBounds().toFloat(), is_input_, colour);
     }
 
 private:
@@ -95,18 +93,18 @@ public:
     {
         juce::String label;
         juce::String tooltip;
-        bool active {false};
+        bool active{false};
     };
 
-    TrayVolumeContent(float initial_gain, bool audio_running,
+    TrayVolumeContent(float initial_gain,
+                      bool audio_running,
                       std::function<void(float)> on_change,
                       std::function<bool()> on_toggle_audio,
                       std::function<void()> on_mute_toggle,
                       std::function<void(int)> on_toggle_shortcut,
                       const std::vector<ShortcutInfo>& shortcuts)
         : on_change_(std::move(on_change)), on_toggle_audio_(std::move(on_toggle_audio)),
-          on_mute_toggle_(std::move(on_mute_toggle)),
-          on_toggle_shortcut_(std::move(on_toggle_shortcut)),
+          on_mute_toggle_(std::move(on_mute_toggle)), on_toggle_shortcut_(std::move(on_toggle_shortcut)),
           pre_mute_volume_(initial_gain),
           shortcut_count_(juce::jmin(static_cast<int>(shortcuts.size()), kMaxShortcutButtons))
     {
@@ -119,8 +117,7 @@ public:
         slider_.setRange(0.0, 1.0, 0.0);
         slider_.setNumDecimalPlacesToDisplay(2);
         slider_.setValue(initial_gain, juce::dontSendNotification);
-        slider_.onValueChange = [this]()
-        {
+        slider_.onValueChange = [this]() {
             if (on_change_)
             {
                 float new_val = static_cast<float>(slider_.getValue());
@@ -159,8 +156,7 @@ public:
         is_muted_ = (initial_gain <= 0.0f);
         updateMuteButtonVisual();
         mute_button_.setClickingTogglesState(true);
-        mute_button_.onClick = [this]()
-        {
+        mute_button_.onClick = [this]() {
             if (on_mute_toggle_)
                 on_mute_toggle_();
         };
@@ -174,11 +170,9 @@ public:
             // by text; this flag asks for the green/grey state-text treatment.
             b.getProperties().set("stateText", true);
             b.setClickingTogglesState(true);
-            b.setToggleState(shortcuts[static_cast<std::size_t>(i)].active,
-                             juce::dontSendNotification);
+            b.setToggleState(shortcuts[static_cast<std::size_t>(i)].active, juce::dontSendNotification);
             b.setTooltip(shortcuts[static_cast<std::size_t>(i)].tooltip);
-            b.onClick = [this, i]()
-            {
+            b.onClick = [this, i]() {
                 if (on_toggle_shortcut_)
                     on_toggle_shortcut_(i);
             };
@@ -187,8 +181,7 @@ public:
 
         audio_button_.setButtonText(audio_running ? "ON" : "OFF");
         audio_button_.setToggleState(audio_running, juce::dontSendNotification);
-        audio_button_.onClick = [this]()
-        {
+        audio_button_.onClick = [this]() {
             if (on_toggle_audio_)
             {
                 const bool now_running = on_toggle_audio_();
@@ -218,8 +211,7 @@ public:
         for (int i = 0; i < shortcut_count_; ++i)
         {
             button_fb.items.add(juce::FlexItem().withWidth(4));
-            button_fb.items.add(
-                juce::FlexItem(shortcut_buttons_[static_cast<std::size_t>(i)]).withFlex(1.0f));
+            button_fb.items.add(juce::FlexItem(shortcut_buttons_[static_cast<std::size_t>(i)]).withFlex(1.0f));
         }
         button_fb.items.add(juce::FlexItem().withWidth(4));
         button_fb.items.add(juce::FlexItem(mute_button_).withFlex(1.0f));
@@ -258,10 +250,14 @@ public:
         slider_.setBounds(b);
     }
 
-    void setMeterLevels(float in_l_peak, float in_l_rms,
-                       float in_r_peak, float in_r_rms,
-                       float out_l_peak, float out_l_rms,
-                       float out_r_peak, float out_r_rms)
+    void setMeterLevels(float in_l_peak,
+                        float in_l_rms,
+                        float in_r_peak,
+                        float in_r_rms,
+                        float out_l_peak,
+                        float out_l_rms,
+                        float out_r_peak,
+                        float out_r_rms)
     {
         meter_input_l_->setLevels(in_l_peak, in_l_rms);
         meter_input_r_->setLevels(in_r_peak, in_r_rms);
@@ -280,21 +276,34 @@ public:
     {
         if (index >= 0 && index < shortcut_count_)
         {
-            shortcut_buttons_[static_cast<std::size_t>(index)].setToggleState(
-                active, juce::dontSendNotification);
+            shortcut_buttons_[static_cast<std::size_t>(index)].setToggleState(active, juce::dontSendNotification);
         }
     }
 
-    int shortcutCount() const noexcept { return shortcut_count_; }
+    int shortcutCount() const noexcept
+    {
+        return shortcut_count_;
+    }
 
     void setAudioRunning(bool running)
     {
         audio_button_.setToggleState(running, juce::dontSendNotification);
     }
 
-    bool isMuted() const { return is_muted_; }
-    void setPreMuteVolume(float vol) { pre_mute_volume_ = vol; }
-    float getPreMuteVolume() const { return pre_mute_volume_; }
+    bool isMuted() const
+    {
+        return is_muted_;
+    }
+
+    void setPreMuteVolume(float vol)
+    {
+        pre_mute_volume_ = vol;
+    }
+
+    float getPreMuteVolume() const
+    {
+        return pre_mute_volume_;
+    }
 
 private:
     void updateMuteButtonVisual()
@@ -314,15 +323,15 @@ private:
     std::unique_ptr<MeterPanel> meter_input_r_;
     std::unique_ptr<MeterPanel> meter_output_l_;
     std::unique_ptr<MeterPanel> meter_output_r_;
-    SignalDirectionIcon input_icon_ {true};
-    SignalDirectionIcon output_icon_ {false};
+    SignalDirectionIcon input_icon_{true};
+    SignalDirectionIcon output_icon_{false};
     std::function<void(float)> on_change_;
     std::function<bool()> on_toggle_audio_;
     std::function<void()> on_mute_toggle_;
     std::function<void(int)> on_toggle_shortcut_;
-    bool is_muted_ {false};
+    bool is_muted_{false};
     float pre_mute_volume_;
-    int shortcut_count_ {0};
+    int shortcut_count_{0};
 };
 
 // Positions of the slots that own a tray shortcut button, in chain order and
@@ -362,16 +371,15 @@ std::vector<TrayVolumeContent::ShortcutInfo> buildShortcutInfos(const ChainSnaps
     for (const int pos : shortcutPositions(chain))
     {
         const auto& slot = chain.slots[static_cast<std::size_t>(pos)];
-        const juce::String name = juce::String(slot.tag).isNotEmpty()
-                                      ? juce::String(slot.tag)
-                                      : juce::String(slot.ref.name);
+        const juce::String name =
+            juce::String(slot.tag).isNotEmpty() ? juce::String(slot.tag) : juce::String(slot.ref.name);
         out.push_back({shortcutLabel(slot), name, !slot.is_bypassed});
     }
     return out;
 }
 
-LRESULT CALLBACK mainWindowSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
-                                         UINT_PTR /*uIdSubclass*/, DWORD_PTR dwRefData)
+LRESULT CALLBACK
+mainWindowSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR /*uIdSubclass*/, DWORD_PTR dwRefData)
 {
     auto* self = reinterpret_cast<MainWindow*>(dwRefData);
     if (self != nullptr)
@@ -431,8 +439,7 @@ juce::String endpointDisplayName(const HardwareOutputInfo& info, bool for_input)
 // Create an HICON from a JUCE Image at the requested size. When `grayscale` is
 // true each pixel is desaturated to its luminance (alpha preserved), used for the
 // "engine paused" tray icon.
-HICON createHICONFromJuceImage(const juce::Image& sourceImage, int width, int height,
-                               bool grayscale = false)
+HICON createHICONFromJuceImage(const juce::Image& sourceImage, int width, int height, bool grayscale = false)
 {
     auto image = sourceImage.rescaled(width, height);
 
@@ -451,7 +458,7 @@ HICON createHICONFromJuceImage(const juce::Image& sourceImage, int width, int he
     BITMAPV5HEADER bmi = {};
     bmi.bV5Size = sizeof(BITMAPV5HEADER);
     bmi.bV5Width = width;
-    bmi.bV5Height = -height; // top-down
+    bmi.bV5Height = -height;  // top-down
     bmi.bV5Planes = 1;
     bmi.bV5BitCount = 32;
     bmi.bV5Compression = BI_BITFIELDS;
@@ -461,8 +468,7 @@ HICON createHICONFromJuceImage(const juce::Image& sourceImage, int width, int he
     bmi.bV5AlphaMask = 0xFF000000;
 
     void* bits = nullptr;
-    HBITMAP hColor = CreateDIBSection(screenDC, reinterpret_cast<BITMAPINFO*>(&bmi),
-                                      DIB_RGB_COLORS, &bits, nullptr, 0);
+    HBITMAP hColor = CreateDIBSection(screenDC, reinterpret_cast<BITMAPINFO*>(&bmi), DIB_RGB_COLORS, &bits, nullptr, 0);
     ReleaseDC(nullptr, screenDC);
 
     if (!hColor || !bits)
@@ -484,8 +490,7 @@ HICON createHICONFromJuceImage(const juce::Image& sourceImage, int width, int he
             if (grayscale)
             {
                 // Rec. 601 luma; alpha untouched so the icon keeps its shape.
-                const auto lum = static_cast<uint8_t>(
-                    (src[0] * 299 + src[1] * 587 + src[2] * 114) / 1000);
+                const auto lum = static_cast<uint8_t>((src[0] * 299 + src[1] * 587 + src[2] * 114) / 1000);
                 dst[0] = lum;  // B
                 dst[1] = lum;  // G
                 dst[2] = lum;  // R
@@ -527,7 +532,10 @@ namespace {
 class GlassPanel : public juce::Component
 {
 public:
-    void setSectionTitle(const juce::String& title) { section_title_ = title; }
+    void setSectionTitle(const juce::String& title)
+    {
+        section_title_ = title;
+    }
 
     void paint(juce::Graphics& g) override
     {
@@ -539,9 +547,7 @@ public:
 
         if (section_title_.isNotEmpty())
         {
-            const juce::Colour titleCol = (laf != nullptr)
-                ? laf->colors().accentCyan
-                : kAccentCyan;
+            const juce::Colour titleCol = (laf != nullptr) ? laf->colors().accentCyan : kAccentCyan;
 
             juce::FontOptions fo;
             juce::Font f{fo};
@@ -550,21 +556,21 @@ public:
             g.setColour(titleCol.withAlpha(0.75f));
             g.drawText(section_title_,
                        getLocalBounds().reduced(10, 0).withHeight(kTitleH),
-                       juce::Justification::centredLeft, false);
+                       juce::Justification::centredLeft,
+                       false);
 
             // Thin separator line below title.
             g.setColour(titleCol.withAlpha(0.15f));
-            g.fillRect(juce::Rectangle<float>(10.0f, static_cast<float>(kTitleH) - 1.0f,
-                                              static_cast<float>(getWidth()) - 20.0f, 1.0f));
+            g.fillRect(juce::Rectangle<float>(
+                10.0f, static_cast<float>(kTitleH) - 1.0f, static_cast<float>(getWidth()) - 20.0f, 1.0f));
         }
     }
 
     // Content area below the title strip.
     juce::Rectangle<int> contentBounds() const
     {
-        return section_title_.isNotEmpty()
-            ? getLocalBounds().reduced(8).withTrimmedTop(kTitleH - 8)
-            : getLocalBounds().reduced(8);
+        return section_title_.isNotEmpty() ? getLocalBounds().reduced(8).withTrimmedTop(kTitleH - 8)
+                                           : getLocalBounds().reduced(8);
     }
 
     static constexpr int kTitleH = 18;
@@ -576,26 +582,31 @@ private:
 class DevicePanel : public GlassPanel
 {
 public:
-    DevicePanel(juce::Label* transport_label, juce::ComboBox* transport_mode,
-                juce::Label* input_label, juce::ComboBox* input,
-                juce::Label* input_rate_caption, juce::Label* input_rate_value,
-                juce::Label* output_label, juce::ComboBox* output,
-                juce::Label* buffer_label, juce::ComboBox* buffer,
-                juce::Label* output_rate_caption, juce::Label* output_rate_value,
-                juce::Label* vst_rate_caption, juce::ComboBox* vst_rate_selector,
-                juce::Label* asio_device_label, juce::ComboBox* asio_device,
-                juce::Label* asio_pair_label, juce::ComboBox* asio_pair,
+    DevicePanel(juce::Label* transport_label,
+                juce::ComboBox* transport_mode,
+                juce::Label* input_label,
+                juce::ComboBox* input,
+                juce::Label* input_rate_caption,
+                juce::Label* input_rate_value,
+                juce::Label* output_label,
+                juce::ComboBox* output,
+                juce::Label* buffer_label,
+                juce::ComboBox* buffer,
+                juce::Label* output_rate_caption,
+                juce::Label* output_rate_value,
+                juce::Label* vst_rate_caption,
+                juce::ComboBox* vst_rate_selector,
+                juce::Label* asio_device_label,
+                juce::ComboBox* asio_device,
+                juce::Label* asio_pair_label,
+                juce::ComboBox* asio_pair,
                 juce::TextButton* asio_settings)
-        : transport_label_(transport_label), transport_mode_(transport_mode),
-          input_label_(input_label), input_(input),
-          input_rate_caption_(input_rate_caption), input_rate_value_(input_rate_value),
-          output_label_(output_label), output_(output),
-          buffer_label_(buffer_label), buffer_(buffer),
-          output_rate_caption_(output_rate_caption), output_rate_value_(output_rate_value),
-          vst_rate_caption_(vst_rate_caption), vst_rate_selector_(vst_rate_selector),
-          asio_device_label_(asio_device_label), asio_device_(asio_device),
-          asio_pair_label_(asio_pair_label), asio_pair_(asio_pair),
-          asio_settings_(asio_settings)
+        : transport_label_(transport_label), transport_mode_(transport_mode), input_label_(input_label), input_(input),
+          input_rate_caption_(input_rate_caption), input_rate_value_(input_rate_value), output_label_(output_label),
+          output_(output), buffer_label_(buffer_label), buffer_(buffer), output_rate_caption_(output_rate_caption),
+          output_rate_value_(output_rate_value), vst_rate_caption_(vst_rate_caption),
+          vst_rate_selector_(vst_rate_selector), asio_device_label_(asio_device_label), asio_device_(asio_device),
+          asio_pair_label_(asio_pair_label), asio_pair_(asio_pair), asio_settings_(asio_settings)
     {
         setSectionTitle(i18n::tr("AUDIO DEVICE"));
         addAndMakeVisible(transport_label_);
@@ -624,8 +635,7 @@ public:
         GlassPanel::paint(g);
 
         auto* laf = dynamic_cast<CustomLookAndFeel*>(&getLookAndFeel());
-        const auto col = (laf != nullptr) ? laf->colors().accentCyan.withAlpha(0.65f)
-                                           : kAccentCyan.withAlpha(0.65f);
+        const auto col = (laf != nullptr) ? laf->colors().accentCyan.withAlpha(0.65f) : kAccentCyan.withAlpha(0.65f);
 
         juce::FontOptions fo;
         juce::Font f{fo};
@@ -640,7 +650,8 @@ public:
         g.setColour(col.withAlpha(0.2f));
         g.fillRect(juce::Rectangle<float>(static_cast<float>(input_hdr.getX()),
                                           static_cast<float>(input_hdr.getBottom()) - 1.0f,
-                                          static_cast<float>(input_hdr.getWidth()), 1.0f));
+                                          static_cast<float>(input_hdr.getWidth()),
+                                          1.0f));
 
         // Must match the INPUT-section carving in resized() exactly.
         b.removeFromTop(kHdrGap + kRowH + kRowGap + kRowH + kSectionGap);
@@ -651,7 +662,8 @@ public:
         g.setColour(col.withAlpha(0.2f));
         g.fillRect(juce::Rectangle<float>(static_cast<float>(output_hdr.getX()),
                                           static_cast<float>(output_hdr.getBottom()) - 1.0f,
-                                          static_cast<float>(output_hdr.getWidth()), 1.0f));
+                                          static_cast<float>(output_hdr.getWidth()),
+                                          1.0f));
     }
 
     void resized() override
@@ -761,10 +773,10 @@ public:
     // Row metrics. paint() has to skip the INPUT rows to place the OUTPUT
     // sub-header, so it repeats the same arithmetic as resized() — naming these
     // keeps the two from drifting apart.
-    static constexpr int kRowH       = 28;
-    static constexpr int kRowGap     = 4;
-    static constexpr int kHdrGap     = 2;   // sub-header → first row of its section
-    static constexpr int kSectionGap = 6;   // last row of a section → next sub-header
+    static constexpr int kRowH = 28;
+    static constexpr int kRowGap = 4;
+    static constexpr int kHdrGap = 2;      // sub-header → first row of its section
+    static constexpr int kSectionGap = 6;  // last row of a section → next sub-header
 
     // Every row is "fixed-width caption | 4 px | flex(1) control". One shared
     // caption width keeps the control column aligned and, unlike the previous
@@ -795,12 +807,10 @@ private:
     juce::TextButton* asio_settings_;
 };
 
-
 class PluginButtonPanel : public GlassPanel
 {
 public:
-    PluginButtonPanel(juce::TextButton* save, juce::TextButton* load_preset)
-        : save_(save), load_preset_(load_preset)
+    PluginButtonPanel(juce::TextButton* save, juce::TextButton* load_preset) : save_(save), load_preset_(load_preset)
     {
         addAndMakeVisible(save_);
         addAndMakeVisible(load_preset_);
@@ -827,11 +837,16 @@ private:
 class MeterStatusPanel : public GlassPanel
 {
 public:
-    MeterStatusPanel(juce::Label* in_label, MeterPanel* in_l, MeterPanel* in_r,
-                     juce::Label* out_label, MeterPanel* out_l, MeterPanel* out_r,
-                     juce::Label* vol_label, juce::Slider* volume, juce::TextButton* mute_button)
-        : in_label_(in_label), in_l_(in_l), in_r_(in_r),
-          out_label_(out_label), out_l_(out_l), out_r_(out_r),
+    MeterStatusPanel(juce::Label* in_label,
+                     MeterPanel* in_l,
+                     MeterPanel* in_r,
+                     juce::Label* out_label,
+                     MeterPanel* out_l,
+                     MeterPanel* out_r,
+                     juce::Label* vol_label,
+                     juce::Slider* volume,
+                     juce::TextButton* mute_button)
+        : in_label_(in_label), in_l_(in_l), in_r_(in_r), out_label_(out_label), out_l_(out_l), out_r_(out_r),
           vol_label_(vol_label), volume_(volume), mute_button_(mute_button)
     {
         setSectionTitle(i18n::tr("LEVELS"));
@@ -876,8 +891,7 @@ public:
 
         // Labels: "Cap" spans in_l+in_r, "Out" spans out_l+out_r, "Vol" over volume
         auto makeLabel = [&](juce::Component* a, juce::Component* b_comp) {
-            return a->getBounds().getUnion(b_comp->getBounds())
-                       .withY(labelRow.getY()).withHeight(kLabelH);
+            return a->getBounds().getUnion(b_comp->getBounds()).withY(labelRow.getY()).withHeight(kLabelH);
         };
         in_label_->setBounds(makeLabel(in_l_, in_r_));
         out_label_->setBounds(makeLabel(out_l_, out_r_));
@@ -903,12 +917,16 @@ private:
 class HeaderComponent : public juce::Component
 {
 public:
-    HeaderComponent(juce::ImageComponent* logo, juce::Label* title,
-                    ResetButton* reset, PowerButton* audio_toggle,
-                    SettingsButton* about, juce::Button* energy_saver, juce::TextButton* help,
+    HeaderComponent(juce::ImageComponent* logo,
+                    juce::Label* title,
+                    ResetButton* reset,
+                    PowerButton* audio_toggle,
+                    SettingsButton* about,
+                    juce::Button* energy_saver,
+                    juce::TextButton* help,
                     juce::TextButton* assistant)
-        : logo_(logo), title_(title), reset_(reset), audio_toggle_(audio_toggle),
-          about_(about), energy_saver_(energy_saver), help_(help), assistant_(assistant)
+        : logo_(logo), title_(title), reset_(reset), audio_toggle_(audio_toggle), about_(about),
+          energy_saver_(energy_saver), help_(help), assistant_(assistant)
     {
         addAndMakeVisible(logo_);
         addAndMakeVisible(title_);
@@ -956,7 +974,6 @@ private:
     juce::TextButton* assistant_;
 };
 
-
 // Two-column body: the wide left column stacks AUDIO DEVICE over PLUGIN CHAIN,
 // the narrow right column stacks LEVELS over SPECTRUM. Panels in a column share
 // its width, so the chain editor lines up with the device panel and the analyser
@@ -964,10 +981,12 @@ private:
 class BodyComponent : public juce::Component
 {
 public:
-    BodyComponent(juce::Component* device_panel, juce::Component* chain_panel,
-                  juce::Component* meter_panel, juce::Component* spectrum_panel)
-        : device_panel_(device_panel), chain_panel_(chain_panel),
-          meter_panel_(meter_panel), spectrum_panel_(spectrum_panel)
+    BodyComponent(juce::Component* device_panel,
+                  juce::Component* chain_panel,
+                  juce::Component* meter_panel,
+                  juce::Component* spectrum_panel)
+        : device_panel_(device_panel), chain_panel_(chain_panel), meter_panel_(meter_panel),
+          spectrum_panel_(spectrum_panel)
     {
         addAndMakeVisible(device_panel_);
         addAndMakeVisible(chain_panel_);
@@ -1122,7 +1141,7 @@ private:
     juce::Component* cpu_bar_;
 };
 
-} // namespace
+}  // namespace
 
 // ============================================================================
 // MainContentComponent
@@ -1135,8 +1154,7 @@ public:
                          juce::Component* body,
                          juce::Component* plugin_panel,
                          juce::Component* status_bar)
-        : header_(header), body_(body),
-          plugin_panel_(plugin_panel), status_bar_(status_bar)
+        : header_(header), body_(body), plugin_panel_(plugin_panel), status_bar_(status_bar)
     {
         addAndMakeVisible(header_);
         addAndMakeVisible(body_);
@@ -1155,10 +1173,9 @@ public:
 
         fb.items.add(juce::FlexItem(*header_).withMinHeight(48).withHeight(48));
         fb.items.add(juce::FlexItem().withHeight(8));
-        fb.items.add(juce::FlexItem(*body_).withMinHeight(BodyComponent::kTopRowH
-                                                          + BodyComponent::kGap
-                                                          + BodyComponent::kMinBottomH)
-                                            .withFlex(1.0f));
+        fb.items.add(juce::FlexItem(*body_)
+                         .withMinHeight(BodyComponent::kTopRowH + BodyComponent::kGap + BodyComponent::kMinBottomH)
+                         .withFlex(1.0f));
         fb.items.add(juce::FlexItem().withHeight(8));
         fb.items.add(juce::FlexItem(*plugin_panel_).withMinHeight(44).withHeight(44));
         fb.items.add(juce::FlexItem().withHeight(8));
@@ -1201,9 +1218,9 @@ void LeafButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool
 {
     auto area = getLocalBounds().toFloat().reduced(3.0f);
 
-    const juce::Colour leaf_on = kIconActiveGreen;   // active green (shared with power icon)
-    const juce::Colour leaf_sleep {0xFF69F0AE};      // brighter mint while sleeping
-    const juce::Colour leaf_off = kIconInactiveGrey; // muted grey when disabled (shared)
+    const juce::Colour leaf_on = kIconActiveGreen;    // active green (shared with power icon)
+    const juce::Colour leaf_sleep{0xFF69F0AE};        // brighter mint while sleeping
+    const juce::Colour leaf_off = kIconInactiveGrey;  // muted grey when disabled (shared)
 
     juce::Colour col = enabled_ ? (sleeping_ ? leaf_sleep : leaf_on) : leaf_off;
     if (shouldDrawHighlighted)
@@ -1271,8 +1288,14 @@ void ResetButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, boo
 
     // Draw an arc (3/4 circle)
     juce::Path arc;
-    arc.addCentredArc(cx, cy, radius, radius, 0.0f, juce::MathConstants<float>::pi * 0.5f,
-                      juce::MathConstants<float>::pi * 2.0f, true);
+    arc.addCentredArc(cx,
+                      cy,
+                      radius,
+                      radius,
+                      0.0f,
+                      juce::MathConstants<float>::pi * 0.5f,
+                      juce::MathConstants<float>::pi * 2.0f,
+                      true);
     g.setColour(col);
     g.strokePath(arc, juce::PathStrokeType(1.8f));
 
@@ -1312,8 +1335,7 @@ void SettingsButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, 
 
     // Draw main circle
     g.setColour(col);
-    g.drawEllipse(juce::Rectangle<float>(cx - radius * 0.6f, cy - radius * 0.6f,
-                                         radius * 1.2f, radius * 1.2f), 1.8f);
+    g.drawEllipse(juce::Rectangle<float>(cx - radius * 0.6f, cy - radius * 0.6f, radius * 1.2f, radius * 1.2f), 1.8f);
 
     // Draw teeth around the circle
     for (int i = 0; i < num_teeth; ++i)
@@ -1331,15 +1353,13 @@ void SettingsButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, 
     }
 
     // Draw center hole
-    g.drawEllipse(juce::Rectangle<float>(cx - radius * 0.25f, cy - radius * 0.25f,
-                                         radius * 0.5f, radius * 0.5f), 1.2f);
+    g.drawEllipse(juce::Rectangle<float>(cx - radius * 0.25f, cy - radius * 0.25f, radius * 0.5f, radius * 0.5f), 1.2f);
 }
 
 MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     // MUST stay identical to kWindowTitle in main.cpp - the single-instance check
     // locates a running instance by exact window caption via FindWindowW.
-    : juce::DocumentWindow("Global VST Host", kBgDeep, juce::DocumentWindow::closeButton)
-    , engine_(std::move(engine))
+    : juce::DocumentWindow("Global VST Host", kBgDeep, juce::DocumentWindow::closeButton), engine_(std::move(engine))
 {
     StartupLog("constructor start");
     setUsingNativeTitleBar(true);
@@ -1410,7 +1430,11 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
         {
             for (const auto& id : input_endpoint_ids_)
             {
-                if (id == current_input) { input_restored = true; break; }
+                if (id == current_input)
+                {
+                    input_restored = true;
+                    break;
+                }
             }
         }
         // Check if output was restored by autosave.
@@ -1418,13 +1442,21 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
         {
             for (const auto& id : output_endpoint_ids_)
             {
-                if (id == current_output) { output_restored = true; break; }
+                if (id == current_output)
+                {
+                    output_restored = true;
+                    break;
+                }
             }
             if (!output_restored)
             {
                 for (const auto& name : asio_device_names_)
                 {
-                    if (name == current_output) { output_restored = true; break; }
+                    if (name == current_output)
+                    {
+                        output_restored = true;
+                        break;
+                    }
                 }
             }
         }
@@ -1437,6 +1469,9 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
                 if (input_endpoint_ids_[i] == remembered)
                 {
                     input_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
+                    // Restart-only-if-running guard: no-op while startup still
+                    // has the engine stopped.
+                    EngineSettingsGuard settings_guard(engine_.get());
                     engine_->selectInput(remembered);
                     input_restored = true;
                     break;
@@ -1453,6 +1488,8 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
                 if (output_endpoint_ids_[i] == remembered)
                 {
                     output_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
+                    // Same guard as the input fallback above.
+                    EngineSettingsGuard settings_guard(engine_.get());
                     engine_->selectOutput(remembered);
                     output_restored = true;
                     break;
@@ -1469,9 +1506,8 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     StartupLog("startTimerHz done");
 
     // Load icon from binary data for tray and UI use.
-    app_icon_image_ = juce::ImageCache::getFromMemory(
-        jyglobalvst::BinaryData::app_icon_png,
-        jyglobalvst::BinaryData::app_icon_pngSize);
+    app_icon_image_ = juce::ImageCache::getFromMemory(jyglobalvst::BinaryData::app_icon_png,
+                                                      jyglobalvst::BinaryData::app_icon_pngSize);
 
     // Restore saved window state AFTER making visible (window needs a peer).
     setVisible(true);
@@ -1532,8 +1568,7 @@ MainWindow::~MainWindow()
     destroyTrayIcon();
     removePowerHandler();
     stopTimer();
-    autosave_store_.write(engine_.get(), preset_override_flag_,
-                          static_cast<int>(custom_laf_.currentTheme()));
+    autosave_store_.write(engine_.get(), preset_override_flag_, static_cast<int>(custom_laf_.currentTheme()));
     engine_->setListener(nullptr);
     if (audio_running_)
     {
@@ -1659,11 +1694,11 @@ void MainWindow::createTrayIcon()
 
     NOTIFYICONDATA nid = {};
     nid.cbSize = sizeof(nid);
-    nid.hWnd   = hwnd;
-    nid.uID    = kTrayIconId;
+    nid.hWnd = hwnd;
+    nid.uID = kTrayIconId;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = kTrayIconMsg;
-    nid.hIcon  = initial != nullptr ? initial : LoadIcon(nullptr, IDI_APPLICATION);
+    nid.hIcon = initial != nullptr ? initial : LoadIcon(nullptr, IDI_APPLICATION);
     wcscpy_s(nid.szTip, L"Global VST Host");
 
     if (Shell_NotifyIcon(NIM_ADD, &nid))
@@ -1698,10 +1733,10 @@ void MainWindow::updateTrayIconAppearance()
 
     NOTIFYICONDATA nid = {};
     nid.cbSize = sizeof(nid);
-    nid.hWnd   = hwnd;
-    nid.uID    = kTrayIconId;
+    nid.hWnd = hwnd;
+    nid.uID = kTrayIconId;
     nid.uFlags = NIF_ICON;
-    nid.hIcon  = icon;
+    nid.hIcon = icon;
     if (Shell_NotifyIcon(NIM_MODIFY, &nid))
     {
         tray_icon_active_shown_ = active;
@@ -1723,8 +1758,8 @@ void MainWindow::destroyTrayIcon()
 
     NOTIFYICONDATA nid = {};
     nid.cbSize = sizeof(nid);
-    nid.hWnd   = hwnd;
-    nid.uID    = kTrayIconId;
+    nid.hWnd = hwnd;
+    nid.uID = kTrayIconId;
     Shell_NotifyIcon(NIM_DELETE, &nid);
     tray_icon_created_ = false;
 
@@ -1762,8 +1797,8 @@ void MainWindow::updateTrayIconTooltip(const juce::String& text)
 
     NOTIFYICONDATA nid = {};
     nid.cbSize = sizeof(nid);
-    nid.hWnd   = hwnd;
-    nid.uID    = kTrayIconId;
+    nid.hWnd = hwnd;
+    nid.uID = kTrayIconId;
     nid.uFlags = NIF_TIP;
     wcscpy_s(nid.szTip, text.toWideCharPointer());
     Shell_NotifyIcon(NIM_MODIFY, &nid);
@@ -1803,9 +1838,13 @@ void MainWindow::showTrayContextMenu()
     POINT pt;
     GetCursorPos(&pt);
     SetForegroundWindow(static_cast<HWND>(getPeer()->getNativeHandle()));
-    int cmd = TrackPopupMenu(tray_menu_, TPM_RETURNCMD | TPM_NONOTIFY,
-                             pt.x, pt.y, 0,
-                             static_cast<HWND>(getPeer()->getNativeHandle()), nullptr);
+    int cmd = TrackPopupMenu(tray_menu_,
+                             TPM_RETURNCMD | TPM_NONOTIFY,
+                             pt.x,
+                             pt.y,
+                             0,
+                             static_cast<HWND>(getPeer()->getNativeHandle()),
+                             nullptr);
 
     switch (cmd)
     {
@@ -1845,20 +1884,17 @@ void MainWindow::showTrayVolumePopup()
     if (peer == nullptr)
         return;
 
-    const float gain = (volume_slider_ != nullptr)
-                           ? static_cast<float>(volume_slider_->getValue())
-                           : 1.0f;
+    const float gain = (volume_slider_ != nullptr) ? static_cast<float>(volume_slider_->getValue()) : 1.0f;
 
     auto content = std::make_unique<TrayVolumeContent>(
-        gain, audio_running_,
+        gain,
+        audio_running_,
         [this](float g) { applyMasterVolume(g, true); },
-        [this]() -> bool
-        {
+        [this]() -> bool {
             setAudioRunning(!audio_running_);
             return audio_running_;
         },
-        [this]()
-        {
+        [this]() {
             if (volume_slider_ == nullptr)
                 return;
             const float current = static_cast<float>(volume_slider_->getValue());
@@ -1880,11 +1916,14 @@ void MainWindow::showTrayVolumePopup()
     {
         std::lock_guard<std::mutex> lock(meter_frame_mutex_);
         const auto& frame = latest_meter_frame_;
-        content->setMeterLevels(
-            linearToDb(frame.input_peak_l), linearToDb(frame.input_rms_l),
-            linearToDb(frame.input_peak_r), linearToDb(frame.input_rms_r),
-            linearToDb(frame.output_peak_l), linearToDb(frame.output_rms_l),
-            linearToDb(frame.output_peak_r), linearToDb(frame.output_rms_r));
+        content->setMeterLevels(linearToDb(frame.input_peak_l),
+                                linearToDb(frame.input_rms_l),
+                                linearToDb(frame.input_peak_r),
+                                linearToDb(frame.input_rms_r),
+                                linearToDb(frame.output_peak_l),
+                                linearToDb(frame.output_rms_l),
+                                linearToDb(frame.output_peak_r),
+                                linearToDb(frame.output_rms_r));
     }
 
     // Keep a safe pointer to update meters in timer callback; automatically nulls out
@@ -1898,8 +1937,8 @@ void MainWindow::showTrayVolumePopup()
     {
         NOTIFYICONIDENTIFIER nidId = {};
         nidId.cbSize = sizeof(nidId);
-        nidId.hWnd   = static_cast<HWND>(peer->getNativeHandle());
-        nidId.uID    = kTrayIconId;
+        nidId.hWnd = static_cast<HWND>(peer->getNativeHandle());
+        nidId.uID = kTrayIconId;
         RECT rc = {};
         if (SUCCEEDED(Shell_NotifyIconGetRect(&nidId, &rc)))
         {
@@ -1932,9 +1971,7 @@ void MainWindow::restoreFromTray()
 void MainWindow::quitFromTray()
 {
     destroyTrayIcon();
-    juce::MessageManager::callAsync([this]() {
-        juce::JUCEApplication::getInstance()->systemRequestedQuit();
-    });
+    juce::MessageManager::callAsync([this]() { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
 }
 
 bool MainWindow::handleTrayMessage(UINT msg, LPARAM /*wParam*/)
@@ -1971,7 +2008,7 @@ void MainWindow::toggleShortcutBypass(int button_index)
     }
 
     const int pos = positions[static_cast<std::size_t>(button_index)];
-    const bool bypassed = ! chain.slots[static_cast<std::size_t>(pos)].is_bypassed;
+    const bool bypassed = !chain.slots[static_cast<std::size_t>(pos)].is_bypassed;
     engine_->setBypass(pos, bypassed);
     notifyBypassToggled(nativeHwnd(), chain.slots[static_cast<std::size_t>(pos)].ref.name, bypassed);
 }
@@ -2049,8 +2086,7 @@ void MainWindow::buildUI()
     // Reflect the engine's current desired rate (falls back to 48 kHz if unset).
     {
         const int desired = static_cast<int>(engine_->sampleRate());
-        vst_rate_selector_->setSelectedId(desired > 0 ? desired : 48000,
-                                             juce::dontSendNotification);
+        vst_rate_selector_->setSelectedId(desired > 0 ? desired : 48000, juce::dontSendNotification);
     }
     vst_rate_selector_->addListener(this);
 
@@ -2059,8 +2095,7 @@ void MainWindow::buildUI()
     audio_toggle_->addListener(this);
 
     // --- Master volume slider ----------------------------------------------
-    volume_slider_ = std::make_unique<juce::Slider>(juce::Slider::LinearVertical,
-                                                      juce::Slider::NoTextBox);
+    volume_slider_ = std::make_unique<juce::Slider>(juce::Slider::LinearVertical, juce::Slider::NoTextBox);
     volume_slider_->setRange(0.0, 1.0, 0.0);
     // Restore the persisted master volume from the previous session.
     const float persisted_volume = roaming_settings_store_.load().master_volume;
@@ -2088,7 +2123,9 @@ void MainWindow::buildUI()
 
     // --- Chain editor ------------------------------------------------------
     chain_editor_ = std::make_unique<ChainEditor>(engine_.get());
-    chain_editor_->onAddPluginRequested = [this]() { handleLoadPlugin(); };
+    chain_editor_->onAddPluginRequested = [this]() {
+        handleLoadPlugin();
+    };
 
     // --- Spectrum analyser -------------------------------------------------
     spectrum_analyzer_ = std::make_unique<SpectrumAnalyzer>(engine_.get());
@@ -2114,15 +2151,14 @@ void MainWindow::buildUI()
     // --- Theme selector ----------------------------------------------------
     theme_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Theme:"));
     theme_selector_ = std::make_unique<juce::ComboBox>();
-    theme_selector_->addItem("Neon Blue",   static_cast<int>(CustomLookAndFeel::ThemeId::NeonBlue));
+    theme_selector_->addItem("Neon Blue", static_cast<int>(CustomLookAndFeel::ThemeId::NeonBlue));
     theme_selector_->addItem("Neon Purple", static_cast<int>(CustomLookAndFeel::ThemeId::NeonPurple));
-    theme_selector_->addItem("Neon Green",  static_cast<int>(CustomLookAndFeel::ThemeId::NeonGreen));
+    theme_selector_->addItem("Neon Green", static_cast<int>(CustomLookAndFeel::ThemeId::NeonGreen));
     theme_selector_->addItem("Neon Orange", static_cast<int>(CustomLookAndFeel::ThemeId::NeonOrange));
-    theme_selector_->addItem("Neon Red",    static_cast<int>(CustomLookAndFeel::ThemeId::NeonRed));
-    theme_selector_->addItem("Monochrome",  static_cast<int>(CustomLookAndFeel::ThemeId::Mono));
+    theme_selector_->addItem("Neon Red", static_cast<int>(CustomLookAndFeel::ThemeId::NeonRed));
+    theme_selector_->addItem("Monochrome", static_cast<int>(CustomLookAndFeel::ThemeId::Mono));
     theme_selector_->addItem(i18n::tr("Light"), static_cast<int>(CustomLookAndFeel::ThemeId::Light));
-    theme_selector_->setSelectedId(static_cast<int>(CustomLookAndFeel::ThemeId::NeonBlue),
-                                   juce::dontSendNotification);
+    theme_selector_->setSelectedId(static_cast<int>(CustomLookAndFeel::ThemeId::NeonBlue), juce::dontSendNotification);
     theme_selector_->addListener(this);
 
     // --- Start minimized to tray toggle ----------------------------------
@@ -2187,43 +2223,58 @@ void MainWindow::buildUI()
     title_label_->setFont(titleFont);
     title_label_->setColour(juce::Label::textColourId, kAccentCyan);
 
-    auto* header = new HeaderComponent(logo_comp, title_label_,
-                                       reset_engine_button_.get(), audio_toggle_.get(),
-                                       about_button_.get(), energy_saver_button_.get(),
-                                       help_button_.get(), assistant_button_.get());
+    auto* header = new HeaderComponent(logo_comp,
+                                       title_label_,
+                                       reset_engine_button_.get(),
+                                       audio_toggle_.get(),
+                                       about_button_.get(),
+                                       energy_saver_button_.get(),
+                                       help_button_.get(),
+                                       assistant_button_.get());
 
     // --- Panels ------------------------------------------------------------
-    auto* device_panel = new DevicePanel(
-        transport_label_.get(), transport_mode_selector_.get(),
-        input_label_.get(), input_selector_.get(),
-        input_rate_caption_.get(), input_rate_value_.get(),
-        output_label_.get(), output_selector_.get(),
-        buffer_label_.get(), buffer_selector_.get(),
-        output_rate_caption_.get(), output_rate_value_.get(),
-        vst_rate_caption_.get(), vst_rate_selector_.get(),
-        asio_device_label_.get(), asio_device_selector_.get(),
-        asio_pair_label_.get(), asio_pair_selector_.get(),
-        asio_settings_button_.get());
+    auto* device_panel = new DevicePanel(transport_label_.get(),
+                                         transport_mode_selector_.get(),
+                                         input_label_.get(),
+                                         input_selector_.get(),
+                                         input_rate_caption_.get(),
+                                         input_rate_value_.get(),
+                                         output_label_.get(),
+                                         output_selector_.get(),
+                                         buffer_label_.get(),
+                                         buffer_selector_.get(),
+                                         output_rate_caption_.get(),
+                                         output_rate_value_.get(),
+                                         vst_rate_caption_.get(),
+                                         vst_rate_selector_.get(),
+                                         asio_device_label_.get(),
+                                         asio_device_selector_.get(),
+                                         asio_pair_label_.get(),
+                                         asio_pair_selector_.get(),
+                                         asio_settings_button_.get());
     device_panel_ = device_panel;
 
-    auto* plugin_panel = new PluginButtonPanel(
-        save_preset_button_.get(), load_preset_button_.get());
+    auto* plugin_panel = new PluginButtonPanel(save_preset_button_.get(), load_preset_button_.get());
 
-    auto* meter_panel = new MeterStatusPanel(
-        meter_input_label_.get(), meter_input_l_.get(), meter_input_r_.get(),
-        meter_output_label_.get(), meter_output_l_.get(), meter_output_r_.get(),
-        vol_label_.get(), volume_slider_.get(), mute_button_.get());
+    auto* meter_panel = new MeterStatusPanel(meter_input_label_.get(),
+                                             meter_input_l_.get(),
+                                             meter_input_r_.get(),
+                                             meter_output_label_.get(),
+                                             meter_output_l_.get(),
+                                             meter_output_r_.get(),
+                                             vol_label_.get(),
+                                             volume_slider_.get(),
+                                             mute_button_.get());
 
     auto* chain_panel = new ChainEditorPanel(chain_editor_.get());
     auto* spectrum_panel = new SpectrumPanel(spectrum_analyzer_.get());
 
     auto* body = new BodyComponent(device_panel, chain_panel, meter_panel, spectrum_panel);
 
-    auto* status_bar = new StatusBarComponent(
-        status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get());
+    auto* status_bar =
+        new StatusBarComponent(status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get());
 
-    auto* content = new MainContentComponent(
-        header, body, plugin_panel, status_bar);
+    auto* content = new MainContentComponent(header, body, plugin_panel, status_bar);
     content_root_ = content;
 
     // Apply global LookAndFeel to the content tree.
@@ -2232,8 +2283,7 @@ void MainWindow::buildUI()
     setContentOwned(content, true);
 
     // Default mode.
-    transport_mode_selector_->setSelectedId(static_cast<int>(TransportMode::Wasapi),
-                                             juce::dontSendNotification);
+    transport_mode_selector_->setSelectedId(static_cast<int>(TransportMode::Wasapi), juce::dontSendNotification);
 
     updateControlVisibility();
     applyTooltips();
@@ -2404,7 +2454,13 @@ void MainWindow::buttonClicked(juce::Button* button)
     }
     else if (button == asio_settings_button_.get())
     {
-        engine_->openAsioControlPanel();
+        {
+            // Stop around the panel so the engine's internal restart logic
+            // stays dormant; the guard performs the single restart at scope
+            // exit, and audio_running_ below then observes the live state.
+            EngineSettingsGuard settings_guard(engine_.get());
+            engine_->openAsioControlPanel();
+        }
         audio_running_ = engine_->isRunning();
         audio_toggle_->setPowerState(audio_running_);
         updateTrayIconAppearance();
@@ -2511,6 +2567,9 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         const auto mode = static_cast<TransportMode>(id);
         if (mode != current_transport_mode_)
         {
+            // Stop the live transport for the whole switch (exclusive toggle,
+            // buffer size, output device) and restart once at scope exit.
+            EngineSettingsGuard settings_guard(engine_.get());
             current_transport_mode_ = mode;
             if (mode == TransportMode::Wasapi)
             {
@@ -2552,8 +2611,8 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                 // Asio on both after the real switch so updateControlVisibility() below (which
                 // reads current_transport_mode_, not the combo box) shows the right controls.
                 current_transport_mode_ = TransportMode::Asio;
-                transport_mode_selector_->setSelectedId(
-                    static_cast<int>(TransportMode::Asio), juce::dontSendNotification);
+                transport_mode_selector_->setSelectedId(static_cast<int>(TransportMode::Asio),
+                                                        juce::dontSendNotification);
             }
             updateControlVisibility();
         }
@@ -2566,33 +2625,41 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             const EndpointId new_input = input_endpoint_ids_[idx];
             const EndpointId current_output = engine_->currentOutput();
 
-            // T022: Validate device mismatch before selecting input
-            // If the new input conflicts with the current output, disconnect the output
-            if (!new_input.empty() && !current_output.empty() && new_input == current_output)
             {
-                engine_->selectOutput(std::string(kDisconnectedDeviceId));
-                for (int i = 0; i < static_cast<int>(output_endpoint_ids_.size()); ++i)
-                {
-                    if (output_endpoint_ids_[i] == std::string(kDisconnectedDeviceId))
-                    {
-                        output_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
-                        break;
-                    }
-                }
-                juce::AlertWindow::showMessageBoxAsync(
-                    juce::AlertWindow::InfoIcon,
-                    i18n::tr("Device Conflict Resolved"),
-                    i18n::tr("WASAPI loopback requires two separate audio interfaces:\n"
-                             "one for capture (system audio) and one for playback (processed output).\n\n"
-                             "The output device has been disconnected. The input will be muted automatically.\n\n"
-                             "Please connect a separate playback device such as USB headphones, an external display "
-                             "with audio output, a DAC, or similar.\n\n"
-                             "Alternatively, you can install a virtual audio cable such as VB-Cable from "
-                             "https://vb-audio.com/Cable/ "),
-                    "OK");
-            }
+                // Guard the transport-affecting mutations; the engine restarts
+                // (once) at scope exit, so the device-rate reads and the
+                // autosave below observe the live state again.
+                EngineSettingsGuard settings_guard(engine_.get());
 
-            engine_->selectInput(new_input);
+                // T022: Validate device mismatch before selecting input
+                // If the new input conflicts with the current output, disconnect the output
+                if (!new_input.empty() && !current_output.empty() && new_input == current_output)
+                {
+                    engine_->selectOutput(std::string(kDisconnectedDeviceId));
+                    for (int i = 0; i < static_cast<int>(output_endpoint_ids_.size()); ++i)
+                    {
+                        if (output_endpoint_ids_[i] == std::string(kDisconnectedDeviceId))
+                        {
+                            output_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
+                            break;
+                        }
+                    }
+                    juce::AlertWindow::showMessageBoxAsync(
+                        juce::AlertWindow::InfoIcon,
+                        i18n::tr("Device Conflict Resolved"),
+                        i18n::tr(
+                            "WASAPI loopback requires two separate audio interfaces:\n"
+                            "one for capture (system audio) and one for playback (processed output).\n\n"
+                            "The output device has been disconnected. The input will be muted automatically.\n\n"
+                            "Please connect a separate playback device such as USB headphones, an external display "
+                            "with audio output, a DAC, or similar.\n\n"
+                            "Alternatively, you can install a virtual audio cable such as VB-Cable from "
+                            "https://vb-audio.com/Cable/ "),
+                        "OK");
+                }
+
+                engine_->selectInput(new_input);
+            }
 
             // Default VST rate to the highest of input/output rates.
             const int in_rate = engine_->inputDeviceSampleRate();
@@ -2624,33 +2691,41 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             const EndpointId new_output = output_endpoint_ids_[idx];
             const EndpointId current_input = engine_->currentInput();
 
-            // T022: Validate device mismatch before selecting output
-            // If the new output conflicts with the current input, disconnect the input
-            if (!new_output.empty() && !current_input.empty() && new_output == current_input)
             {
-                engine_->selectInput(std::string(kDisconnectedDeviceId));
-                for (int i = 0; i < static_cast<int>(input_endpoint_ids_.size()); ++i)
-                {
-                    if (input_endpoint_ids_[i] == std::string(kDisconnectedDeviceId))
-                    {
-                        input_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
-                        break;
-                    }
-                }
-                juce::AlertWindow::showMessageBoxAsync(
-                    juce::AlertWindow::InfoIcon,
-                    i18n::tr("Device Conflict Resolved"),
-                    i18n::tr("WASAPI loopback requires two separate audio interfaces:\n"
-                             "one for capture (system audio) and one for playback (processed output).\n\n"
-                             "The input device has been disconnected. It will be muted automatically.\n\n"
-                             "Please connect a separate playback device such as USB headphones, an external display "
-                             "with audio output, a DAC, or similar.\n\n"
-                             "Alternatively, you can install a virtual audio cable such as VB-Cable from "
-                             "https://vb-audio.com/Cable/ "),
-                    "OK");
-            }
+                // Guard the transport-affecting mutations; the engine restarts
+                // (once) at scope exit, so the device-rate reads and the
+                // autosave below observe the live state again.
+                EngineSettingsGuard settings_guard(engine_.get());
 
-            engine_->selectOutput(new_output);
+                // T022: Validate device mismatch before selecting output
+                // If the new output conflicts with the current input, disconnect the input
+                if (!new_output.empty() && !current_input.empty() && new_output == current_input)
+                {
+                    engine_->selectInput(std::string(kDisconnectedDeviceId));
+                    for (int i = 0; i < static_cast<int>(input_endpoint_ids_.size()); ++i)
+                    {
+                        if (input_endpoint_ids_[i] == std::string(kDisconnectedDeviceId))
+                        {
+                            input_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
+                            break;
+                        }
+                    }
+                    juce::AlertWindow::showMessageBoxAsync(
+                        juce::AlertWindow::InfoIcon,
+                        i18n::tr("Device Conflict Resolved"),
+                        i18n::tr(
+                            "WASAPI loopback requires two separate audio interfaces:\n"
+                            "one for capture (system audio) and one for playback (processed output).\n\n"
+                            "The input device has been disconnected. It will be muted automatically.\n\n"
+                            "Please connect a separate playback device such as USB headphones, an external display "
+                            "with audio output, a DAC, or similar.\n\n"
+                            "Alternatively, you can install a virtual audio cable such as VB-Cable from "
+                            "https://vb-audio.com/Cable/ "),
+                        "OK");
+                }
+
+                engine_->selectOutput(new_output);
+            }
 
             // Default VST rate to the highest of input/output rates.
             const int in_rate = engine_->inputDeviceSampleRate();
@@ -2678,7 +2753,10 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         const int idx = asio_device_selector_->getSelectedItemIndex();
         if (idx >= 0 && idx < static_cast<int>(asio_device_names_.size()))
         {
-            engine_->selectOutput(asio_device_names_[idx]);
+            {
+                EngineSettingsGuard settings_guard(engine_.get());
+                engine_->selectOutput(asio_device_names_[idx]);
+            }
 
             // Default VST rate to the highest of input/output rates.
             const int in_rate = engine_->inputDeviceSampleRate();
@@ -2699,14 +2777,22 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
     else if (comboBoxThatHasChanged == asio_pair_selector_.get())
     {
         const int pair_index = asio_pair_selector_->getSelectedItemIndex();
-        engine_->setAsioOutputPair(pair_index * 2);
+        {
+            EngineSettingsGuard settings_guard(engine_.get());
+            engine_->setAsioOutputPair(pair_index * 2);
+        }
         saveSessionState();
     }
     else if (comboBoxThatHasChanged == buffer_selector_.get())
     {
         try
         {
-            engine_->setBufferSize(buffer_selector_->getSelectedId());
+            {
+                // The guard restarts at scope exit even when setBufferSize
+                // throws; the catch below reverts the selector.
+                EngineSettingsGuard settings_guard(engine_.get());
+                engine_->setBufferSize(buffer_selector_->getSelectedId());
+            }
             saveSessionState();
         }
         catch (const std::exception& e)
@@ -2721,7 +2807,10 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         const int rate = vst_rate_selector_->getSelectedId();
         if (rate > 0)
         {
-            engine_->setSampleRate(static_cast<double>(rate));
+            {
+                EngineSettingsGuard settings_guard(engine_.get());
+                engine_->setSampleRate(static_cast<double>(rate));
+            }
             saveSessionState();
         }
     }
@@ -2954,10 +3043,19 @@ void MainWindow::handleSavePreset()
         {
             nlohmann::json preset_doc;
             std::ifstream pifs(path);
-            if (pifs) { try { pifs >> preset_doc; } catch (...) {} }
+            if (pifs)
+            {
+                try
+                {
+                    pifs >> preset_doc;
+                }
+                catch (...)
+                {}
+            }
             preset_doc["theme_id"] = static_cast<int>(custom_laf_.currentTheme());
             std::ofstream pofs(path, std::ios::binary);
-            if (pofs) pofs << preset_doc.dump(2);
+            if (pofs)
+                pofs << preset_doc.dump(2);
         }
 
         status_label_->setText(i18n::tr("Preset saved: ") + juce::String(path.stem().string()),
@@ -2990,7 +3088,12 @@ void MainWindow::handleLoadPreset()
             std::ifstream pifs(path);
             if (pifs)
             {
-                try { pifs >> preset_doc; } catch (...) {}
+                try
+                {
+                    pifs >> preset_doc;
+                }
+                catch (...)
+                {}
                 if (preset_doc.contains("theme_id") && preset_doc["theme_id"].is_number_integer())
                 {
                     const int tid = preset_doc["theme_id"].get<int>();
@@ -3036,8 +3139,7 @@ void MainWindow::handleAbout()
     settings.tooltips_label = tooltips_label_.get();
     settings.tooltips_button = tooltips_button_.get();
 
-    AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings,
-                           &custom_laf_);
+    AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings, &custom_laf_);
 }
 
 void MainWindow::handleHelp()
@@ -3062,64 +3164,55 @@ void MainWindow::handleCheckForUpdates()
         return;
     }
 
-    const std::string current_version =
-        juce::JUCEApplication::getInstance()->getApplicationVersion().toStdString();
+    const std::string current_version = juce::JUCEApplication::getInstance()->getApplicationVersion().toStdString();
     status_label_->setText("Checking for updates...", juce::dontSendNotification);
 
     // UpdateCheck::check runs on a detached worker that captures only its
     // arguments; the local instance may die immediately after this call.
-    UpdateCheck{}.check(
-        rs.update_check_endpoint_url, current_version,
-        [this](UpdateCheckResult result) {
-            juce::MessageManager::callAsync([this, result]() {
-                if (! result.success)
-                {
-                    status_label_->setText(
-                        "Update check failed: " + juce::String(result.error_message),
-                        juce::dontSendNotification);
-                    return;
-                }
-                if (! result.update_available)
-                {
-                    status_label_->setText(
-                        "Up to date (" + juce::String(result.installed_version) + ")",
-                        juce::dontSendNotification);
-                    return;
-                }
+    UpdateCheck{}.check(rs.update_check_endpoint_url, current_version, [this](UpdateCheckResult result) {
+        juce::MessageManager::callAsync([this, result]() {
+            if (!result.success)
+            {
+                status_label_->setText("Update check failed: " + juce::String(result.error_message),
+                                       juce::dontSendNotification);
+                return;
+            }
+            if (!result.update_available)
+            {
+                status_label_->setText("Up to date (" + juce::String(result.installed_version) + ")",
+                                       juce::dontSendNotification);
+                return;
+            }
 
-                // JUCE 8 dialog API (AlertWindow::showAsync with MessageBoxOptions
-                // works with or without modal loops). Callback receives the
-                // 1-based index of the clicked button.
-                juce::AlertWindow::showAsync(
-                    juce::MessageBoxOptions()
-                        .withIconType(juce::MessageBoxIconType::QuestionIcon)
-                        .withTitle("Update available")
-                        .withMessage("Version " + juce::String(result.latest_version) +
-                                         " is available (installed: " +
-                                         juce::String(result.installed_version) +
-                                         ").\n\nDownload and run the installer now?")
-                        .withButton("Download and Install")
-                        .withButton("Later"),
-                    juce::ModalCallbackFunction::create([this, result](int choice) {
-                        if (choice != 1)
-                        {
-                            status_label_->setText("Update postponed", juce::dontSendNotification);
-                            return;
-                        }
+            // JUCE 8 dialog API (AlertWindow::showAsync with MessageBoxOptions
+            // works with or without modal loops). Callback receives the
+            // 1-based index of the clicked button.
+            juce::AlertWindow::showAsync(
+                juce::MessageBoxOptions()
+                    .withIconType(juce::MessageBoxIconType::QuestionIcon)
+                    .withTitle("Update available")
+                    .withMessage("Version " + juce::String(result.latest_version) + " is available (installed: " +
+                                 juce::String(result.installed_version) + ").\n\nDownload and run the installer now?")
+                    .withButton("Download and Install")
+                    .withButton("Later"),
+                juce::ModalCallbackFunction::create([this, result](int choice) {
+                    if (choice != 1)
+                    {
+                        status_label_->setText("Update postponed", juce::dontSendNotification);
+                        return;
+                    }
 
-                        status_label_->setText("Downloading update...", juce::dontSendNotification);
-                        UpdateCheck::downloadAndInstall(
-                            result.download_url, [this](bool ok, std::string message) {
-                                juce::MessageManager::callAsync([this, ok, message]() {
-                                    status_label_->setText(
-                                        ok ? "Installer launched: " + juce::String(message)
-                                           : "Update failed: " + juce::String(message),
-                                        juce::dontSendNotification);
-                                });
-                            });
-                    }));
-            });
+                    status_label_->setText("Downloading update...", juce::dontSendNotification);
+                    UpdateCheck::downloadAndInstall(result.download_url, [this](bool ok, std::string message) {
+                        juce::MessageManager::callAsync([this, ok, message]() {
+                            status_label_->setText(ok ? "Installer launched: " + juce::String(message)
+                                                      : "Update failed: " + juce::String(message),
+                                                   juce::dontSendNotification);
+                        });
+                    });
+                }));
         });
+    });
 }
 
 void MainWindow::toggleEnergySaver()
@@ -3141,8 +3234,7 @@ void MainWindow::updateEnergySaverVisual()
 {
     if (energy_saver_button_ == nullptr)
         return;
-    energy_saver_button_->setEnergyState(engine_->isEnergySaverEnabled(),
-                                         engine_->isEnergySaverSleeping());
+    energy_saver_button_->setEnergyState(engine_->isEnergySaverEnabled(), engine_->isEnergySaverSleeping());
 }
 
 void MainWindow::onEnergySaverStateChanged(bool sleeping)
@@ -3160,8 +3252,7 @@ void MainWindow::onEnergySaverStateChanged(bool sleeping)
 
 void MainWindow::saveSessionState()
 {
-    autosave_store_.write(engine_.get(), preset_override_flag_,
-                          static_cast<int>(custom_laf_.currentTheme()));
+    autosave_store_.write(engine_.get(), preset_override_flag_, static_cast<int>(custom_laf_.currentTheme()));
 }
 
 void MainWindow::restoreFromAutosave()
@@ -3212,8 +3303,8 @@ void MainWindow::restoreFromAutosave()
             if (asio_device_names_[i] == cur_output)
             {
                 current_transport_mode_ = TransportMode::Asio;
-                transport_mode_selector_->setSelectedId(
-                    static_cast<int>(TransportMode::Asio), juce::dontSendNotification);
+                transport_mode_selector_->setSelectedId(static_cast<int>(TransportMode::Asio),
+                                                        juce::dontSendNotification);
                 asio_device_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
                 updateControlVisibility();
                 break;
@@ -3298,12 +3389,10 @@ void MainWindow::refreshSampleRates()
     const bool running = engine_->isRunning();
 
     // Input/capture endpoint rate (read-only).
-    input_rate_value_->setText(format(running ? engine_->inputDeviceSampleRate() : 0),
-                               juce::dontSendNotification);
+    input_rate_value_->setText(format(running ? engine_->inputDeviceSampleRate() : 0), juce::dontSendNotification);
 
     // Output endpoint rate (read-only).
-    output_rate_value_->setText(format(running ? engine_->outputDeviceSampleRate() : 0),
-                               juce::dontSendNotification);
+    output_rate_value_->setText(format(running ? engine_->outputDeviceSampleRate() : 0), juce::dontSendNotification);
 
     // VST chain rate — reflect the user-selected rate in the dropdown without
     // firing a change notification.
@@ -3330,8 +3419,7 @@ void MainWindow::refreshMeters()
     // Update per-plugin output meters in the chain editor.
     if (chain_editor_ != nullptr && engine_ != nullptr)
     {
-        chain_editor_->setPluginMeterLevels(engine_->pluginOutputPeaks(),
-                                               engine_->pluginOutputRms());
+        chain_editor_->setPluginMeterLevels(engine_->pluginOutputPeaks(), engine_->pluginOutputRms());
     }
 
     // Update tray volume popup meters if still open. tray_volume_popup_ is a
@@ -3342,11 +3430,14 @@ void MainWindow::refreshMeters()
         if (popup_component->isVisible())
         {
             auto* popup = static_cast<TrayVolumeContent*>(popup_component);
-            popup->setMeterLevels(
-                linearToDb(frame.input_peak_l), linearToDb(frame.input_rms_l),
-                linearToDb(frame.input_peak_r), linearToDb(frame.input_rms_r),
-                linearToDb(frame.output_peak_l), linearToDb(frame.output_rms_l),
-                linearToDb(frame.output_peak_r), linearToDb(frame.output_rms_r));
+            popup->setMeterLevels(linearToDb(frame.input_peak_l),
+                                  linearToDb(frame.input_rms_l),
+                                  linearToDb(frame.input_peak_r),
+                                  linearToDb(frame.input_rms_r),
+                                  linearToDb(frame.output_peak_l),
+                                  linearToDb(frame.output_rms_l),
+                                  linearToDb(frame.output_peak_r),
+                                  linearToDb(frame.output_rms_r));
 
             // Keep the shortcut toggles in step with bypass changes made
             // elsewhere while the popup is open. A shortcut assigned or cleared
@@ -3372,8 +3463,8 @@ void MainWindow::refreshMeters()
 
 void MainWindow::updateControlVisibility()
 {
-    const bool is_wasapi_family = (current_transport_mode_ == TransportMode::Wasapi
-                                   || current_transport_mode_ == TransportMode::WasapiExclusive);
+    const bool is_wasapi_family =
+        (current_transport_mode_ == TransportMode::Wasapi || current_transport_mode_ == TransportMode::WasapiExclusive);
     const bool is_asio = (current_transport_mode_ == TransportMode::Asio);
 
     output_selector_->setVisible(is_wasapi_family);
@@ -3494,8 +3585,7 @@ void MainWindow::onDeviceLost(const EndpointId& lost, const EndpointId& fallback
 void MainWindow::onDeviceRestored(const EndpointId& restored)
 {
     juce::MessageManager::callAsync([this, restored]() {
-        status_label_->setText(i18n::tr("Device restored: ") + juce::String(restored),
-                               juce::dontSendNotification);
+        status_label_->setText(i18n::tr("Device restored: ") + juce::String(restored), juce::dontSendNotification);
         notifyDeviceRestored(nativeHwnd(), restored);
         refreshDeviceLists();
     });
@@ -3503,9 +3593,7 @@ void MainWindow::onDeviceRestored(const EndpointId& restored)
 
 void MainWindow::onDeviceListChanged()
 {
-    juce::MessageManager::callAsync([this]() {
-        refreshDeviceLists();
-    });
+    juce::MessageManager::callAsync([this]() { refreshDeviceLists(); });
 }
 
 void MainWindow::onCpuWarning(float rolling_1s_pct)
@@ -3611,7 +3699,7 @@ void MainWindow::onSystemResume()
     resume_restart_pending_ = true;
 
     // Do not rebind on the resume message itself: see kResumeRestartDelayMs.
-    juce::Component::SafePointer<MainWindow> self {this};
+    juce::Component::SafePointer<MainWindow> self{this};
     juce::Timer::callAfterDelay(kResumeRestartDelayMs, [self]() {
         if (auto* window = self.getComponent())
         {

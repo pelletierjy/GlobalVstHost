@@ -14,29 +14,31 @@
 // =====================================================================
 
 #include "audio_engine_impl.h"
-#include "device_watchdog.h"
-#include "energy_saver_controller.h"
-#include "stall_supervisor.h"
 
 #include "../builtin-effects/builtin_effect_registry.h"
 #include "../builtin-effects/builtin_ids.h"
 #include "../chain/preset_serializer.h"
 #include "../vst-host/default_scan_paths.h"
+#include "device_watchdog.h"
+#include "energy_saver_controller.h"
+#include "stall_supervisor.h"
 
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 
-#include <fstream>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <fstream>
+#include <iostream>
 #include <stdexcept>
 #include <thread>
 #include <utility>
-#include <iostream>
+
 #include <windows.h>
+
 #include <avrt.h>
 #include <mmdeviceapi.h>
 
@@ -116,16 +118,14 @@ void LogDebug(const char* fmt, ...)
         }
     }
     catch (...)
-    {
-    }
+    {}
 }
 
 // JUCE doesn't expose Windows endpoint IDs directly — it surfaces friendly
 // names. The endpoint enumerator gives us both, so we map by friendly_name
 // for testable-dev. Release prep does an exact endpoint-id match through
 // direct WASAPI.
-const std::string& nameForEndpoint(const std::vector<shared::EndpointDescriptor>& list,
-                                   const EndpointId& id)
+const std::string& nameForEndpoint(const std::vector<shared::EndpointDescriptor>& list, const EndpointId& id)
 {
     static const std::string empty;
     for (const auto& d : list)
@@ -145,9 +145,7 @@ public:
     // Constructor only initialises the JUCE window; no plugin calls here so
     // standard C++ exception handling is sufficient.
     explicit PluginEditorHost(const juce::String& plugin_name)
-        : juce::DocumentWindow(plugin_name + " — Editor",
-                               juce::Colours::darkgrey,
-                               juce::DocumentWindow::closeButton)
+        : juce::DocumentWindow(plugin_name + " — Editor", juce::Colours::darkgrey, juce::DocumentWindow::closeButton)
     {
         setUsingNativeTitleBar(true);
     }
@@ -183,7 +181,8 @@ static juce::AudioProcessorEditor* createEditorDRM(juce::AudioProcessor* proc)
         g_editor_exception_code = p->ExceptionRecord->ExceptionCode;
         g_editor_exception_addr = (ULONG_PTR)p->ExceptionRecord->ExceptionAddress;
         char buf[128];
-        wsprintfA(buf, "[JyGlobalVST] createEditorDRM: exception 0x%08lX at 0x%llX\n",
+        wsprintfA(buf,
+                  "[JyGlobalVST] createEditorDRM: exception 0x%08lX at 0x%llX\n",
                   (unsigned long)g_editor_exception_code,
                   (unsigned long long)g_editor_exception_addr);
         OutputDebugStringA(buf);
@@ -230,12 +229,9 @@ static bool attachEditorSafe(PluginEditorHost* window, juce::AudioProcessorEdito
 }  // namespace
 
 AudioEngineImpl::AudioEngineImpl()
-    : watchdog_(std::make_unique<DeviceWatchdog>(this))
-    , plugin_chain_(std::make_unique<PluginChain>())
-    , scanner_(std::make_unique<PluginScanner>())
-    , scan_cache_(std::make_unique<ScanCache>())
-    , plugin_loader_(std::make_unique<VST3PluginLoader>())
-    , builtin_registry_(std::make_unique<BuiltinEffectRegistry>())
+    : watchdog_(std::make_unique<DeviceWatchdog>(this)), plugin_chain_(std::make_unique<PluginChain>()),
+      scanner_(std::make_unique<PluginScanner>()), scan_cache_(std::make_unique<ScanCache>()),
+      plugin_loader_(std::make_unique<VST3PluginLoader>()), builtin_registry_(std::make_unique<BuiltinEffectRegistry>())
 {
     device_manager_.initialiseWithDefaultDevices(2, 2);
     scan_cache_->load();
@@ -252,25 +248,29 @@ void AudioEngineImpl::start()
     LogDebug("start() called");
     try
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         if (running_.load())
         {
             LogDebug("start() already running, returning");
             return;
         }
 
+        // Bridge targets are transport-specific; drop the previous session's
+        // values so latencyProfile() never reports a stale bridge. The branches
+        // below (plus audioDeviceAboutToStart/engineThreadLoop) repopulate them.
+        cached_capture_bridge_target_.store(0, std::memory_order_relaxed);
+        cached_output_bridge_target_.store(0, std::memory_order_relaxed);
+
         mixed_mode_active_.store(false, std::memory_order_release);
         bool wasapi_loopback_mode = false;
 
         if (desired_output_transport_kind_ == TransportKind::Asio &&
-            desired_input_transport_kind_ == TransportKind::Wasapi &&
-            !desired_input_id_.empty())
+            desired_input_transport_kind_ == TransportKind::Wasapi && !desired_input_id_.empty())
         {
             mixed_mode_active_.store(true, std::memory_order_release);
         }
         else if (desired_output_transport_kind_ == TransportKind::Wasapi &&
-                 desired_input_transport_kind_ == TransportKind::Wasapi &&
-                 !desired_input_id_.empty())
+                 desired_input_transport_kind_ == TransportKind::Wasapi && !desired_input_id_.empty())
         {
             wasapi_loopback_mode = true;
         }
@@ -281,15 +281,14 @@ void AudioEngineImpl::start()
             const EndpointId conflict = same_device_guard_.checkConflict(desired_input_id_, desired_output_id_);
             if (!conflict.empty())
             {
-                notifyOnUiThread([conflict](IAudioEngineListener& l) {
-                    l.onSameDeviceConflict(conflict);
-                });
+                notifyOnUiThread([conflict](IAudioEngineListener& l) { l.onSameDeviceConflict(conflict); });
                 LogDebug("start() refused: same-device conflict on %s", conflict.c_str());
                 return;
             }
         }
 
-        LogDebug("start() transport setup: mixed_mode=%d, output_kind=%d (Wasapi=0), input_kind=%d (Wasapi=0), input_id='%s', wasapi_loopback=%d, input_is_loopback=%d",
+        LogDebug("start() transport setup: mixed_mode=%d, output_kind=%d (Wasapi=0), input_kind=%d (Wasapi=0), "
+                 "input_id='%s', wasapi_loopback=%d, input_is_loopback=%d",
                  mixed_mode_active_.load(std::memory_order_acquire) ? 1 : 0,
                  static_cast<int>(desired_output_transport_kind_),
                  static_cast<int>(desired_input_transport_kind_),
@@ -334,9 +333,8 @@ void AudioEngineImpl::start()
             if (!endpoint_volume_guard_.mute())
             {
                 // Fallback: muting not available, notify UI to select different output
-                notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
-                    l.onCaptureMuteFallbackRequired(id);
-                });
+                notifyOnUiThread(
+                    [id = desired_input_id_](IAudioEngineListener& l) { l.onCaptureMuteFallbackRequired(id); });
             }
         }
 
@@ -366,6 +364,12 @@ void AudioEngineImpl::start()
             work_buffer_.setSize(2, desired_buffer_size_, false, false, true);
             chain_block_ = desired_buffer_size_;
             chain_block_capacity_ = desired_buffer_size_;
+            // Output bridge target for latencyProfile(): engineThreadLoop()
+            // paces the chain against 3 chain blocks of queued output. The loop
+            // re-stores the value clamped to the ring capacity once it computes
+            // the exact fill target; the capture target stays 0 here so
+            // latencyProfile() reports the live capture-ring fill instead.
+            cached_output_bridge_target_.store(3 * chain_block_, std::memory_order_relaxed);
             plugin_chain_->prepareToPlay(chain_rate, desired_buffer_size_);
             negotiated_sample_rate_.store(static_cast<int>(chain_rate));
 
@@ -377,10 +381,14 @@ void AudioEngineImpl::start()
 
             // Set up capture-side resampler when capture rate differs from chain rate.
             const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : chain_rate;
-            capture_resampling_enabled_ = wasapi_rate > 0.0 && chain_rate > 0.0 &&
-                                          std::abs(wasapi_rate - chain_rate) > 0.1;
-            LogDebug("Capture resampling setup: capture_wasapi_rate_=%.0f, chain_rate=%.0f, wasapi_rate=%.0f, enabled=%d",
-                     capture_wasapi_rate_, chain_rate, wasapi_rate, capture_resampling_enabled_ ? 1 : 0);
+            capture_resampling_enabled_ =
+                wasapi_rate > 0.0 && chain_rate > 0.0 && std::abs(wasapi_rate - chain_rate) > 0.1;
+            LogDebug(
+                "Capture resampling setup: capture_wasapi_rate_=%.0f, chain_rate=%.0f, wasapi_rate=%.0f, enabled=%d",
+                capture_wasapi_rate_,
+                chain_rate,
+                wasapi_rate,
+                capture_resampling_enabled_ ? 1 : 0);
 
             // Always compute the ratio and size the raw scratch buffer — even when
             // resampling is disabled (ratio == 1.0) — so the callback can peek from
@@ -389,13 +397,15 @@ void AudioEngineImpl::start()
             capture_nominal_ratio_ = (chain_rate > 0.0) ? (wasapi_rate / chain_rate) : 1.0;
             xrun_count_.store(0, std::memory_order_relaxed);
 
-            const int raw_max = static_cast<int>(std::ceil(
-                                    static_cast<double>(desired_buffer_size_) * capture_nominal_ratio_)) + 8;
+            const int raw_max =
+                static_cast<int>(std::ceil(static_cast<double>(desired_buffer_size_) * capture_nominal_ratio_)) + 8;
             capture_raw_buffer_.setSize(2, raw_max, false, true, true);
             if (capture_resampling_enabled_)
             {
                 LogDebug("Resampler ratio: %.4f (input/output rate ratio for %d->%d Hz)",
-                         capture_nominal_ratio_, static_cast<int>(wasapi_rate), static_cast<int>(chain_rate));
+                         capture_nominal_ratio_,
+                         static_cast<int>(wasapi_rate),
+                         static_cast<int>(chain_rate));
                 capture_resampler_.prepare(capture_nominal_ratio_, static_cast<std::size_t>(raw_max), 2);
             }
 
@@ -424,31 +434,26 @@ void AudioEngineImpl::start()
         running_.store(true);
         last_active_output_transport_kind_ = desired_output_transport_kind_;
         if (mixed_mode_active_.load(std::memory_order_acquire) || wasapi_loopback_mode)
-        {
-        }
+        {}
         startEnergySaver();
         LogDebug("start() completed");
     }
     catch (const std::exception& e)
     {
         LogDebug("start() EXCEPTION: %s", e.what());
-        notifyOnUiThread([msg = std::string(e.what())](IAudioEngineListener& l) {
-            l.onDeviceLost(msg, EndpointId{});
-        });
+        notifyOnUiThread([msg = std::string(e.what())](IAudioEngineListener& l) { l.onDeviceLost(msg, EndpointId{}); });
     }
     catch (...)
     {
         LogDebug("start() UNKNOWN EXCEPTION");
-        notifyOnUiThread([](IAudioEngineListener& l) {
-            l.onDeviceLost("unknown", EndpointId{});
-        });
+        notifyOnUiThread([](IAudioEngineListener& l) { l.onDeviceLost("unknown", EndpointId{}); });
     }
 }
 
 void AudioEngineImpl::stop()
 {
     LogDebug("stop() called");
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     if (!running_.exchange(false))
     {
         LogDebug("stop() not running, returning");
@@ -479,7 +484,7 @@ bool AudioEngineImpl::isRunning() const
 
 void AudioEngineImpl::setListener(IAudioEngineListener* listener)
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     listener_ = listener;
 }
 
@@ -500,7 +505,7 @@ void AudioEngineImpl::reset()
     // with the mixed/wasapi-loopback/plain-device branches start() handles —
     // which is what previously left reset() without a wasapi-loopback-mode
     // path, causing a stale sample rate after an ASIO -> WASAPI switch.
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     // plugin_chain_->releaseResources() (inside stop()) drops DSP resources but
     // preserves the loaded slots/state/ordering; start() re-prepares the chain
@@ -509,9 +514,7 @@ void AudioEngineImpl::reset()
     start();
 
     chain_revision_.store(plugin_chain_->revision());
-    notifyOnUiThread([this](IAudioEngineListener& l) {
-        l.onChainRevision(chain_revision_.load());
-    });
+    notifyOnUiThread([this](IAudioEngineListener& l) { l.onChainRevision(chain_revision_.load()); });
 }
 
 // =====================================================================
@@ -550,9 +553,7 @@ void AudioEngineImpl::setEnergySaverSleeping(bool sleeping)
     if (energy_saver_sleeping_.exchange(sleeping) == sleeping)
         return;
     LogDebug("EnergySaver: %s", sleeping ? "sleeping" : "awake");
-    notifyOnUiThread([sleeping](IAudioEngineListener& l) {
-        l.onEnergySaverStateChanged(sleeping);
-    });
+    notifyOnUiThread([sleeping](IAudioEngineListener& l) { l.onEnergySaverStateChanged(sleeping); });
 }
 
 void AudioEngineImpl::startEnergySaver()
@@ -581,8 +582,7 @@ void AudioEngineImpl::energySaverThreadLoop()
     EnergySaverController controller(kEnergySaverIdleMs, kEnergySaverWakeDb);
     const auto t0 = clock::now();
     auto now_ms = [&t0]() {
-        return static_cast<long long>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t0).count());
+        return static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t0).count());
     };
     controller.reset(now_ms());
 
@@ -616,7 +616,7 @@ void AudioEngineImpl::energySaverThreadLoop()
             // and only then calls stopEnergySaver(), which joins this thread.
             // Blocking here would deadlock that sequence. Missing a tick costs
             // nothing — the next one is 100 ms away.
-            std::unique_lock lk {control_mutex_, std::try_to_lock};
+            std::unique_lock lk{control_mutex_, std::try_to_lock};
             if (lk.owns_lock() && wasapi_capture_ != nullptr && !wasapi_capture_->isHealthy() &&
                 now - last_capture_recovery_ms_ >= kCaptureRecoveryBackoffMs)
             {
@@ -643,8 +643,7 @@ void AudioEngineImpl::energySaverThreadLoop()
                          running_.load(std::memory_order_acquire),
                          stall_supervision_suspended_.load(std::memory_order_acquire)))
         {
-            LogDebug("energySaver: audio callback stalled >%lld ms, requesting engine restart",
-                     kStallTimeoutMs);
+            LogDebug("energySaver: audio callback stalled >%lld ms, requesting engine restart", kStallTimeoutMs);
             notifyOnUiThread([](IAudioEngineListener& l) { l.onAudioStalled(); });
         }
     }
@@ -722,7 +721,7 @@ void AudioEngineImpl::selectOutput(const EndpointId& id)
     TransportKind new_transport_kind = TransportKind::Wasapi;
 
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         if (desired_output_id_ == id && desired_asio_device_name_ == id)
         {
             return;
@@ -760,15 +759,14 @@ void AudioEngineImpl::selectOutput(const EndpointId& id)
         }
 
         // Update mixed-mode flag.
-        mixed_mode_active_.store(
-            desired_output_transport_kind_ == TransportKind::Asio &&
-                desired_input_transport_kind_ == TransportKind::Wasapi &&
-                !desired_input_id_.empty(),
-            std::memory_order_release);
+        mixed_mode_active_.store(desired_output_transport_kind_ == TransportKind::Asio &&
+                                     desired_input_transport_kind_ == TransportKind::Wasapi &&
+                                     !desired_input_id_.empty(),
+                                 std::memory_order_release);
     }
     if (running_.load())
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         // If transport mode changed, use reset() for complete re-initialization
         if (new_transport_kind != last_active_output_transport_kind_)
         {
@@ -786,7 +784,7 @@ void AudioEngineImpl::selectOutput(const EndpointId& id)
 void AudioEngineImpl::selectInput(const EndpointId& id)
 {
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         if (desired_input_id_ == id)
         {
             return;
@@ -808,18 +806,19 @@ void AudioEngineImpl::selectInput(const EndpointId& id)
         }
         desired_input_is_loopback_ = is_loopback;
         LogDebug("selectInput(): id='%s', is_loopback=%d, render_list_size=%zu",
-                 id.c_str(), is_loopback ? 1 : 0, render_list.size());
+                 id.c_str(),
+                 is_loopback ? 1 : 0,
+                 render_list.size());
 
         // Update mixed-mode flag.
-        mixed_mode_active_.store(
-            desired_output_transport_kind_ == TransportKind::Asio &&
-                desired_input_transport_kind_ == TransportKind::Wasapi &&
-                !desired_input_id_.empty(),
-            std::memory_order_release);
+        mixed_mode_active_.store(desired_output_transport_kind_ == TransportKind::Asio &&
+                                     desired_input_transport_kind_ == TransportKind::Wasapi &&
+                                     !desired_input_id_.empty(),
+                                 std::memory_order_release);
     }
     if (running_.load())
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         stop();
         start();
     }
@@ -827,7 +826,7 @@ void AudioEngineImpl::selectInput(const EndpointId& id)
 
 EndpointId AudioEngineImpl::currentOutput() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     if (desired_output_transport_kind_ == TransportKind::Asio)
     {
         return desired_asio_device_name_;
@@ -837,7 +836,7 @@ EndpointId AudioEngineImpl::currentOutput() const
 
 EndpointId AudioEngineImpl::currentInput() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     return desired_input_id_;
 }
 
@@ -849,7 +848,7 @@ bool AudioEngineImpl::isCaptureDeviceMuted() const
 
 DeviceResolutionSource AudioEngineImpl::currentResolutionSource() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     return resolution_source_;
 }
 
@@ -862,12 +861,11 @@ void AudioEngineImpl::setBufferSize(int samples)
     const size_t count = is_asio ? std::size(kAllowedAsio) : std::size(kAllowedWasapi);
     if (std::find(allowed, allowed + count, samples) == allowed + count)
     {
-        throw std::invalid_argument(is_asio
-                                        ? "buffer size must be one of {32, 64, 128, 256, 512, 1024}"
-                                        : "buffer size must be one of {512, 1024} in WASAPI mode");
+        throw std::invalid_argument(is_asio ? "buffer size must be one of {32, 64, 128, 256, 512, 1024}"
+                                            : "buffer size must be one of {512, 1024} in WASAPI mode");
     }
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         if (desired_buffer_size_ == samples)
         {
             return;
@@ -876,7 +874,7 @@ void AudioEngineImpl::setBufferSize(int samples)
     }
     if (running_.load())
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         stop();
         start();
     }
@@ -884,7 +882,7 @@ void AudioEngineImpl::setBufferSize(int samples)
 
 int AudioEngineImpl::bufferSize() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     return desired_buffer_size_;
 }
 
@@ -905,8 +903,7 @@ bool AudioEngineImpl::reconfigureChainInPlace(const std::function<void()>& recon
     // pure cost. The WASAPI paths do request desired_sample_rate_ from the device
     // (applyDeviceSelection) and the pure-WASAPI path runs its own engine thread,
     // so both still need a full stop()/start().
-    if (desired_output_transport_kind_ != TransportKind::Asio ||
-        wasapi_output_ != nullptr ||
+    if (desired_output_transport_kind_ != TransportKind::Asio || wasapi_output_ != nullptr ||
         device_manager_.getCurrentAudioDevice() == nullptr)
     {
         return false;
@@ -954,7 +951,7 @@ bool AudioEngineImpl::reconfigureChainInPlace(const std::function<void()>& recon
 void AudioEngineImpl::setSampleRate(double rate)
 {
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         if (desired_sample_rate_ == rate)
         {
             return;
@@ -963,7 +960,7 @@ void AudioEngineImpl::setSampleRate(double rate)
     }
     if (running_.load())
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         // Since the ASIO driver's own clock is never touched (applyAsioTransport
         // passes sample_rate = 0.0), a rate change only affects the chain and the
         // resamplers. Reconfiguring in place avoids tearing down and renegotiating
@@ -979,13 +976,15 @@ void AudioEngineImpl::setSampleRate(double rate)
 
 double AudioEngineImpl::sampleRate() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     return desired_sample_rate_;
 }
+
 int AudioEngineImpl::negotiatedSampleRate() const
 {
     return negotiated_sample_rate_.load();
 }
+
 int AudioEngineImpl::outputDeviceSampleRate() const
 {
     // Pure-WASAPI loopback mode: the render endpoint's negotiated rate.
@@ -1018,7 +1017,7 @@ int AudioEngineImpl::inputDeviceSampleRate() const
 
 void AudioEngineImpl::rescanPlugins(IScanProgressListener* progress)
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     auto paths = defaultVst3ScanPaths();
     scanner_->start(paths, progress, scan_cache_.get());
 }
@@ -1031,7 +1030,7 @@ void AudioEngineImpl::cancelScan()
 
 std::vector<PluginCatalogEntry> AudioEngineImpl::catalog() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     auto result = builtin_registry_->entries();
     auto scanned = scan_cache_->plugins();
     result.insert(result.end(), scanned.begin(), scanned.end());
@@ -1040,7 +1039,7 @@ std::vector<PluginCatalogEntry> AudioEngineImpl::catalog() const
 
 ChainSnapshot AudioEngineImpl::snapshotChain() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     ChainSnapshot s;
     s.chain_revision = plugin_chain_->revision();
     s.slots = plugin_chain_->snapshot();
@@ -1049,10 +1048,9 @@ ChainSnapshot AudioEngineImpl::snapshotChain() const
 
 InstanceId AudioEngineImpl::addPlugin(const PluginRef& ref, int position)
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
-    LogDebug("addPlugin: position=%d, ref.vendor='%s', ref.name='%s'",
-             position, ref.vendor.c_str(), ref.name.c_str());
+    LogDebug("addPlugin: position=%d, ref.vendor='%s', ref.name='%s'", position, ref.vendor.c_str(), ref.name.c_str());
 
     std::shared_ptr<PluginInstance> instance;
 
@@ -1126,7 +1124,7 @@ InstanceId AudioEngineImpl::addPlugin(const PluginRef& ref, int position)
 
 InstanceId AudioEngineImpl::addPluginFromPath(const std::filesystem::path& vst3_path, int position)
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     LogDebug("addPluginFromPath: position=%d, path='%s'", position, vst3_path.string().c_str());
 
@@ -1178,7 +1176,7 @@ InstanceId AudioEngineImpl::addPluginFromPath(const std::filesystem::path& vst3_
 void AudioEngineImpl::removeSlot(int position)
 {
     LogDebug("removeSlot: Attempting to remove position %d", position);
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     if (!plugin_chain_)
     {
@@ -1201,7 +1199,7 @@ void AudioEngineImpl::removeSlot(int position)
 void AudioEngineImpl::moveSlot(int from, int to)
 {
     LogDebug("moveSlot: Attempting to move from %d to %d", from, to);
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     if (!plugin_chain_)
     {
@@ -1210,11 +1208,9 @@ void AudioEngineImpl::moveSlot(int from, int to)
     }
 
     auto snapshot = plugin_chain_->snapshot();
-    if (from < 0 || from >= static_cast<int>(snapshot.size()) || to < 0 ||
-        to >= static_cast<int>(snapshot.size()))
+    if (from < 0 || from >= static_cast<int>(snapshot.size()) || to < 0 || to >= static_cast<int>(snapshot.size()))
     {
-        LogDebug("moveSlot: Invalid positions (from=%d, to=%d, chain_size=%zu)",
-                 from, to, snapshot.size());
+        LogDebug("moveSlot: Invalid positions (from=%d, to=%d, chain_size=%zu)", from, to, snapshot.size());
         return;
     }
 
@@ -1246,8 +1242,7 @@ void AudioEngineImpl::setBypass(int position, bool bypassed)
     auto snapshot = plugin_chain_->snapshot();
     if (position >= static_cast<int>(snapshot.size()))
     {
-        LogDebug("setBypass: Position %d out of bounds (chain size: %zu)", position,
-                 snapshot.size());
+        LogDebug("setBypass: Position %d out of bounds (chain size: %zu)", position, snapshot.size());
         return;
     }
 
@@ -1324,8 +1319,7 @@ void AudioEngineImpl::setParameter(int position, ParamId param, float value)
     auto snapshot = plugin_chain_->snapshot();
     if (position >= static_cast<int>(snapshot.size()))
     {
-        LogDebug("setParameter: Position %d out of bounds (chain size: %zu)", position,
-                 snapshot.size());
+        LogDebug("setParameter: Position %d out of bounds (chain size: %zu)", position, snapshot.size());
         return;
     }
 
@@ -1354,7 +1348,7 @@ void AudioEngineImpl::openEditor(int position)
     juce::AudioProcessor* proc = nullptr;
     std::string plugin_name;
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
 
         if (!plugin_chain_)
         {
@@ -1365,8 +1359,7 @@ void AudioEngineImpl::openEditor(int position)
         auto snapshot = plugin_chain_->snapshot();
         if (position >= static_cast<int>(snapshot.size()))
         {
-            LogDebug("openEditor: Position %d out of bounds (chain size: %zu)", position,
-                     snapshot.size());
+            LogDebug("openEditor: Position %d out of bounds (chain size: %zu)", position, snapshot.size());
             return;
         }
 
@@ -1396,7 +1389,7 @@ void AudioEngineImpl::openEditor(int position)
     // a crash in ARC X (and possibly other IK plugins) that occurs when createView()
     // and processBlock access shared state concurrently without synchronization.
     // Skip hasEditor() — ARC X faults there too; null return is the "no editor" signal.
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     // Re-validate after releasing and re-acquiring lock
     if (!proc)
@@ -1435,30 +1428,28 @@ void AudioEngineImpl::openEditor(int position)
         juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
                                                "Editor Error",
                                                "Failed to create editor for " + juce::String(plugin_name) +
-                                                   "\nException code: 0x" + juce::String::toHexString((int)g_editor_exception_code));
+                                                   "\nException code: 0x" +
+                                                   juce::String::toHexString((int)g_editor_exception_code));
         return;
     }
 
-    LogDebug("openEditor: Editor created successfully, dimensions: %dx%d",
-             editor->getWidth(), editor->getHeight());
+    LogDebug("openEditor: Editor created successfully, dimensions: %dx%d", editor->getWidth(), editor->getHeight());
 
     auto host = std::make_unique<PluginEditorHost>(juce::String(plugin_name));
 
     if (!attachEditorSafe(host.get(), editor))
     {
         LogDebug("openEditor: Plugin faulted in attachEditor (setContentOwned/isResizable) — discarding window");
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-                                               "Editor Error",
-                                               "Failed to attach editor for " + juce::String(plugin_name));
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::AlertWindow::WarningIcon, "Editor Error", "Failed to attach editor for " + juce::String(plugin_name));
         return;
     }
 
     if (!showEditorSafe(host.get()))
     {
         LogDebug("openEditor: Plugin faulted while showing its editor — discarding window");
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-                                               "Editor Error",
-                                               "Failed to show editor for " + juce::String(plugin_name));
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::AlertWindow::WarningIcon, "Editor Error", "Failed to show editor for " + juce::String(plugin_name));
         return;
     }
 
@@ -1472,8 +1463,8 @@ void AudioEngineImpl::openEditor(int position)
 void AudioEngineImpl::closeEditor(int position)
 {
     LogDebug("closeEditor: Closing editor for position %d", position);
-    
-    std::lock_guard lk {control_mutex_};
+
+    std::lock_guard lk{control_mutex_};
     auto it = editor_windows_.find(position);
     if (it != editor_windows_.end())
     {
@@ -1490,7 +1481,7 @@ void AudioEngineImpl::repointPlaceholder(int position, const PluginRef& ref)
 {
     LogDebug("repointPlaceholder: Starting for position %d", position);
 
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     if (position < 0)
     {
@@ -1507,8 +1498,7 @@ void AudioEngineImpl::repointPlaceholder(int position, const PluginRef& ref)
     auto snapshot = plugin_chain_->snapshot();
     if (position >= static_cast<int>(snapshot.size()))
     {
-        LogDebug("repointPlaceholder: Position %d out of bounds (chain size: %zu)", position,
-                 snapshot.size());
+        LogDebug("repointPlaceholder: Position %d out of bounds (chain size: %zu)", position, snapshot.size());
         return;
     }
 
@@ -1522,9 +1512,8 @@ void AudioEngineImpl::repointPlaceholder(int position, const PluginRef& ref)
     if (!scan_cache_)
     {
         LogDebug("repointPlaceholder: scan_cache_ is null");
-        notifyOnUiThread([](IAudioEngineListener& l) {
-            l.onPluginFailed(InstanceId{}, "Re-point failed: scan cache unavailable");
-        });
+        notifyOnUiThread(
+            [](IAudioEngineListener& l) { l.onPluginFailed(InstanceId{}, "Re-point failed: scan cache unavailable"); });
         return;
     }
 
@@ -1551,9 +1540,8 @@ void AudioEngineImpl::repointPlaceholder(int position, const PluginRef& ref)
     if (!result || !result.instance)
     {
         LogDebug("repointPlaceholder: Plugin failed to load from %s", entry->file_path.string().c_str());
-        notifyOnUiThread([](IAudioEngineListener& l) {
-            l.onPluginFailed(InstanceId{}, "Re-point failed: plugin failed to load");
-        });
+        notifyOnUiThread(
+            [](IAudioEngineListener& l) { l.onPluginFailed(InstanceId{}, "Re-point failed: plugin failed to load"); });
         return;
     }
 
@@ -1568,7 +1556,7 @@ void AudioEngineImpl::repointPlaceholder(int position, const PluginRef& ref)
             try
             {
                 proc->setStateInformation(placeholder->pendingStateChunk().getData(),
-                                         static_cast<int>(placeholder->pendingStateChunk().getSize()));
+                                          static_cast<int>(placeholder->pendingStateChunk().getSize()));
             }
             catch (const std::exception& e)
             {
@@ -1617,9 +1605,8 @@ void AudioEngineImpl::loadPreset(const std::filesystem::path& path)
     std::ifstream ifs(path, std::ios::binary);
     if (!ifs)
     {
-        notifyOnUiThread([](IAudioEngineListener& l) {
-            l.onPluginFailed(InstanceId{}, "Preset load failed: cannot open file");
-        });
+        notifyOnUiThread(
+            [](IAudioEngineListener& l) { l.onPluginFailed(InstanceId{}, "Preset load failed: cannot open file"); });
         return;
     }
 
@@ -1651,7 +1638,7 @@ void AudioEngineImpl::loadPreset(const std::filesystem::path& path)
     // state chunks are stored — the correct VST3 activation order.
     stop();
 
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     // Restore buffer size from preset if present.
     if (doc.contains("target_buffer_size") && doc["target_buffer_size"].is_number_integer())
@@ -1724,8 +1711,7 @@ void AudioEngineImpl::loadPreset(const std::filesystem::path& path)
     }
 }
 
-void AudioEngineImpl::loadChainFromJson(const nlohmann::json& doc,
-                                         std::vector<MissingPluginInfo>& out_missing)
+void AudioEngineImpl::loadChainFromJson(const nlohmann::json& doc, std::vector<MissingPluginInfo>& out_missing)
 {
     LogDebug("loadChainFromJson() start");
     if (!doc.contains("slots") || !doc["slots"].is_array())
@@ -1859,7 +1845,7 @@ void AudioEngineImpl::loadChainFromJson(const nlohmann::json& doc,
         }
 
         // Every branch above added a slot at index i; restore its user tag.
-        const std::string tag = slot.value("tag", std::string {});
+        const std::string tag = slot.value("tag", std::string{});
         if (!tag.empty())
         {
             plugin_chain_->setTag(static_cast<int>(i), tag);
@@ -1943,13 +1929,19 @@ void AudioEngineImpl::restoreChain(const std::filesystem::path& path)
 
 void AudioEngineImpl::savePreset(const std::filesystem::path& path, const std::string& name)
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     int sr = negotiated_sample_rate_.load();
     std::string device_name = desired_output_friendly_name_;
 
-    auto doc = serializePreset(*plugin_chain_, name, desired_buffer_size_, sr, device_name,
-                               desired_input_id_, desired_output_id_, running_.load());
+    auto doc = serializePreset(*plugin_chain_,
+                               name,
+                               desired_buffer_size_,
+                               sr,
+                               device_name,
+                               desired_input_id_,
+                               desired_output_id_,
+                               running_.load());
 
     std::ofstream ofs(path, std::ios::binary);
     if (ofs)
@@ -1958,16 +1950,15 @@ void AudioEngineImpl::savePreset(const std::filesystem::path& path, const std::s
     }
     else
     {
-        notifyOnUiThread([](IAudioEngineListener& l) {
-            l.onPluginFailed(InstanceId{}, "Preset save failed: cannot write file");
-        });
+        notifyOnUiThread(
+            [](IAudioEngineListener& l) { l.onPluginFailed(InstanceId{}, "Preset save failed: cannot write file"); });
     }
 }
 
 void AudioEngineImpl::setAsioOutputPair(int channel_offset)
 {
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         if (desired_asio_output_pair_ == channel_offset)
         {
             return;
@@ -1976,7 +1967,7 @@ void AudioEngineImpl::setAsioOutputPair(int channel_offset)
     }
     if (running_.load())
     {
-        std::lock_guard lk {control_mutex_};
+        std::lock_guard lk{control_mutex_};
         if (desired_output_transport_kind_ == TransportKind::Asio)
             applyAsioTransport();
     }
@@ -1984,7 +1975,7 @@ void AudioEngineImpl::setAsioOutputPair(int channel_offset)
 
 int AudioEngineImpl::asioOutputPair() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     return desired_asio_output_pair_;
 }
 
@@ -2008,15 +1999,15 @@ void AudioEngineImpl::openAsioControlPanel()
 
 void AudioEngineImpl::setWasapiExclusive(bool exclusive)
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     if (wasapi_exclusive_ == exclusive)
         return;
     wasapi_exclusive_ = exclusive;
     if (desired_output_transport_kind_ != TransportKind::Wasapi)
         return;
 
-    const bool wasapi_loopback_mode = desired_input_transport_kind_ == TransportKind::Wasapi &&
-                                       !desired_input_id_.empty();
+    const bool wasapi_loopback_mode =
+        desired_input_transport_kind_ == TransportKind::Wasapi && !desired_input_id_.empty();
     if (running_.load() && wasapi_loopback_mode)
     {
         // Pure WASAPI-loopback mode opens capture/output directly (not via
@@ -2033,12 +2024,17 @@ void AudioEngineImpl::setWasapiExclusive(bool exclusive)
 
 bool AudioEngineImpl::wasapiExclusive() const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     return wasapi_exclusive_;
 }
 
 LatencyProfile AudioEngineImpl::latencyProfile() const
 {
+    // Serialise against control-thread mutations (device opens/closes, chain
+    // reconfigures). The audio callback never takes control_mutex_, so this
+    // cannot block the audio path; the body below is plain reads only.
+    std::lock_guard lk{control_mutex_};
+
     LatencyProfile p;
     auto* device = device_manager_.getCurrentAudioDevice();
 
@@ -2074,8 +2070,48 @@ LatencyProfile AudioEngineImpl::latencyProfile() const
         }
     }
 
+    const double chain_rate = static_cast<double>(negotiated_sample_rate_.load(std::memory_order_relaxed));
+
+    // VST chain latency: summed over the active graph node processors and
+    // converted to ms at the chain's processing rate.
+    if (plugin_chain_ != nullptr && chain_rate > 0.0)
+    {
+        p.plugin_chain_ms =
+            static_cast<float>(static_cast<double>(plugin_chain_->totalLatencySamples()) * 1000.0 / chain_rate);
+    }
+
     // T021: Resampling latency is negligible for windowed sinc resampler (< 1 ms)
-    // plugin_chain_ms is managed by plugin_chain_ on demand
+
+    // Bridge buffering: the app's own ring queueing between the capture stream
+    // and the chain (folded into capture_ms) and between the chain and the
+    // output device (folded into output_ms), so the readout reacts to buffer
+    // size / VST rate changes. A cached target of 0 means "no fixed target":
+    // report the live ring fill instead — but only while audio is actually
+    // flowing, so a stopped engine never shows a stale bridge.
+    if (running_.load(std::memory_order_relaxed))
+    {
+        int capture_bridge = cached_capture_bridge_target_.load(std::memory_order_relaxed);
+        if (capture_bridge == 0 && capture_ring_buffer_ != nullptr)
+        {
+            capture_bridge = static_cast<int>(capture_ring_buffer_->available());
+        }
+        const double capture_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : chain_rate;
+        if (capture_bridge > 0 && capture_rate > 0.0)
+        {
+            p.capture_ms += static_cast<float>(static_cast<double>(capture_bridge) * 1000.0 / capture_rate);
+        }
+
+        int output_bridge = cached_output_bridge_target_.load(std::memory_order_relaxed);
+        if (output_bridge == 0 && chain_out_fifo_ != nullptr)
+        {
+            output_bridge = static_cast<int>(chain_out_fifo_->available());
+        }
+        if (output_bridge > 0 && chain_rate > 0.0)
+        {
+            p.output_ms += static_cast<float>(static_cast<double>(output_bridge) * 1000.0 / chain_rate);
+        }
+    }
+
     p.total_round_trip_ms = p.capture_ms + p.resample_ms + p.plugin_chain_ms + p.output_ms;
     p.last_updated = std::chrono::steady_clock::now();
     return p;
@@ -2142,13 +2178,13 @@ int AudioEngineImpl::copyRecentOutputSamples(float* dest, int max_samples) const
 
 void AudioEngineImpl::injectTestCatalogEntry(const PluginCatalogEntry& entry)
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     scan_cache_->addEntry(entry);
 }
 
 juce::AudioProcessor* AudioEngineImpl::testGetProcessor(int position) const
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     if (!plugin_chain_)
         return nullptr;
     auto instance = plugin_chain_->getSlotInstance(position);
@@ -2157,7 +2193,7 @@ juce::AudioProcessor* AudioEngineImpl::testGetProcessor(int position) const
 
 InstanceId AudioEngineImpl::addPlaceholderSlot(int position)
 {
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     auto placeholder = std::make_shared<PlaceholderInstance>(PluginRef{}, std::filesystem::path{});
     const auto id = plugin_chain_->addPlaceholderSlot(std::move(placeholder), position);
     chain_revision_.store(plugin_chain_->revision());
@@ -2170,11 +2206,11 @@ InstanceId AudioEngineImpl::addPlaceholderSlot(int position)
 // =====================================================================
 
 void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input_channel_data,
-                                                      int num_input_channels,
-                                                      float* const* output_channel_data,
-                                                      int num_output_channels,
-                                                      int num_samples,
-                                                      const juce::AudioIODeviceCallbackContext& /*context*/)
+                                                       int num_input_channels,
+                                                       float* const* output_channel_data,
+                                                       int num_output_channels,
+                                                       int num_samples,
+                                                       const juce::AudioIODeviceCallbackContext& /*context*/)
 {
     const auto t_start = rt_clock_.now();
 
@@ -2221,9 +2257,7 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     // frame or two either way.
     const bool use_chain_fifo = output_resampling_enabled_ && chain_out_fifo_ != nullptr;
     const int fifo_needed =
-        use_chain_fifo
-            ? static_cast<int>(std::ceil(static_cast<double>(num_samples) * output_nominal_ratio_)) + 4
-            : 0;
+        use_chain_fifo ? static_cast<int>(std::ceil(static_cast<double>(num_samples) * output_nominal_ratio_)) + 4 : 0;
 
     // Meters only need to be current when we actually push a frame to the UI (~30 Hz).
     // Gate the per-block peak/RMS scans to those dispatch blocks so the audio thread
@@ -2284,23 +2318,20 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                 const std::size_t raw_cap = static_cast<std::size_t>(capture_raw_buffer_.getNumSamples());
                 const std::size_t peek_n = std::min({needed, avail, raw_cap});
 
-                float* raw[2] = {
-                    capture_raw_buffer_.getWritePointer(0),
-                    capture_raw_buffer_.getWritePointer(1)};
+                float* raw[2] = {capture_raw_buffer_.getWritePointer(0), capture_raw_buffer_.getWritePointer(1)};
                 const std::size_t peeked = capture_ring_buffer_->peek(raw, peek_n);
 
                 const float* src[2] = {raw[0], raw[1]};
-                float* dst[2] = {
-                    work_buffer_.getWritePointer(0),
-                    work_buffer_.getNumChannels() > 1 ? work_buffer_.getWritePointer(1) : nullptr};
+                float* dst[2] = {work_buffer_.getWritePointer(0),
+                                 work_buffer_.getNumChannels() > 1 ? work_buffer_.getWritePointer(1) : nullptr};
 
                 std::size_t consumed = 0;
                 if (capture_drift_.enabled() || capture_resampling_enabled_)
                 {
                     // Adaptive path, used even at nominal ratio 1.0 so the drift trim
                     // has somewhere to act. The interpolator is transparent at unity.
-                    capture_resampler_.processAdaptive(effective_ratio, src, dst,
-                                                       static_cast<std::size_t>(vst_samples), peeked, &consumed);
+                    capture_resampler_.processAdaptive(
+                        effective_ratio, src, dst, static_cast<std::size_t>(vst_samples), peeked, &consumed);
                 }
                 else
                 {
@@ -2335,7 +2366,8 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             {
                 if (input_channel_data[c] != nullptr)
                 {
-                    std::memcpy(work_buffer_.getWritePointer(c), input_channel_data[c],
+                    std::memcpy(work_buffer_.getWritePointer(c),
+                                input_channel_data[c],
                                 static_cast<std::size_t>(copy_n) * sizeof(float));
                 }
                 if (copy_n < chain_samples)
@@ -2410,8 +2442,7 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             std::uint64_t write_pos = spectrum_write_pos_.load(std::memory_order_relaxed);
             for (int s = 0; s < vst_samples; ++s)
             {
-                spectrum_ring_[static_cast<std::size_t>(write_pos & kSpectrumRingMask)] =
-                    0.5f * (left[s] + right[s]);
+                spectrum_ring_[static_cast<std::size_t>(write_pos & kSpectrumRingMask)] = 0.5f * (left[s] + right[s]);
                 ++write_pos;
             }
             spectrum_write_pos_.store(write_pos, std::memory_order_release);
@@ -2422,9 +2453,8 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
         {
             // The FIFO is 2-channel and dereferences both pointers, so a mono work
             // buffer duplicates channel 0 rather than handing it a null.
-            const float* fifo_src[2] = {
-                work_buffer_.getReadPointer(0),
-                work_buffer_.getReadPointer(work_buffer_.getNumChannels() > 1 ? 1 : 0)};
+            const float* fifo_src[2] = {work_buffer_.getReadPointer(0),
+                                        work_buffer_.getReadPointer(work_buffer_.getNumChannels() > 1 ? 1 : 0)};
             (void)chain_out_fifo_->tryWrite(fifo_src, static_cast<std::size_t>(chain_samples));
         }
     }  // end chain pass loop
@@ -2446,9 +2476,8 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
                                              chain_out_fifo_->available(),
                                              static_cast<std::size_t>(chain_peek_buffer_.getNumSamples())});
         // peek() writes both channels unconditionally, so neither pointer may be null.
-        float* peek_dst[2] = {
-            chain_peek_buffer_.getWritePointer(0),
-            chain_peek_buffer_.getWritePointer(chain_peek_buffer_.getNumChannels() > 1 ? 1 : 0)};
+        float* peek_dst[2] = {chain_peek_buffer_.getWritePointer(0),
+                              chain_peek_buffer_.getWritePointer(chain_peek_buffer_.getNumChannels() > 1 ? 1 : 0)};
         const std::size_t peeked = chain_out_fifo_->peek(peek_dst, peek_n);
 
         const float* chain_src[2] = {peek_dst[0], peek_dst[1]};
@@ -2457,9 +2486,8 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
             output_resampled_buffer_.getNumChannels() > 1 ? output_resampled_buffer_.getWritePointer(1) : nullptr};
 
         std::size_t out_consumed = 0;
-        output_resampler_.process(chain_src, resampled_dst,
-                                   static_cast<std::size_t>(num_samples),
-                                   peeked, &out_consumed);
+        output_resampler_.process(
+            chain_src, resampled_dst, static_cast<std::size_t>(num_samples), peeked, &out_consumed);
         chain_out_fifo_->advanceRead(out_consumed);
 
         out_buffer = &output_resampled_buffer_;
@@ -2475,8 +2503,7 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
         if (output_fade_gain_ != target || target != 1.0f)
         {
             const double rate = juce_device_rate_ > 0.0 ? juce_device_rate_ : 48000.0;
-            const float step = static_cast<float>(
-                static_cast<double>(out_samples) / (kFadeMs * 0.001 * rate));
+            const float step = static_cast<float>(static_cast<double>(out_samples) / (kFadeMs * 0.001 * rate));
             const float start_gain = output_fade_gain_;
             if (output_fade_gain_ < target)
                 output_fade_gain_ = std::min(target, output_fade_gain_ + step);
@@ -2504,7 +2531,8 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
         {
             if (output_channel_data[c] != nullptr)
             {
-                std::memcpy(output_channel_data[c], out_buffer->getReadPointer(c),
+                std::memcpy(output_channel_data[c],
+                            out_buffer->getReadPointer(c),
                             static_cast<std::size_t>(num_samples) * sizeof(float));
             }
         }
@@ -2520,12 +2548,9 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     // T017: Feed processed audio to WasapiOutput ring buffer.
     if (wasapi_output_ != nullptr && output_ring_buffer_ != nullptr)
     {
-        const float* src_ptrs[2] = {
-            out_buffer->getReadPointer(0),
-            out_buffer->getNumChannels() > 1 ? out_buffer->getReadPointer(1) : nullptr
-        };
-        const std::size_t written = output_ring_buffer_->tryWrite(
-            src_ptrs, static_cast<std::size_t>(out_samples));
+        const float* src_ptrs[2] = {out_buffer->getReadPointer(0),
+                                    out_buffer->getNumChannels() > 1 ? out_buffer->getReadPointer(1) : nullptr};
+        const std::size_t written = output_ring_buffer_->tryWrite(src_ptrs, static_cast<std::size_t>(out_samples));
         (void)written;
     }
 
@@ -2563,17 +2588,15 @@ void AudioEngineImpl::audioDeviceIOCallbackWithContext(const float* const* input
     //    metering scans above (do_meter), so the frame reflects the just-computed values.
     if (do_meter)
     {
-        MeterFrame frame{
-            meter_input_peak_l_.load(),
-            meter_input_peak_r_.load(),
-            meter_input_rms_l_.load(),
-            meter_input_rms_r_.load(),
-            meter_output_peak_l_.load(),
-            meter_output_peak_r_.load(),
-            meter_output_rms_l_.load(),
-            meter_output_rms_r_.load(),
-            std::chrono::steady_clock::now()
-        };
+        MeterFrame frame{meter_input_peak_l_.load(),
+                         meter_input_peak_r_.load(),
+                         meter_input_rms_l_.load(),
+                         meter_input_rms_r_.load(),
+                         meter_output_peak_l_.load(),
+                         meter_output_peak_r_.load(),
+                         meter_output_rms_l_.load(),
+                         meter_output_rms_r_.load(),
+                         std::chrono::steady_clock::now()};
         notifyOnUiThread([frame](IAudioEngineListener& l) { l.onMeterFrame(frame); });
     }
 }
@@ -2597,8 +2620,7 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         output_resampling_enabled_ = device_rate > 0.0 && std::abs(chain_rate - device_rate) > 0.1;
         output_nominal_ratio_ = (device_rate > 0.0) ? (chain_rate / device_rate) : 1.0;
 
-        const int chain_block = static_cast<int>(std::ceil(
-                                    static_cast<double>(block) * output_nominal_ratio_)) + 8;
+        const int chain_block = static_cast<int>(std::ceil(static_cast<double>(block) * output_nominal_ratio_)) + 8;
         chain_block_capacity_ = chain_block;
         chain_block_ = chain_block;
 
@@ -2607,7 +2629,11 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         plugin_chain_->prepareToPlay(chain_rate, chain_block);
         negotiated_sample_rate_.store(static_cast<int>(chain_rate));
         LogDebug("audioDeviceAboutToStart() device_sr=%.0f chain_sr=%.0f ch=%d block=%d chain_block=%d",
-                 device_rate, chain_rate, channels, block, chain_block);
+                 device_rate,
+                 chain_rate,
+                 channels,
+                 block,
+                 chain_block);
 
         if (output_resampling_enabled_)
         {
@@ -2619,12 +2645,15 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
             // Four chain blocks is ample: steady-state occupancy stays under one.
             // Cost is under one chain block of added latency (mean ~half), and
             // only on the mismatched-rate path.
-            chain_out_fifo_ = std::make_unique<shared::LockFreeAudioRingBuffer>(
-                static_cast<std::size_t>(chain_block) * 4, 2);
+            chain_out_fifo_ =
+                std::make_unique<shared::LockFreeAudioRingBuffer>(static_cast<std::size_t>(chain_block) * 4, 2);
             chain_peek_buffer_.setSize(2, chain_block * 4, false, true, true);
 
             LogDebug("audioDeviceAboutToStart() output SRC: chain=%.0f device=%.0f ratio=%.6f fifo=%d",
-                     chain_rate, device_rate, output_nominal_ratio_, chain_block * 4);
+                     chain_rate,
+                     device_rate,
+                     output_nominal_ratio_,
+                     chain_block * 4);
         }
         else
         {
@@ -2633,8 +2662,7 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
 
         // Set up capture-side resampler when capture rate differs from chain rate.
         const double wasapi_rate = capture_wasapi_rate_ > 0.0 ? capture_wasapi_rate_ : chain_rate;
-        capture_resampling_enabled_ = wasapi_rate > 0.0 && chain_rate > 0.0 &&
-                                      std::abs(wasapi_rate - chain_rate) > 0.1;
+        capture_resampling_enabled_ = wasapi_rate > 0.0 && chain_rate > 0.0 && std::abs(wasapi_rate - chain_rate) > 0.1;
 
         // Always compute the ratio and size the raw scratch buffer — even when
         // resampling is disabled (ratio == 1.0) — so the callback can peek from
@@ -2645,9 +2673,9 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
         // The drift servo can push the effective ratio up to kDriftMaxTrim above
         // nominal, so the raw scratch has to cover that too — otherwise the peek
         // gets clamped short at high rates and every block reports a false xrun.
-        const int raw_max = static_cast<int>(std::ceil(
-                                static_cast<double>(chain_block) * capture_nominal_ratio_
-                                * (1.0 + kDriftMaxTrim))) + 8;
+        const int raw_max = static_cast<int>(std::ceil(static_cast<double>(chain_block) * capture_nominal_ratio_ *
+                                                       (1.0 + kDriftMaxTrim))) +
+                            8;
         capture_raw_buffer_.setSize(2, raw_max, false, true, true);
 
         // On this transport the capture ring is fed by the WASAPI capture thread
@@ -2660,15 +2688,21 @@ void AudioEngineImpl::audioDeviceAboutToStart(juce::AudioIODevice* device)
             target_fill = static_cast<std::size_t>(kCaptureTargetSeconds * wasapi_rate);
             target_fill = std::min(target_fill, capture_ring_buffer_->capacity() / 2);
         }
-        capture_drift_.configure(target_fill,
-                                 {kDriftKp, kDriftKi, kDriftMaxTrim, kDriftMaxIntegral});
+        // Capture bridge target for latencyProfile(): the drift-servo target
+        // (45 ms, kCaptureTargetSeconds) on this JUCE/ASIO path. A value of 0
+        // (no capture stream here) falls back to the live ring fill.
+        cached_capture_bridge_target_.store(static_cast<int>(target_fill), std::memory_order_relaxed);
+        capture_drift_.configure(target_fill, {kDriftKp, kDriftKi, kDriftMaxTrim, kDriftMaxIntegral});
 
         if (capture_resampling_enabled_ || capture_drift_.enabled())
         {
             capture_resampler_.prepare(capture_nominal_ratio_, static_cast<std::size_t>(raw_max), 2);
 
             LogDebug("audioDeviceAboutToStart() capture SRC: wasapi=%.0f chain=%.0f ratio=%.6f target_fill=%zu",
-                     wasapi_rate, chain_rate, capture_nominal_ratio_, target_fill);
+                     wasapi_rate,
+                     chain_rate,
+                     capture_nominal_ratio_,
+                     target_fill);
         }
     }
     LogDebug("audioDeviceAboutToStart() completed");
@@ -2692,8 +2726,8 @@ void AudioEngineImpl::audioDeviceError(const juce::String& /*error_message*/)
 void AudioEngineImpl::applyDeviceSelection()
 {
     // Ensure we are on the correct WASAPI device type (shared vs. exclusive).
-    device_manager_.setCurrentAudioDeviceType(
-        wasapi_exclusive_ ? "Windows Audio (Exclusive Mode)" : "Windows Audio", true);
+    device_manager_.setCurrentAudioDeviceType(wasapi_exclusive_ ? "Windows Audio (Exclusive Mode)" : "Windows Audio",
+                                              true);
 
     juce::AudioDeviceManager::AudioDeviceSetup setup;
     device_manager_.getAudioDeviceSetup(setup);
@@ -2769,9 +2803,8 @@ void AudioEngineImpl::applyDeviceSelection()
     {
         // Bubble up to the listener on the UI thread.
         const juce::String captured = err;
-        notifyOnUiThread([captured](IAudioEngineListener& l) {
-            l.onPluginFailed(InstanceId {}, captured.toStdString());
-        });
+        notifyOnUiThread(
+            [captured](IAudioEngineListener& l) { l.onPluginFailed(InstanceId{}, captured.toStdString()); });
     }
 }
 
@@ -2827,15 +2860,14 @@ void AudioEngineImpl::applyAsioTransport()
     {
         fallback_reason_ = report.error;
         LogDebug("ASIO open failed for '%s': %s — falling back to WASAPI",
-                 desired_asio_device_name_.c_str(), report.error.c_str());
+                 desired_asio_device_name_.c_str(),
+                 report.error.c_str());
         // Surface the fallback so the user knows they're on WASAPI, not ASIO.
         // The tray UI treats onDeviceLost as informational (status label +
         // device-list refresh); it does not auto-reconnect or restart.
         const EndpointId lost = desired_asio_device_name_;
         const EndpointId fallback_to = desired_output_id_;
-        notifyOnUiThread([lost, fallback_to](IAudioEngineListener& l) {
-            l.onDeviceLost(lost, fallback_to);
-        });
+        notifyOnUiThread([lost, fallback_to](IAudioEngineListener& l) { l.onDeviceLost(lost, fallback_to); });
         fallbackToWasapi();
         applyDeviceSelection();
         return;
@@ -2877,22 +2909,18 @@ void AudioEngineImpl::openWasapiCapture()
     // Size for ~500 ms at the maximum supported rate so the drift controller keeps
     // the same real-time headroom for any WASAPI/ASIO rate combo (incl. 96/192 kHz).
     const std::size_t ring_capacity = static_cast<std::size_t>(kMaxSupportedSampleRate * 0.5) + 1;
-    capture_ring_buffer_ = std::make_unique<shared::LockFreeAudioRingBuffer>(
-        ring_capacity,
-        2);
+    capture_ring_buffer_ = std::make_unique<shared::LockFreeAudioRingBuffer>(ring_capacity, 2);
 
     wasapi_capture_ = std::make_unique<WasapiCapture>();
     // Open in loopback mode for render endpoints, real capture mode for microphones/line-in.
     const bool loopback = desired_input_is_loopback_;
     LogDebug("openWasapiCapture(): opening id='%s', loopback=%d", desired_input_id_.c_str(), loopback ? 1 : 0);
-    if (!wasapi_capture_->open(desired_input_id_, desired_sample_rate_,
-                                 capture_ring_buffer_.get(), loopback, wasapi_exclusive_))
+    if (!wasapi_capture_->open(
+            desired_input_id_, desired_sample_rate_, capture_ring_buffer_.get(), loopback, wasapi_exclusive_))
     {
         // T012: Notify UI that loopback capture initialization failed.
         LogDebug("openWasapiCapture(): WasapiCapture::open() FAILED for id='%s'", desired_input_id_.c_str());
-        notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
-            l.onDeviceLost(id, EndpointId{});
-        });
+        notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) { l.onDeviceLost(id, EndpointId{}); });
         wasapi_capture_.reset();
         capture_ring_buffer_.reset();
         return;
@@ -2905,9 +2933,7 @@ void AudioEngineImpl::openWasapiCapture()
     {
         // T012: Notify UI that capture stream failed to start.
         LogDebug("openWasapiCapture(): WasapiCapture::start() FAILED for id='%s'", desired_input_id_.c_str());
-        notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
-            l.onDeviceLost(id, EndpointId{});
-        });
+        notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) { l.onDeviceLost(id, EndpointId{}); });
         wasapi_capture_->close();
         wasapi_capture_.reset();
         capture_ring_buffer_.reset();
@@ -2945,7 +2971,7 @@ void AudioEngineImpl::openWasapiOutput()
     // 16384-frame ring is only ~170 ms at 96 kHz and starves under load.
     output_ring_buffer_ = std::make_unique<shared::LockFreeAudioRingBuffer>(
         static_cast<std::size_t>(kMaxSupportedSampleRate * 0.5) + 1,  // max frames
-        2);                                                            // stereo
+        2);                                                           // stereo
 
     if (!output_ring_buffer_)
         return;
@@ -2953,9 +2979,7 @@ void AudioEngineImpl::openWasapiOutput()
     wasapi_output_ = std::make_unique<WasapiOutput>();
     if (!wasapi_output_->open(desired_output_id_, desired_sample_rate_))
     {
-        notifyOnUiThread([id = desired_output_id_](IAudioEngineListener& l) {
-            l.onDeviceLost(id, EndpointId{});
-        });
+        notifyOnUiThread([id = desired_output_id_](IAudioEngineListener& l) { l.onDeviceLost(id, EndpointId{}); });
         wasapi_output_.reset();
         output_ring_buffer_.reset();
         return;
@@ -2965,9 +2989,7 @@ void AudioEngineImpl::openWasapiOutput()
 
     if (!wasapi_output_->start(output_ring_buffer_.get()))
     {
-        notifyOnUiThread([id = desired_output_id_](IAudioEngineListener& l) {
-            l.onDeviceLost(id, EndpointId{});
-        });
+        notifyOnUiThread([id = desired_output_id_](IAudioEngineListener& l) { l.onDeviceLost(id, EndpointId{}); });
         wasapi_output_->close();
         wasapi_output_.reset();
         output_ring_buffer_.reset();
@@ -2992,72 +3014,58 @@ void AudioEngineImpl::onDeviceStateChanged(const std::string& device_id, DWORD s
     if (state != DEVICE_STATE_ACTIVE)
         return;
 
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     // If a previously-removed device that matches our desired input or output
     // becomes active again, notify the UI so it can offer resumption.
     if (device_id == desired_input_id_ || device_id == desired_output_id_)
     {
         LogDebug("onDeviceStateChanged: remembered device %s became active", device_id.c_str());
-        notifyOnUiThread([device_id](IAudioEngineListener& l) {
-            l.onDeviceRestored(device_id);
-        });
+        notifyOnUiThread([device_id](IAudioEngineListener& l) { l.onDeviceRestored(device_id); });
     }
 
     // Notify UI that the available device list changed so it can refresh dropdowns.
-    notifyOnUiThread([](IAudioEngineListener& l) {
-        l.onDeviceListChanged();
-    });
+    notifyOnUiThread([](IAudioEngineListener& l) { l.onDeviceListChanged(); });
 }
 
 void AudioEngineImpl::onDeviceAdded(const std::string& device_id)
 {
     // T031: If the added device matches a remembered selection, allow resuming.
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
 
     if (device_id == desired_input_id_ || device_id == desired_output_id_)
     {
         LogDebug("onDeviceAdded: remembered device %s added", device_id.c_str());
-        notifyOnUiThread([device_id](IAudioEngineListener& l) {
-            l.onDeviceRestored(device_id);
-        });
+        notifyOnUiThread([device_id](IAudioEngineListener& l) { l.onDeviceRestored(device_id); });
     }
 
     // A new endpoint appeared — refresh the UI lists.
-    notifyOnUiThread([](IAudioEngineListener& l) {
-        l.onDeviceListChanged();
-    });
+    notifyOnUiThread([](IAudioEngineListener& l) { l.onDeviceListChanged(); });
 }
 
 void AudioEngineImpl::onDeviceRemoved(const std::string& device_id)
 {
     // T029: If the active output endpoint was removed, stop safely and prompt reselection.
     // T030: If the active capture endpoint (specific, non-default) was removed, fire a clear message.
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     if (!running_.load())
         return;
 
     if (device_id == desired_output_id_)
     {
         LogDebug("onDeviceRemoved: active output %s removed, stopping safely", device_id.c_str());
-        notifyOnUiThread([id = desired_output_id_](IAudioEngineListener& l) {
-            l.onDeviceLost(id, EndpointId{});
-        });
+        notifyOnUiThread([id = desired_output_id_](IAudioEngineListener& l) { l.onDeviceLost(id, EndpointId{}); });
         stop();
     }
     else if (device_id == desired_input_id_ && !follow_default_capture_)
     {
         LogDebug("onDeviceRemoved: active capture %s removed, stopping safely", device_id.c_str());
-        notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) {
-            l.onDeviceLost(id, EndpointId{});
-        });
+        notifyOnUiThread([id = desired_input_id_](IAudioEngineListener& l) { l.onDeviceLost(id, EndpointId{}); });
         stop();
     }
 
     // An endpoint disappeared — refresh the UI lists.
-    notifyOnUiThread([](IAudioEngineListener& l) {
-        l.onDeviceListChanged();
-    });
+    notifyOnUiThread([](IAudioEngineListener& l) { l.onDeviceListChanged(); });
 }
 
 void AudioEngineImpl::onDefaultDeviceChanged(int flow, const std::string& device_id)
@@ -3065,7 +3073,7 @@ void AudioEngineImpl::onDefaultDeviceChanged(int flow, const std::string& device
     if (flow != static_cast<int>(eRender))
         return;
 
-    std::lock_guard lk {control_mutex_};
+    std::lock_guard lk{control_mutex_};
     if (!running_.load())
         return;
 
@@ -3076,9 +3084,7 @@ void AudioEngineImpl::onDefaultDeviceChanged(int flow, const std::string& device
         if (!resolved_capture.empty())
         {
             LogDebug("onDefaultDeviceChanged: default changed to output device, conflict detected");
-            notifyOnUiThread([id = resolved_capture](IAudioEngineListener& l) {
-                l.onSameDeviceConflict(id);
-            });
+            notifyOnUiThread([id = resolved_capture](IAudioEngineListener& l) { l.onSameDeviceConflict(id); });
             stop();
             return;
         }
@@ -3090,9 +3096,7 @@ void AudioEngineImpl::onDefaultDeviceChanged(int flow, const std::string& device
     else if (device_id == desired_output_id_ && device_id == desired_input_id_)
     {
         // Specific endpoint selection now coincides with output due to some external change.
-        notifyOnUiThread([id = device_id](IAudioEngineListener& l) {
-            l.onSameDeviceConflict(id);
-        });
+        notifyOnUiThread([id = device_id](IAudioEngineListener& l) { l.onSameDeviceConflict(id); });
         stop();
     }
 }
@@ -3151,6 +3155,9 @@ void AudioEngineImpl::engineThreadLoop()
     {
         target_fill = std::min<std::size_t>(target_fill, output_ring_buffer_->capacity() / 2);
     }
+    // Output bridge target for latencyProfile(): the backpressure fill this
+    // loop paces the chain against (pure-WASAPI mode's queued output).
+    cached_output_bridge_target_.store(static_cast<int>(target_fill), std::memory_order_relaxed);
 
     // When the ring is full enough, wait for the render thread to drain. Poll at a
     // fraction of the block period so room is picked up promptly; the poll is only
@@ -3160,8 +3167,7 @@ void AudioEngineImpl::engineThreadLoop()
 
     while (engine_thread_running_.load(std::memory_order_acquire))
     {
-        if (output_ring_buffer_ != nullptr &&
-            output_ring_buffer_->available() >= target_fill)
+        if (output_ring_buffer_ != nullptr && output_ring_buffer_->available() >= target_fill)
         {
             // Output ring has enough queued; let the hardware clock drain it.
             std::this_thread::sleep_for(poll);
@@ -3174,8 +3180,7 @@ void AudioEngineImpl::engineThreadLoop()
         {
             // No output ring to pace against (should not happen in loopback mode);
             // fall back to nominal block-period pacing to avoid a busy spin.
-            std::this_thread::sleep_for(
-                std::chrono::microseconds(static_cast<std::int64_t>(block * 1'000'000.0 / sr)));
+            std::this_thread::sleep_for(std::chrono::microseconds(static_cast<std::int64_t>(block * 1'000'000.0 / sr)));
         }
     }
 

@@ -8,8 +8,7 @@
 namespace jyglobalvst::testing {
 
 class US4BufferChangeTest : public LoopbackFixture
-{
-};
+{};
 
 TEST_F(US4BufferChangeTest, SetBufferSizeUpdatesValue)
 {
@@ -44,20 +43,25 @@ TEST_F(US4BufferChangeTest, LatencyProfileReflectsBufferSize)
     // Allow device to settle.
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    auto profile_256 = engine()->latencyProfile();
-    EXPECT_GT(profile_256.total_round_trip_ms, 0.0f);
-
     engine()->setBufferSize(512);
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     auto profile_512 = engine()->latencyProfile();
     EXPECT_GT(profile_512.total_round_trip_ms, 0.0f);
 
-    // Larger buffer should generally yield >= latency, but JUCE
-    // abstraction layers may not change immediately. We just verify
-    // the profile is structurally valid and was recently updated.
+    // Buffer-responsive: doubling the buffer queues more frames in the output
+    // bridge, so the reported round trip must grow with it.
+    engine()->setBufferSize(1024);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    auto profile_1024 = engine()->latencyProfile();
+    EXPECT_GT(profile_1024.total_round_trip_ms, 0.0f);
+    EXPECT_GT(profile_1024.total_round_trip_ms, profile_512.total_round_trip_ms)
+        << "Round-trip latency should grow when the buffer size doubles";
+
+    // The profile was recently updated (not a stale cached readout).
     auto now = std::chrono::steady_clock::now();
-    auto age = std::chrono::duration_cast<std::chrono::seconds>(now - profile_512.last_updated).count();
+    auto age = std::chrono::duration_cast<std::chrono::seconds>(now - profile_1024.last_updated).count();
     EXPECT_LE(std::abs(age), 5);
 
     StopEngine();

@@ -11,8 +11,7 @@
 namespace jyglobalvst::testing {
 
 class US1SinglePluginRoutingTest : public LoopbackFixture
-{
-};
+{};
 
 TEST_F(US1SinglePluginRoutingTest, AddPluginBumpsChainRevision)
 {
@@ -104,7 +103,10 @@ TEST_F(US1SinglePluginRoutingTest, LatencyProfileReflectsDeviceLatency)
     const auto latency = engine()->latencyProfile();
     EXPECT_GE(latency.capture_ms, 0.0f) << "Capture latency should be non-negative";
     EXPECT_GE(latency.output_ms, 0.0f) << "Output latency should be non-negative";
-    EXPECT_EQ(latency.total_round_trip_ms, latency.capture_ms + latency.output_ms);
+    // The total is exactly the sum of every reported component — not just the
+    // capture/output legs.
+    EXPECT_EQ(latency.total_round_trip_ms,
+              latency.capture_ms + latency.resample_ms + latency.plugin_chain_ms + latency.output_ms);
 
     StopEngine();
 }
