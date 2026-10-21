@@ -6,7 +6,7 @@
 ## Manual build command:
 ##   wix build -arch x64 -d "JyGlobalVSTExe=<path>" -d "AudioEngineDll=<path>"
 ##     -d "ProductVersion=<version>" -out GlobalVSTHost-<version>-x64.msi
-##     -ext WixUIExtension -ext WixUtilExtension src/installer/wix/product.wxs
+##     -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext src/installer/wix/product.wxs
 ##
 
 find_program(WIX_TOOL wix)
@@ -26,7 +26,7 @@ message(STATUS "WiX Toolset found: ${WIX_TOOL}")
 # DLL: build/lib/Release/jyglobalvst_audio_engine.dll
 # CMD: wix build -arch x64 -d "JyGlobalVSTExe=..." -d "AudioEngineDll=..."
 #      -d "ProductVersion=${PROJECT_VERSION}" -out build/GlobalVSTHost-${PROJECT_VERSION}-x64.msi
-#      -ext WixUIExtension -ext WixUtilExtension src/installer/wix/product.wxs
+#      -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext src/installer/wix/product.wxs
 
 message(STATUS "To build MSI after Release binaries are ready:")
 message(STATUS "  wix build -arch x64 \\")
@@ -34,5 +34,5 @@ message(STATUS "    -d \"JyGlobalVSTExe=build/src/tray-app/jyglobalvst_tray_arte
 message(STATUS "    -d \"AudioEngineDll=build/lib/Release/jyglobalvst_audio_engine.dll\" \\")
 message(STATUS "    -d \"ProductVersion=${PROJECT_VERSION}\" \\")
 message(STATUS "    -out build/GlobalVSTHost-${PROJECT_VERSION}-x64.msi \\")
-message(STATUS "    -ext WixUIExtension -ext WixUtilExtension \\")
+message(STATUS "    -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext \\")
 message(STATUS "    src/installer/wix/product.wxs")

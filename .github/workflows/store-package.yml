@@ -60,6 +60,11 @@ jobs:
       - name: Install CMake
         uses: lukka/get-cmake@latest
 
+      # FindWebView2.cmake globs the current-user NuGet folder for the static
+      # loader; hosted runners do not ship Microsoft.Web.WebView2.
+      - name: Install WebView2 SDK (NuGet)
+        run: nuget install Microsoft.Web.WebView2 -Version 1.0.1901.177 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages" -NonInteractive
+
       - name: Build Store package
         id: build
         shell: pwsh
