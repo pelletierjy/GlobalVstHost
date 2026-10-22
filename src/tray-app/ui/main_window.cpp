@@ -1109,13 +1109,14 @@ private:
 class StatusBarComponent : public juce::Component
 {
 public:
-    StatusBarComponent(juce::Label* status, juce::Label* latency, juce::Label* cpu_label, juce::Component* cpu_bar)
-        : status_(status), latency_(latency), cpu_label_(cpu_label), cpu_bar_(cpu_bar)
+    StatusBarComponent(juce::Label* status, juce::Label* latency, juce::Label* cpu_label, juce::Component* cpu_bar, juce::Component* spinner)
+        : status_(status), latency_(latency), cpu_label_(cpu_label), cpu_bar_(cpu_bar), spinner_(spinner)
     {
         addAndMakeVisible(status_);
         addAndMakeVisible(latency_);
         addAndMakeVisible(cpu_label_);
         addAndMakeVisible(cpu_bar_);
+        addAndMakeVisible(spinner_);
     }
 
     void resized() override
@@ -1125,6 +1126,8 @@ public:
         fb.flexDirection = juce::FlexBox::Direction::row;
         fb.alignItems = juce::FlexBox::AlignItems::stretch;
         fb.items.add(juce::FlexItem(*status_).withFlex(1));
+        fb.items.add(juce::FlexItem().withWidth(8));
+        fb.items.add(juce::FlexItem(*spinner_).withMinWidth(18).withWidth(18));
         fb.items.add(juce::FlexItem().withWidth(8));
         fb.items.add(juce::FlexItem(*latency_).withMinWidth(270).withWidth(270));
         fb.items.add(juce::FlexItem().withWidth(8));
@@ -1139,6 +1142,7 @@ private:
     juce::Label* latency_;
     juce::Label* cpu_label_;
     juce::Component* cpu_bar_;
+    juce::Component* spinner_;
 };
 
 }  // namespace
@@ -1362,6 +1366,7 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     : juce::DocumentWindow("Global VST Host", kBgDeep, juce::DocumentWindow::closeButton), engine_(std::move(engine))
 {
     StartupLog("constructor start");
+    juce::MouseCursor::showWaitCursor();
     setUsingNativeTitleBar(true);
     setResizable(true, true);
     setResizeLimits(600, 480, 1920, 1080);
@@ -1369,6 +1374,9 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
 
     buildUI();
     StartupLog("buildUI done");
+    busy_spinner_.setActive(true);   // visible from the first painted frame; cleared on the first timer tick
+    if (auto* top = getTopLevelComponent())
+        top->setMouseCursor(juce::MouseCursor::WaitCursor);
 
     engine_->setListener(this);
     StartupLog("setListener done");
@@ -1471,6 +1479,7 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
                     input_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
                     // Restart-only-if-running guard: no-op while startup still
                     // has the engine stopped.
+                    UiBusyScope ui_busy(busy_spinner_);
                     EngineSettingsGuard settings_guard(engine_.get());
                     engine_->selectInput(remembered);
                     input_restored = true;
@@ -1489,6 +1498,7 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
                 {
                     output_selector_->setSelectedItemIndex(i, juce::dontSendNotification);
                     // Same guard as the input fallback above.
+                    UiBusyScope ui_busy(busy_spinner_);
                     EngineSettingsGuard settings_guard(engine_.get());
                     engine_->selectOutput(remembered);
                     output_restored = true;
@@ -2272,7 +2282,7 @@ void MainWindow::buildUI()
     auto* body = new BodyComponent(device_panel, chain_panel, meter_panel, spectrum_panel);
 
     auto* status_bar =
-        new StatusBarComponent(status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get());
+        new StatusBarComponent(status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get(), &busy_spinner_);
 
     auto* content = new MainContentComponent(header, body, plugin_panel, status_bar);
     content_root_ = content;
@@ -2458,6 +2468,7 @@ void MainWindow::buttonClicked(juce::Button* button)
             // Stop around the panel so the engine's internal restart logic
             // stays dormant; the guard performs the single restart at scope
             // exit, and audio_running_ below then observes the live state.
+            UiBusyScope ui_busy(busy_spinner_);
             EngineSettingsGuard settings_guard(engine_.get());
             engine_->openAsioControlPanel();
         }
@@ -2569,6 +2580,7 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         {
             // Stop the live transport for the whole switch (exclusive toggle,
             // buffer size, output device) and restart once at scope exit.
+            UiBusyScope ui_busy(busy_spinner_);
             EngineSettingsGuard settings_guard(engine_.get());
             current_transport_mode_ = mode;
             if (mode == TransportMode::Wasapi)
@@ -2629,6 +2641,7 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                 // Guard the transport-affecting mutations; the engine restarts
                 // (once) at scope exit, so the device-rate reads and the
                 // autosave below observe the live state again.
+                UiBusyScope ui_busy(busy_spinner_);
                 EngineSettingsGuard settings_guard(engine_.get());
 
                 // T022: Validate device mismatch before selecting input
@@ -2695,6 +2708,7 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
                 // Guard the transport-affecting mutations; the engine restarts
                 // (once) at scope exit, so the device-rate reads and the
                 // autosave below observe the live state again.
+                UiBusyScope ui_busy(busy_spinner_);
                 EngineSettingsGuard settings_guard(engine_.get());
 
                 // T022: Validate device mismatch before selecting output
@@ -2754,6 +2768,7 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         if (idx >= 0 && idx < static_cast<int>(asio_device_names_.size()))
         {
             {
+                UiBusyScope ui_busy(busy_spinner_);
                 EngineSettingsGuard settings_guard(engine_.get());
                 engine_->selectOutput(asio_device_names_[idx]);
             }
@@ -2778,6 +2793,7 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
     {
         const int pair_index = asio_pair_selector_->getSelectedItemIndex();
         {
+            UiBusyScope ui_busy(busy_spinner_);
             EngineSettingsGuard settings_guard(engine_.get());
             engine_->setAsioOutputPair(pair_index * 2);
         }
@@ -2790,6 +2806,7 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
             {
                 // The guard restarts at scope exit even when setBufferSize
                 // throws; the catch below reverts the selector.
+                UiBusyScope ui_busy(busy_spinner_);
                 EngineSettingsGuard settings_guard(engine_.get());
                 engine_->setBufferSize(buffer_selector_->getSelectedId());
             }
@@ -2808,6 +2825,7 @@ void MainWindow::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
         if (rate > 0)
         {
             {
+                UiBusyScope ui_busy(busy_spinner_);
                 EngineSettingsGuard settings_guard(engine_.get());
                 engine_->setSampleRate(static_cast<double>(rate));
             }
@@ -3125,7 +3143,7 @@ void MainWindow::handleAbout()
 
     // The running app is the authority; the literal only covers a host with no
     // JUCEApplication instance (unit-test harnesses).
-    juce::String version = "1.3.3.0";
+    juce::String version = "1.3.4.0";
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 
@@ -3357,6 +3375,15 @@ void MainWindow::timerCallback()
     if (++timer_call_count <= 20)
     {
         StartupLog(juce::String("timerCallback #" + juce::String(timer_call_count)).toStdString().c_str());
+    }
+
+    if (startup_busy_)
+    {
+        startup_busy_ = false;
+        busy_spinner_.setActive(false);
+        juce::MouseCursor::hideWaitCursor();
+        if (auto* top = getTopLevelComponent())
+            top->setMouseCursor(juce::MouseCursor::NormalCursor);
     }
 
     // Check if initial plugin scan has completed

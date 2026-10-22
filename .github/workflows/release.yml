@@ -63,9 +63,23 @@ jobs:
       - name: Build Release
         run: cmake --build build --config Release --parallel
 
-      - name: Install WiX Toolset v4
+      - name: Install WiX Toolset
         shell: pwsh
         run: dotnet tool install --global wix
+
+      # WiX v7 refuses every command until the OSMF EULA is accepted (WIX7015).
+      # Official per-user acceptance for CI: writes a marker for later wix calls.
+      # Note: the OSMF fee applies to organizations with >$10k annual revenue;
+      # accepting here represents the repository owner's declaration.
+      - name: Accept WiX OSMF EULA
+        shell: pwsh
+        run: wix eula accept wix7
+
+      - name: Install WiX extensions
+        shell: pwsh
+        run: |
+          wix extension add -g WixToolset.UI.wixext
+          wix extension add -g WixToolset.Util.wixext
 
       - name: Build MSI
         shell: pwsh
@@ -76,7 +90,7 @@ jobs:
             -d "AudioEngineDll=build/lib/Release/jyglobalvst_audio_engine.dll" `
             -d "ProductVersion=$version" `
             -out "build/GlobalVSTHost-$version-x64.msi" `
-            -ext WixUIExtension -ext WixUtilExtension `
+            -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
             src/installer/wix/product.wxs
 
       - name: Compute SHA256

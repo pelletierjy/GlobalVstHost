@@ -7,6 +7,7 @@
 #include "assistant_dialog.h"
 #include "catalog_dialog.h"
 #include "chain_editor.h"
+#include "busy_spinner.h"
 #include "custom_look_and_feel.h"
 #include "meter_panel.h"
 #include "presets/autosave.h"
@@ -203,6 +204,8 @@ private:
     LocalStateStore local_state_store_;
     RoamingSettingsStore roaming_settings_store_;
     bool initializing_ {true};
+    // Spinner + wait cursor active from the constructor until the first timer tick.
+    bool startup_busy_ {true};
 
     // UI elements
     std::unique_ptr<juce::ComboBox> transport_mode_selector_;
@@ -249,6 +252,9 @@ private:
     std::unique_ptr<juce::Label> output_meter_label_;
     std::unique_ptr<juce::Label> plugin_slot_label_;
     std::unique_ptr<juce::Label> status_label_;
+
+    // Animated busy indicator (status bar) for settings changes and startup.
+    BusySpinner busy_spinner_;
 
     // Labels (now owned as members for visibility toggling).
     std::unique_ptr<juce::Label> transport_label_;
