@@ -46,7 +46,7 @@ public:
 #if defined(JYGLOBALVST_VERSION_STRING)
         return JYGLOBALVST_VERSION_STRING;
 #else
-        return "1.3.4.0";
+        return "1.4.0.0";
 #endif
     }
 
