@@ -49,14 +49,6 @@ private:
     bool sleeping_ {false};
 };
 
-// Power button showing "ON"/"OFF" text. Styled identically to plugin bypass buttons.
-class PowerButton : public juce::TextButton
-{
-public:
-    PowerButton();
-    void setPowerState(bool running);
-};
-
 // Reset button drawn as a circular arrow (↻ style).
 class ResetButton : public juce::Button
 {
@@ -137,8 +129,8 @@ public:
     // updates the engine, persists it, and optionally syncs the main slider display.
     void applyMasterVolume(float gain, bool updateMainSlider);
 
-    // Starts or stops the audio engine from any source (toolbar button, tray menu,
-    // tray popup): updates engine state, the toolbar button text, and the status label.
+    // Starts or stops the audio engine from any source (mute button, tray menu,
+    // tray popup): updates engine state, the mute button visual, and the status label.
     void setAudioRunning(bool run);
 
 private:
@@ -171,7 +163,7 @@ private:
     void applyThemeChange(CustomLookAndFeel::ThemeId id);
     void applyTooltips();
     void saveWindowStateIfNeeded();
-    // Toggles bypass on the plugin behind tray popup button 0 or 1.
+    // Toggles bypass on the plugin behind tray popup button 0, 1 or 2.
     void toggleShortcutBypass(int button_index);
     void updateMuteButtonVisual(bool muted);
 
@@ -232,7 +224,6 @@ private:
         WasapiExclusive = 3,
     };
     TransportMode current_transport_mode_ {TransportMode::Wasapi};
-    std::unique_ptr<PowerButton> audio_toggle_;
     std::unique_ptr<juce::TextButton> asio_settings_button_;
     std::unique_ptr<juce::TextButton> save_preset_button_;
     std::unique_ptr<juce::TextButton> load_preset_button_;
@@ -242,7 +233,6 @@ private:
     std::unique_ptr<juce::TextButton> assistant_button_;
     std::unique_ptr<juce::Slider> volume_slider_;
     std::unique_ptr<juce::TextButton> mute_button_;
-    float pre_mute_volume_ {1.0f};
     std::unique_ptr<ResetButton> reset_engine_button_;
     std::unique_ptr<juce::Label> latency_label_;
     std::unique_ptr<juce::Label> cpu_label_;

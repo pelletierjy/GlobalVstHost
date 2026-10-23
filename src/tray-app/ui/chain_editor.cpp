@@ -126,7 +126,7 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
 
     shortcut_button_ = std::make_unique<juce::TextButton>(slot_.shortcut ? "SHORTCUT_SET" : "SHORTCUT");
     shortcut_button_->setTooltip(slot_.shortcut    ? i18n::tr("Remove this plugin's tray shortcut")
-                                 : shortcuts_full_ ? i18n::tr("Two tray shortcuts are already assigned")
+                                 : shortcuts_full_ ? i18n::tr("Three tray shortcuts are already assigned")
                                                    : i18n::tr("Give this plugin a tray shortcut button"));
     shortcut_button_->addListener(this);
     addAndMakeVisible(shortcut_button_.get());
@@ -169,7 +169,7 @@ ChainSlotRow::ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSn
         tag_label_->setColour(juce::Label::textColourId, kTextDim);
     }
 
-    // A row that holds no shortcut cannot claim one while both are taken.
+    // A row that holds no shortcut cannot claim one while all are taken.
     if (!slot_.shortcut && shortcuts_full_)
     {
         shortcut_button_->setEnabled(false);
@@ -250,8 +250,8 @@ void ChainSlotRow::buttonClicked(juce::Button* button)
         else
         {
             // Re-count from the fresh snapshot rather than trusting the flag
-            // captured at construction; the engine rejects a third assignment
-            // anyway, this just keeps the click from being a silent no-op.
+            // captured at construction; the engine enforces the cap anyway, this
+            // just keeps the click from being a silent no-op.
             const int assigned = static_cast<int>(
                 std::count_if(snapshot.slots.begin(), snapshot.slots.end(),
                               [](const ChainSlotSnapshot& s) { return s.shortcut; }));
@@ -262,7 +262,7 @@ void ChainSlotRow::buttonClicked(juce::Button* button)
             }
             else
             {
-                LogDebug("  -> Shortcut button clicked but both shortcuts are taken");
+                LogDebug("  -> Shortcut button clicked but all shortcut slots are taken");
             }
         }
     }

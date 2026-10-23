@@ -474,6 +474,9 @@ void AudioEngineImpl::stop()
     work_buffer_.setSize(0, 0);
     resetOutputResamplingState();
     plugin_chain_->releaseResources();
+    // CPU% is only measured inside the audio callback (which cannot run after
+    // removeAudioCallback above); zero it so restarts start from 0 as well.
+    instantaneous_cpu_pct_.store(0.0f);
     LogDebug("stop() completed");
 }
 
@@ -1294,7 +1297,7 @@ void AudioEngineImpl::setSlotShortcut(int position, bool enabled)
         return;
     }
 
-    // A rejected assignment (the two shortcuts are already taken) leaves the
+    // A rejected assignment (the shortcut cap is already reached) leaves the
     // chain untouched, so there is nothing for the UI to redraw.
     if (plugin_chain_->setShortcut(position, enabled))
     {
@@ -1871,7 +1874,7 @@ void AudioEngineImpl::loadChainFromJson(const nlohmann::json& doc, std::vector<M
 void AudioEngineImpl::assignDefaultShortcuts()
 {
     const auto snap = plugin_chain_->snapshot();
-    for (const auto& uid : {builtin::NIGHTTIME_UID, builtin::EQ_UID})
+    for (const auto& uid : {builtin::NIGHTTIME_UID, builtin::EQ_UID, builtin::COMPRESSOR_UID})
     {
         for (const auto& slot : snap)
         {
@@ -2120,9 +2123,18 @@ LatencyProfile AudioEngineImpl::latencyProfile() const
 CpuStats AudioEngineImpl::cpuStats() const
 {
     CpuStats s;
+    s.xrun_count_session = xrun_count_.load();
+    // A stopped engine has no audio callbacks, so there is no live measurement
+    // to report. Return zeros instead of the last snapshot: the final sample is
+    // taken while the callback races teardown and can sit at (or above) 100%,
+    // which would otherwise freeze the indicator there for the whole muted
+    // period. Mirrors latencyProfile()'s "no stale readout while stopped" rule.
+    if (!running_.load(std::memory_order_relaxed))
+    {
+        return s;
+    }
     s.instantaneous_pct = instantaneous_cpu_pct_.load();
     s.rolling_1s_pct = s.instantaneous_pct;
-    s.xrun_count_session = xrun_count_.load();
     s.warning_active = s.rolling_1s_pct >= 5.0f;
     return s;
 }

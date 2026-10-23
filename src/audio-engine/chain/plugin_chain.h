@@ -130,7 +130,7 @@ public:
 
     // --- Per-slot tray shortcut (UI thread only) -------------------------
     // At most this many slots may own a tray popup quick-toggle button.
-    static constexpr int kMaxShortcuts = 2;
+    static constexpr int kMaxShortcuts = 3;
     // Returns false (leaving the chain untouched) when enabling would exceed
     // kMaxShortcuts, or when position is out of range.
     bool setShortcut(int position, bool enabled);
