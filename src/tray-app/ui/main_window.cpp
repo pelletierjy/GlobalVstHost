@@ -85,7 +85,9 @@ class TrayVolumeContent : public juce::Component
 {
 public:
     // The tray popup hosts at most this many user-assigned quick-toggle buttons.
-    static constexpr int kMaxShortcutButtons = 2;
+    // (The engine start/stop control moved to the mute button, so the slot it used
+    // to occupy is now free for a third mapped plugin.)
+    static constexpr int kMaxShortcutButtons = 3;
 
     // One popup button: a two-letter label taken from the slot's tag or name,
     // plus whether the plugin is currently active (i.e. not bypassed).
@@ -99,13 +101,11 @@ public:
     TrayVolumeContent(float initial_gain,
                       bool audio_running,
                       std::function<void(float)> on_change,
-                      std::function<bool()> on_toggle_audio,
                       std::function<void()> on_mute_toggle,
                       std::function<void(int)> on_toggle_shortcut,
                       const std::vector<ShortcutInfo>& shortcuts)
-        : on_change_(std::move(on_change)), on_toggle_audio_(std::move(on_toggle_audio)),
-          on_mute_toggle_(std::move(on_mute_toggle)), on_toggle_shortcut_(std::move(on_toggle_shortcut)),
-          pre_mute_volume_(initial_gain),
+        : on_change_(std::move(on_change)), on_mute_toggle_(std::move(on_mute_toggle)),
+          on_toggle_shortcut_(std::move(on_toggle_shortcut)), is_muted_(!audio_running),
           shortcut_count_(juce::jmin(static_cast<int>(shortcuts.size()), kMaxShortcutButtons))
     {
         title_.setText(i18n::tr("Master Volume"), juce::dontSendNotification);
@@ -118,26 +118,10 @@ public:
         slider_.setNumDecimalPlacesToDisplay(2);
         slider_.setValue(initial_gain, juce::dontSendNotification);
         slider_.onValueChange = [this]() {
+            // Volume is independent of mute now: the mute button stops/starts the
+            // engine rather than riding the master gain to zero.
             if (on_change_)
-            {
-                float new_val = static_cast<float>(slider_.getValue());
-                on_change_(new_val);
-                if (new_val > 0.0f && is_muted_)
-                {
-                    is_muted_ = false;
-                    updateMuteButtonVisual();
-                    pre_mute_volume_ = new_val;
-                }
-                else if (new_val == 0.0f)
-                {
-                    is_muted_ = true;
-                    updateMuteButtonVisual();
-                }
-                else
-                {
-                    pre_mute_volume_ = new_val;
-                }
-            }
+                on_change_(static_cast<float>(slider_.getValue()));
         };
         addAndMakeVisible(slider_);
 
@@ -153,7 +137,8 @@ public:
         addAndMakeVisible(input_icon_);
         addAndMakeVisible(output_icon_);
 
-        is_muted_ = (initial_gain <= 0.0f);
+        // "Muted" mirrors the engine transport: the mute button stops and starts
+        // the engine, so a stopped engine reads as muted regardless of the volume.
         updateMuteButtonVisual();
         mute_button_.setClickingTogglesState(true);
         mute_button_.onClick = [this]() {
@@ -179,18 +164,6 @@ public:
             addAndMakeVisible(b);
         }
 
-        audio_button_.setButtonText(audio_running ? "ON" : "OFF");
-        audio_button_.setToggleState(audio_running, juce::dontSendNotification);
-        audio_button_.onClick = [this]() {
-            if (on_toggle_audio_)
-            {
-                const bool now_running = on_toggle_audio_();
-                audio_button_.setToggleState(now_running, juce::dontSendNotification);
-                audio_button_.setButtonText(now_running ? "ON" : "OFF");
-            }
-        };
-        addAndMakeVisible(audio_button_);
-
         // Height allows for the in/out glyph strip without shortening the meters.
         setSize(160, 300);
     }
@@ -204,13 +177,13 @@ public:
         auto button_area = b.removeFromBottom(26);
         b.removeFromBottom(6);
 
-        // Layout buttons in button_area
+        // Layout the shortcut quick-toggles + mute button across the bottom row.
         juce::FlexBox button_fb;
         button_fb.flexDirection = juce::FlexBox::Direction::row;
-        button_fb.items.add(juce::FlexItem(audio_button_).withFlex(1.0f));
         for (int i = 0; i < shortcut_count_; ++i)
         {
-            button_fb.items.add(juce::FlexItem().withWidth(4));
+            if (i > 0)
+                button_fb.items.add(juce::FlexItem().withWidth(4));
             button_fb.items.add(juce::FlexItem(shortcut_buttons_[static_cast<std::size_t>(i)]).withFlex(1.0f));
         }
         button_fb.items.add(juce::FlexItem().withWidth(4));
@@ -271,7 +244,7 @@ public:
         updateMuteButtonVisual();
     }
 
-    // Index is the popup button, 0 or 1, not a chain position.
+    // Index is the popup button (0 .. kMaxShortcutButtons-1), not a chain position.
     void setShortcutActive(int index, bool active)
     {
         if (index >= 0 && index < shortcut_count_)
@@ -283,26 +256,6 @@ public:
     int shortcutCount() const noexcept
     {
         return shortcut_count_;
-    }
-
-    void setAudioRunning(bool running)
-    {
-        audio_button_.setToggleState(running, juce::dontSendNotification);
-    }
-
-    bool isMuted() const
-    {
-        return is_muted_;
-    }
-
-    void setPreMuteVolume(float vol)
-    {
-        pre_mute_volume_ = vol;
-    }
-
-    float getPreMuteVolume() const
-    {
-        return pre_mute_volume_;
     }
 
 private:
@@ -318,7 +271,6 @@ private:
     juce::Slider slider_;
     juce::ToggleButton mute_button_;
     std::array<juce::ToggleButton, kMaxShortcutButtons> shortcut_buttons_;
-    juce::ToggleButton audio_button_;
     std::unique_ptr<MeterPanel> meter_input_l_;
     std::unique_ptr<MeterPanel> meter_input_r_;
     std::unique_ptr<MeterPanel> meter_output_l_;
@@ -326,11 +278,9 @@ private:
     SignalDirectionIcon input_icon_{true};
     SignalDirectionIcon output_icon_{false};
     std::function<void(float)> on_change_;
-    std::function<bool()> on_toggle_audio_;
     std::function<void()> on_mute_toggle_;
     std::function<void(int)> on_toggle_shortcut_;
     bool is_muted_{false};
-    float pre_mute_volume_;
     int shortcut_count_{0};
 };
 
@@ -920,18 +870,16 @@ public:
     HeaderComponent(juce::ImageComponent* logo,
                     juce::Label* title,
                     ResetButton* reset,
-                    PowerButton* audio_toggle,
                     SettingsButton* about,
                     juce::Button* energy_saver,
                     juce::TextButton* help,
                     juce::TextButton* assistant)
-        : logo_(logo), title_(title), reset_(reset), audio_toggle_(audio_toggle), about_(about),
+        : logo_(logo), title_(title), reset_(reset), about_(about),
           energy_saver_(energy_saver), help_(help), assistant_(assistant)
     {
         addAndMakeVisible(logo_);
         addAndMakeVisible(title_);
         addAndMakeVisible(reset_);
-        addAndMakeVisible(audio_toggle_);
         addAndMakeVisible(about_);
         addAndMakeVisible(energy_saver_);
         addAndMakeVisible(help_);
@@ -950,8 +898,6 @@ public:
         fb.items.add(juce::FlexItem().withWidth(8));
         fb.items.add(juce::FlexItem(*reset_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
-        fb.items.add(juce::FlexItem(*audio_toggle_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
-        fb.items.add(juce::FlexItem().withWidth(6));
         fb.items.add(juce::FlexItem(*about_).withMinWidth(40).withWidth(40).withMinHeight(28).withHeight(28));
         fb.items.add(juce::FlexItem().withWidth(6));
         // Green leaf toggle, sits immediately left of the "AI" button.
@@ -967,7 +913,6 @@ private:
     juce::ImageComponent* logo_;
     juce::Label* title_;
     ResetButton* reset_;
-    PowerButton* audio_toggle_;
     SettingsButton* about_;
     juce::Button* energy_saver_;
     juce::TextButton* help_;
@@ -1259,19 +1204,6 @@ void LeafButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool
     g.strokePath(rib, juce::PathStrokeType(1.2f));
 }
 
-PowerButton::PowerButton() : juce::TextButton("ON")
-{
-    setTooltip(i18n::tr("Start/Stop audio"));
-    setClickingTogglesState(true);
-    setToggleState(false, juce::dontSendNotification);
-}
-
-void PowerButton::setPowerState(bool running)
-{
-    setToggleState(running, juce::dontSendNotification);
-    setButtonText(running ? "ON" : "OFF");
-}
-
 ResetButton::ResetButton() : juce::Button("Reset")
 {
     setTooltip(i18n::tr("Reset engine"));
@@ -1417,10 +1349,11 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
         engine_->setBypass(0, true);
         engine_->setBypass(1, true);
         engine_->setBypass(2, true);
-        // Give the tray popup its two default quick-toggle buttons; the user can
+        // Give the tray popup its three default quick-toggle buttons; the user can
         // reassign them from the chain editor.
         engine_->setSlotShortcut(0, true);
         engine_->setSlotShortcut(1, true);
+        engine_->setSlotShortcut(2, true);
         StartupLog("Default plugins loaded (EQ, Volume Leveler, and Compressor in bypass mode)");
     }
 
@@ -1900,24 +1833,8 @@ void MainWindow::showTrayVolumePopup()
         gain,
         audio_running_,
         [this](float g) { applyMasterVolume(g, true); },
-        [this]() -> bool {
-            setAudioRunning(!audio_running_);
-            return audio_running_;
-        },
-        [this]() {
-            if (volume_slider_ == nullptr)
-                return;
-            const float current = static_cast<float>(volume_slider_->getValue());
-            if (current > 0.0f)
-            {
-                pre_mute_volume_ = current;
-                applyMasterVolume(0.0f, true);
-            }
-            else
-            {
-                applyMasterVolume(pre_mute_volume_, true);
-            }
-        },
+        // The popup's mute button drives the engine transport: stop = mute.
+        [this]() { setAudioRunning(!audio_running_); },
         [this](int index) { toggleShortcutBypass(index); },
         buildShortcutInfos(engine_->snapshotChain()));
     content->setLookAndFeel(&custom_laf_);
@@ -2100,25 +2017,22 @@ void MainWindow::buildUI()
     }
     vst_rate_selector_->addListener(this);
 
-    // --- Audio toggle (Power icon) ----------------------------------------
-    audio_toggle_ = std::make_unique<PowerButton>();
-    audio_toggle_->addListener(this);
-
     // --- Master volume slider ----------------------------------------------
     volume_slider_ = std::make_unique<juce::Slider>(juce::Slider::LinearVertical, juce::Slider::NoTextBox);
     volume_slider_->setRange(0.0, 1.0, 0.0);
     // Restore the persisted master volume from the previous session.
     const float persisted_volume = roaming_settings_store_.load().master_volume;
     volume_slider_->setValue(persisted_volume, juce::dontSendNotification);
-    pre_mute_volume_ = persisted_volume;
     volume_slider_->setNumDecimalPlacesToDisplay(2);
     volume_slider_->addListener(this);
     engine_->setMasterVolume(persisted_volume);
 
     // --- Mute button -------------------------------------------------------
+    // Mute IS the transport control: it stops and starts the engine rather than
+    // riding the master gain to zero, so it starts life showing the stopped state.
     mute_button_ = std::make_unique<juce::TextButton>();
     mute_button_->addListener(this);
-    updateMuteButtonVisual(persisted_volume <= 0.0f);
+    updateMuteButtonVisual(!audio_running_);
 
     // --- Reset engine button (Icon) -----------------------------------------------
     reset_engine_button_ = std::make_unique<ResetButton>();
@@ -2236,7 +2150,6 @@ void MainWindow::buildUI()
     auto* header = new HeaderComponent(logo_comp,
                                        title_label_,
                                        reset_engine_button_.get(),
-                                       audio_toggle_.get(),
                                        about_button_.get(),
                                        energy_saver_button_.get(),
                                        help_button_.get(),
@@ -2427,24 +2340,11 @@ void MainWindow::refreshDeviceLists()
 
 void MainWindow::buttonClicked(juce::Button* button)
 {
-    if (button == audio_toggle_.get())
+    if (button == mute_button_.get())
     {
+        // Mute stops/starts the engine — the same transport the old power button
+        // drove, so that button no longer exists in the toolbar or the popup.
         setAudioRunning(!audio_running_);
-    }
-    else if (button == mute_button_.get())
-    {
-        const float current = static_cast<float>(volume_slider_->getValue());
-        if (current > 0.0f)
-        {
-            pre_mute_volume_ = current;
-            applyMasterVolume(0.0f, true);
-            updateMuteButtonVisual(true);
-        }
-        else
-        {
-            applyMasterVolume(pre_mute_volume_, true);
-            updateMuteButtonVisual(false);
-        }
     }
     else if (button == save_preset_button_.get())
     {
@@ -2458,7 +2358,7 @@ void MainWindow::buttonClicked(juce::Button* button)
     {
         engine_->reset();
         audio_running_ = engine_->isRunning();
-        audio_toggle_->setPowerState(audio_running_);
+        updateMuteButtonVisual(!audio_running_);
         status_label_->setText(i18n::tr("Engine reset"), juce::dontSendNotification);
         updateTrayIconAppearance();
     }
@@ -2473,7 +2373,7 @@ void MainWindow::buttonClicked(juce::Button* button)
             engine_->openAsioControlPanel();
         }
         audio_running_ = engine_->isRunning();
-        audio_toggle_->setPowerState(audio_running_);
+        updateMuteButtonVisual(!audio_running_);
         updateTrayIconAppearance();
     }
     else if (button == about_button_.get())
@@ -2511,14 +2411,9 @@ void MainWindow::sliderValueChanged(juce::Slider* slider)
 {
     if (slider == volume_slider_.get())
     {
-        float new_vol = static_cast<float>(slider->getValue());
-        applyMasterVolume(new_vol, false);
-        if (new_vol > 0.0f)
-        {
-            pre_mute_volume_ = new_vol;
-            if (mute_button_ != nullptr && mute_button_->getToggleState() == false)
-                updateMuteButtonVisual(false);
-        }
+        // Volume no longer influences the mute visual — mute tracks the engine
+        // transport, so a slider at zero does not read as "muted".
+        applyMasterVolume(static_cast<float>(slider->getValue()), false);
     }
 }
 
@@ -2538,17 +2433,20 @@ void MainWindow::setAudioRunning(bool run)
     if (run)
     {
         engine_->start();
-        audio_running_ = true;
-        audio_toggle_->setPowerState(true);
-        status_label_->setText(i18n::tr("Audio running"), juce::dontSendNotification);
+        audio_running_ = engine_->isRunning();
+        status_label_->setText(audio_running_ ? i18n::tr("Audio running") : i18n::tr("Audio stopped"),
+                               juce::dontSendNotification);
     }
     else
     {
         engine_->stop();
         audio_running_ = false;
-        audio_toggle_->setPowerState(false);
         status_label_->setText(i18n::tr("Audio stopped"), juce::dontSendNotification);
     }
+    // The mute button in the main window and in the tray popup is this transport.
+    updateMuteButtonVisual(!audio_running_);
+    if (auto* popup_component = tray_volume_popup_.getComponent())
+        static_cast<TrayVolumeContent*>(popup_component)->setMuted(!audio_running_);
     updateTrayIconAppearance();
     saveSessionState();
 }
@@ -2905,9 +2803,8 @@ void MainWindow::applyTooltips()
     buffer_selector_->setTooltip(
         enabled ? i18n::tr("Audio buffer size in samples (larger = more stable, smaller = lower latency)") : empty);
     vst_rate_selector_->setTooltip(enabled ? i18n::tr("Target sampling rate for the VST plugin chain") : empty);
-    audio_toggle_->setTooltip(enabled ? i18n::tr("Start or stop audio processing") : empty);
     volume_slider_->setTooltip(enabled ? i18n::tr("Master output volume") : empty);
-    mute_button_->setTooltip(enabled ? i18n::tr("Mute / unmute the output") : empty);
+    mute_button_->setTooltip(enabled ? i18n::tr("Mute / unmute audio (stops and restarts the engine)") : empty);
     reset_engine_button_->setTooltip(enabled ? i18n::tr("Reset the audio engine and reload the plugin chain") : empty);
     save_preset_button_->setTooltip(enabled ? i18n::tr("Save the current plugin chain and settings to a file") : empty);
     load_preset_button_->setTooltip(enabled ? i18n::tr("Load a previously saved preset file") : empty);
@@ -3143,7 +3040,7 @@ void MainWindow::handleAbout()
 
     // The running app is the authority; the literal only covers a host with no
     // JUCEApplication instance (unit-test harnesses).
-    juce::String version = "1.3.4.0";
+    juce::String version = "1.4.0.0";
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 
@@ -3342,16 +3239,14 @@ void MainWindow::restoreFromAutosave()
             juce::MessageManager::callAsync([this]() {
                 StartupLog("callAsync: starting audio");
                 engine_->start();
-                if (engine_->isRunning())
+                audio_running_ = engine_->isRunning();
+                updateMuteButtonVisual(!audio_running_);
+                if (audio_running_)
                 {
-                    audio_running_ = true;
-                    audio_toggle_->setPowerState(true);
                     status_label_->setText(i18n::tr("Session restored - audio running"), juce::dontSendNotification);
                 }
                 else
                 {
-                    audio_running_ = false;
-                    audio_toggle_->setPowerState(false);
                     status_label_->setText(i18n::tr("Session restored - failed to start audio"),
                                            juce::dontSendNotification);
                 }
@@ -3465,6 +3360,10 @@ void MainWindow::refreshMeters()
                                   linearToDb(frame.output_rms_l),
                                   linearToDb(frame.output_peak_r),
                                   linearToDb(frame.output_rms_r));
+
+            // Mute is the engine transport; keep the popup's mute button in step
+            // with state changes made elsewhere (reset, suspend/resume, tray menu).
+            popup->setMuted(!audio_running_);
 
             // Keep the shortcut toggles in step with bypass changes made
             // elsewhere while the popup is open. A shortcut assigned or cleared
@@ -3699,7 +3598,7 @@ void MainWindow::onSystemSuspend()
         engine_->stop();
         audio_running_ = false;
         juce::MessageManager::callAsync([this]() {
-            audio_toggle_->setPowerState(false);
+            updateMuteButtonVisual(true);
             status_label_->setText(i18n::tr("Audio stopped (system sleep)"), juce::dontSendNotification);
         });
     }
@@ -3749,9 +3648,10 @@ void MainWindow::restartAfterResume()
         engine_->stop();
     }
     engine_->start();
-    audio_running_ = true;
-    audio_toggle_->setPowerState(true);
-    status_label_->setText(i18n::tr("Audio running (system resume)"), juce::dontSendNotification);
+    audio_running_ = engine_->isRunning();
+    updateMuteButtonVisual(!audio_running_);
+    status_label_->setText(audio_running_ ? i18n::tr("Audio running (system resume)") : i18n::tr("Audio stopped"),
+                           juce::dontSendNotification);
     updateTrayIconAppearance();
 }
 

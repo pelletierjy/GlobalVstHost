@@ -1294,7 +1294,7 @@ void AudioEngineImpl::setSlotShortcut(int position, bool enabled)
         return;
     }
 
-    // A rejected assignment (the two shortcuts are already taken) leaves the
+    // A rejected assignment (the shortcut cap is already reached) leaves the
     // chain untouched, so there is nothing for the UI to redraw.
     if (plugin_chain_->setShortcut(position, enabled))
     {
@@ -1871,7 +1871,7 @@ void AudioEngineImpl::loadChainFromJson(const nlohmann::json& doc, std::vector<M
 void AudioEngineImpl::assignDefaultShortcuts()
 {
     const auto snap = plugin_chain_->snapshot();
-    for (const auto& uid : {builtin::NIGHTTIME_UID, builtin::EQ_UID})
+    for (const auto& uid : {builtin::NIGHTTIME_UID, builtin::EQ_UID, builtin::COMPRESSOR_UID})
     {
         for (const auto& slot : snap)
         {

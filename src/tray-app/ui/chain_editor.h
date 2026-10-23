@@ -24,7 +24,7 @@ class ChainSlotRow : public juce::Component
                         , public juce::DragAndDropTarget
 {
 public:
-    // shortcuts_full is true when the two tray shortcut buttons are already
+    // shortcuts_full is true when the three tray shortcut buttons are already
     // owned by other slots, so this row cannot claim one until the user frees it.
     ChainSlotRow(IAudioEngine* engine, int position, const ChainSlotSnapshot& slot,
                  bool shortcuts_full);
@@ -105,7 +105,7 @@ public:
     std::function<void()> onAddPluginRequested;
 
     // Mirrors PluginChain::kMaxShortcuts; the engine enforces the cap as well.
-    static constexpr int kMaxShortcuts = 2;
+    static constexpr int kMaxShortcuts = 3;
 
 private:
     static constexpr int kRowHeight = 40;

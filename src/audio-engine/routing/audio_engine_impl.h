@@ -184,7 +184,8 @@ private:
     // Does not clear the chain or touch device/audio settings.
     void loadChainFromJson(const nlohmann::json& doc, std::vector<MissingPluginInfo>& out_missing);
     // One-time default for chains saved before tray shortcuts existed: give the
-    // built-in Volume Leveler and Equalizer the two buttons they used to own.
+    // built-in Volume Leveler, Equalizer and Compressor the buttons a fresh
+    // install assigns (up to PluginChain::kMaxShortcuts).
     void assignDefaultShortcuts();
     void notifyOnUiThread(std::function<void(IAudioEngineListener&)> fn);
 
