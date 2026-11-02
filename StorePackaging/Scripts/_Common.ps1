@@ -242,8 +242,16 @@ function Invoke-AppBuild
     Push-Location $RepoRoot
     try
     {
-        cmake -B $BuildDir -A x64 -DJYGLOBALVST_BUILD_TESTS=OFF
-        if ($LASTEXITCODE -ne 0) { Write-Fail 'CMake configuration failed.' }
+        # Only configure a fresh build tree. An existing cache keeps its own
+        # generator/platform/settings: forcing -A x64 fails outright on caches
+        # created without an explicit platform (e.g. Visual Studio 18 2026
+        # default), and -DJYGLOBALVST_BUILD_TESTS=OFF would silently flip a dev
+        # cache's test targets off.
+        if (-not (Test-Path (Join-Path $BuildDir 'CMakeCache.txt')))
+        {
+            cmake -B $BuildDir -A x64 -DJYGLOBALVST_BUILD_TESTS=OFF
+            if ($LASTEXITCODE -ne 0) { Write-Fail 'CMake configuration failed.' }
+        }
         cmake --build $BuildDir --config $Configuration --target jyglobalvst_tray
         if ($LASTEXITCODE -ne 0) { Write-Fail 'Build failed.' }
     }
