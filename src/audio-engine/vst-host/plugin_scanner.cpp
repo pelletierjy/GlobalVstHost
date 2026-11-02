@@ -15,12 +15,12 @@
 #include "seh_wrapper.h"
 #include "vst3_loader.h"
 
-#include <windows.h>
-
 #include <juce_core/juce_core.h>
 
 #include <algorithm>
 #include <chrono>
+
+#include <windows.h>
 
 namespace jyglobalvst::engine {
 
@@ -73,8 +73,7 @@ void collectVst3FilesImpl(const std::filesystem::path& root, std::vector<std::fi
         do
         {
             const std::wstring name = sub_data.cFileName;
-            const bool is_bundle =
-                name.size() > 5 && _wcsicmp(name.c_str() + name.size() - 5, L".vst3") == 0;
+            const bool is_bundle = name.size() > 5 && _wcsicmp(name.c_str() + name.size() - 5, L".vst3") == 0;
             if (is_bundle || (sub_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
             {
                 continue;
@@ -110,26 +109,48 @@ PluginScanner::PluginScanner() = default;
 PluginScanner::~PluginScanner()
 {
     cancel();
-    waitUntilFinished();
+    // Bounded: the owning engine (~AudioEngineImpl) guarantees no scan thread
+    // is still running here — it detaches and leaks the scanner instead.
+    waitForScanExit(kScanJoinTimeout);
 }
 
-void PluginScanner::start(const std::vector<std::filesystem::path>& paths,
+bool PluginScanner::start(const std::vector<std::filesystem::path>& paths,
                           IScanProgressListener* listener,
                           ScanCache* cache)
 {
-    std::lock_guard<std::mutex> lk(thread_mutex_);
+    std::unique_lock<std::mutex> lk(thread_mutex_);
 
-    if (thread_.joinable())
+    if (running_.load(std::memory_order_acquire) || thread_.joinable())
     {
+        // A previous scan may be hung inside a misbehaving VST3 load; never
+        // block the caller (a UI thread) forever, and never run two scans at
+        // once — both would write scanned_instances_ concurrently.
         cancel_flag_.store(true);
-        thread_.join();
+        if (!scan_exited_cv_.wait_for(
+                lk, kScanJoinTimeout, [this] { return !running_.load(std::memory_order_acquire); }))
+        {
+            return false;
+        }
+        if (thread_.joinable())
+            thread_.join();
     }
 
     cancel_flag_.store(false);
-    running_.store(true);
+    progress_listener_.store(listener, std::memory_order_release);
+    running_.store(true, std::memory_order_release);
     current_paths_ = paths;
 
-    thread_ = std::thread(&PluginScanner::runScan, this, current_paths_, listener, cache);
+    try
+    {
+        thread_ = std::thread(&PluginScanner::runScan, this, current_paths_, cache);
+    }
+    catch (...)
+    {
+        running_.store(false, std::memory_order_release);
+        progress_listener_.store(nullptr, std::memory_order_release);
+        return false;
+    }
+    return true;
 }
 
 void PluginScanner::cancel()
@@ -137,12 +158,29 @@ void PluginScanner::cancel()
     cancel_flag_.store(true);
 }
 
-void PluginScanner::waitUntilFinished()
+bool PluginScanner::waitForScanExit(std::chrono::milliseconds timeout)
 {
-    std::lock_guard<std::mutex> lk(thread_mutex_);
+    std::unique_lock<std::mutex> lk(thread_mutex_);
+    if (!scan_exited_cv_.wait_for(lk, timeout, [this] { return !running_.load(std::memory_order_acquire); }))
+    {
+        return false;
+    }
     if (thread_.joinable())
     {
         thread_.join();
+    }
+    return true;
+}
+
+void PluginScanner::detachRunningScan()
+{
+    std::lock_guard<std::mutex> lk(thread_mutex_);
+    // Future callback sites load progress_listener_ afresh, so clearing it here
+    // stops an already-running (detached) scan from touching a destroyed listener.
+    progress_listener_.store(nullptr, std::memory_order_release);
+    if (thread_.joinable())
+    {
+        thread_.detach();
     }
 }
 
@@ -151,11 +189,9 @@ bool PluginScanner::isRunning() const noexcept
     return running_.load();
 }
 
-void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
-                            IScanProgressListener* listener,
-                            ScanCache* cache)
+void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths, ScanCache* cache)
 {
-    if (listener)
+    if (auto* listener = progress_listener_.load(std::memory_order_acquire))
     {
         listener->onScanStarted(static_cast<int>(paths.size()));
     }
@@ -196,7 +232,7 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
                     VST3PluginLoader* loader;
                     const std::filesystem::path* file;
                     VST3PluginLoader::LoadResult result;
-                } ctx {loader.get(), &file, {}};
+                } ctx{loader.get(), &file, {}};
 
                 const bool loaded_cleanly = SEHPluginWrapper::invokeGuarded(
                     [](void* p) {
@@ -226,7 +262,7 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
 
                     discovered.push_back(std::move(entry));
 
-                    if (listener)
+                    if (auto* listener = progress_listener_.load(std::memory_order_acquire))
                     {
                         listener->onPluginDiscovered(discovered.back());
                     }
@@ -254,7 +290,7 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
 
     if (cancel_flag_.load())
     {
-        if (listener)
+        if (auto* listener = progress_listener_.load(std::memory_order_acquire))
         {
             listener->onScanCancelled();
         }
@@ -267,12 +303,19 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
             cache->save();
         }
 
-        if (listener)
+        if (auto* listener = progress_listener_.load(std::memory_order_acquire))
         {
             listener->onScanFinished(static_cast<int>(discovered.size()));
         }
     }
-    running_.store(false);
+
+    // Publish the exit while holding thread_mutex_ so a wait_for() predicate
+    // check can never miss it, then wake any bounded waiter.
+    {
+        std::lock_guard<std::mutex> lk(thread_mutex_);
+        running_.store(false, std::memory_order_release);
+    }
+    scan_exited_cv_.notify_all();
 }
 
 }  // namespace jyglobalvst::engine

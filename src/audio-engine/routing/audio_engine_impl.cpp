@@ -241,6 +241,18 @@ AudioEngineImpl::~AudioEngineImpl()
 {
     stop();
     stopEnergySaver();  // defensive: guarantee the energy-saver thread is joined
+
+    // A VST3 whose load() hangs never observes the cancel flag (SEH catches
+    // faults, not hangs). Wait only briefly, then sever the listener callbacks
+    // and detach — and, because the detached thread still writes through them,
+    // leak the scanner and its cache rather than free memory it is using.
+    scanner_->cancel();
+    if (!scanner_->waitForScanExit(PluginScanner::kScanJoinTimeout))
+    {
+        scanner_->detachRunningScan();
+        scanner_.release();
+        scan_cache_.release();
+    }
 }
 
 void AudioEngineImpl::start()
@@ -461,7 +473,12 @@ void AudioEngineImpl::stop()
     }
     stopEnergySaver();
     scanner_->cancel();
-    scanner_->waitUntilFinished();
+    // Deliberately NOT waiting for the scan thread here: stop() runs on the UI
+    // message thread (timer callbacks / MessageManager::callAsync), and a plugin
+    // load can hang forever — SEH catches faults, not hangs — which froze the
+    // window until Windows terminated the app (WER MoAppHang). The scan is
+    // independent of audio teardown and observes cancel_flag_ at its next safe
+    // point; teardown joins it with a bounded wait (cancelScan / ~AudioEngineImpl).
     watchdog_->stop();
     stopEngineThread();
     device_manager_.removeAudioCallback(this);
@@ -1022,13 +1039,25 @@ void AudioEngineImpl::rescanPlugins(IScanProgressListener* progress)
 {
     std::lock_guard lk{control_mutex_};
     auto paths = defaultVst3ScanPaths();
-    scanner_->start(paths, progress, scan_cache_.get());
+    if (!scanner_->start(paths, progress, scan_cache_.get()) && progress != nullptr)
+    {
+        // start() refuses to run two scans at once: if the previous scan is
+        // still hung inside a plugin load, report cancelled so the progress
+        // dialog closes instead of waiting forever.
+        progress->onScanCancelled();
+    }
 }
 
 void AudioEngineImpl::cancelScan()
 {
     scanner_->cancel();
-    scanner_->waitUntilFinished();
+    if (!scanner_->waitForScanExit(PluginScanner::kScanJoinTimeout))
+    {
+        // Scan thread hung inside a plugin load: never block the caller (the UI
+        // thread) on it. Callbacks are severed and the thread detached; the
+        // scanner/cache are leaked at teardown if it outlives them (dtor).
+        scanner_->detachRunningScan();
+    }
 }
 
 std::vector<PluginCatalogEntry> AudioEngineImpl::catalog() const

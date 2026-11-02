@@ -874,8 +874,8 @@ public:
                     juce::Button* energy_saver,
                     juce::TextButton* help,
                     juce::TextButton* assistant)
-        : logo_(logo), title_(title), reset_(reset), about_(about),
-          energy_saver_(energy_saver), help_(help), assistant_(assistant)
+        : logo_(logo), title_(title), reset_(reset), about_(about), energy_saver_(energy_saver), help_(help),
+          assistant_(assistant)
     {
         addAndMakeVisible(logo_);
         addAndMakeVisible(title_);
@@ -1054,7 +1054,11 @@ private:
 class StatusBarComponent : public juce::Component
 {
 public:
-    StatusBarComponent(juce::Label* status, juce::Label* latency, juce::Label* cpu_label, juce::Component* cpu_bar, juce::Component* spinner)
+    StatusBarComponent(juce::Label* status,
+                       juce::Label* latency,
+                       juce::Label* cpu_label,
+                       juce::Component* cpu_bar,
+                       juce::Component* spinner)
         : status_(status), latency_(latency), cpu_label_(cpu_label), cpu_bar_(cpu_bar), spinner_(spinner)
     {
         addAndMakeVisible(status_);
@@ -1306,7 +1310,8 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
 
     buildUI();
     StartupLog("buildUI done");
-    busy_spinner_.setActive(true);   // visible from the first painted frame; cleared on the first timer tick
+    busy_spinner_.setActive(
+        true);  // visible from the first painted frame; stays active until the initial scan finishes (timerCallback)
     if (auto* top = getTopLevelComponent())
         top->setMouseCursor(juce::MouseCursor::WaitCursor);
 
@@ -2194,8 +2199,8 @@ void MainWindow::buildUI()
 
     auto* body = new BodyComponent(device_panel, chain_panel, meter_panel, spectrum_panel);
 
-    auto* status_bar =
-        new StatusBarComponent(status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get(), &busy_spinner_);
+    auto* status_bar = new StatusBarComponent(
+        status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get(), &busy_spinner_);
 
     auto* content = new MainContentComponent(header, body, plugin_panel, status_bar);
     content_root_ = content;
@@ -3275,17 +3280,19 @@ void MainWindow::timerCallback()
     if (startup_busy_)
     {
         startup_busy_ = false;
-        busy_spinner_.setActive(false);
         juce::MouseCursor::hideWaitCursor();
         if (auto* top = getTopLevelComponent())
             top->setMouseCursor(juce::MouseCursor::NormalCursor);
     }
 
-    // Check if initial plugin scan has completed
+    // Check if initial plugin scan has completed. The busy spinner stays active
+    // until then: the scan runs on its own thread, the main view keeps painting,
+    // and the spinner tells the user plugins are still being loaded.
     if (!plugin_scan_complete_ && scan_dialog_ && scan_dialog_->isFinished())
     {
         StartupLog("timerCallback: scan finished, hiding dialog");
         plugin_scan_complete_ = true;
+        busy_spinner_.setActive(false);
         status_label_->setText(i18n::tr("Ready"), juce::dontSendNotification);
         scan_dialog_->setVisible(false);
     }
