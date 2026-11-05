@@ -2,4 +2,4 @@
 # Format: Major.Minor.Build.Revision (all integers)
 # Update this file before each Store release
 
-1.3.5.0
+1.3.6.0
