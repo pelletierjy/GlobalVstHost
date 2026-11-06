@@ -127,6 +127,14 @@ public:
         addAndMakeVisible(controls_.start_minimized_button);
         addAndMakeVisible(controls_.tooltips_label);
         addAndMakeVisible(controls_.tooltips_button);
+        if (controls_.scan_on_startup_label != nullptr)
+            addAndMakeVisible(controls_.scan_on_startup_label);
+        if (controls_.scan_on_startup_button != nullptr)
+            addAndMakeVisible(controls_.scan_on_startup_button);
+        if (controls_.rescan_plugins_button != nullptr)
+            addAndMakeVisible(controls_.rescan_plugins_button);
+        if (controls_.scan_paths_button != nullptr)
+            addAndMakeVisible(controls_.scan_paths_button);
     }
 
     ~SettingsTab() override
@@ -139,6 +147,11 @@ public:
         removeChildComponent(controls_.start_minimized_button);
         removeChildComponent(controls_.tooltips_label);
         removeChildComponent(controls_.tooltips_button);
+        // nullptr-safe: removeChildComponent(null) is a no-op.
+        removeChildComponent(controls_.scan_on_startup_label);
+        removeChildComponent(controls_.scan_on_startup_button);
+        removeChildComponent(controls_.rescan_plugins_button);
+        removeChildComponent(controls_.scan_paths_button);
     }
 
     void resized() override
@@ -167,6 +180,24 @@ public:
         controls_.tooltips_label->setBounds(row3.removeFromLeft(110));
         row3.removeFromLeft(8);
         controls_.tooltips_button->setBounds(row3.removeFromLeft(70));
+
+        if (controls_.scan_on_startup_label != nullptr)
+        {
+            b.removeFromTop(12);
+            auto row4 = b.removeFromTop(28);
+            controls_.scan_on_startup_label->setBounds(row4.removeFromLeft(110));
+            row4.removeFromLeft(8);
+            controls_.scan_on_startup_button->setBounds(row4.removeFromLeft(70));
+        }
+
+        if (controls_.rescan_plugins_button != nullptr && controls_.scan_paths_button != nullptr)
+        {
+            b.removeFromTop(16);
+            auto row5 = b.removeFromTop(30);
+            controls_.rescan_plugins_button->setBounds(row5.removeFromLeft(150));
+            row5.removeFromLeft(10);
+            controls_.scan_paths_button->setBounds(row5.removeFromLeft(140));
+        }
     }
 
 private:
@@ -250,7 +281,7 @@ void AboutDiagnostics::show(juce::Component* parent,
     // exitModalState() was a no-op and the dialog could not be dismissed.
     auto* dw = options.launchAsync();
     if (dw != nullptr)
-        dw->centreWithSize(520, 420);
+        dw->centreWithSize(520, 500);  // 5 settings rows now (scan toggle + scan buttons)
 }
 
 }  // namespace jyglobalvst::tray

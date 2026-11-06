@@ -110,6 +110,10 @@ RoamingSettings RoamingSettingsStore::load() const
     {
         s.tooltips_enabled = doc["tooltips_enabled"].get<bool>();
     }
+    if (doc.contains("scan_on_startup") && doc["scan_on_startup"].is_boolean())
+    {
+        s.scan_on_startup = doc["scan_on_startup"].get<bool>();
+    }
 
     if (doc.contains("capture_endpoint_id"))
     {
@@ -151,6 +155,7 @@ RoamingSettings RoamingSettingsStore::load() const
                                    "master_volume",
                                    "energy_saver_enabled",
                                    "tooltips_enabled",
+                                   "scan_on_startup",
                                    "capture_endpoint_id",
                                    "output_endpoint_id",
                                    "follow_default_capture"};
@@ -191,6 +196,7 @@ void RoamingSettingsStore::save(const RoamingSettings& settings) const
     doc["master_volume"] = settings.master_volume;
     doc["energy_saver_enabled"] = settings.energy_saver_enabled;
     doc["tooltips_enabled"] = settings.tooltips_enabled;
+    doc["scan_on_startup"] = settings.scan_on_startup;
     doc["capture_endpoint_id"] = settings.capture_endpoint_id
                                      ? nlohmann::json(*settings.capture_endpoint_id)
                                      : nlohmann::json(nullptr);

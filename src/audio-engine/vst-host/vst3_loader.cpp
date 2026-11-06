@@ -77,6 +77,77 @@ VST3PluginLoader::VST3PluginLoader()
     // Format is ready to use; JUCE handles initialization.
 }
 
+VST3PluginLoader::DescribeResult VST3PluginLoader::describe(const std::filesystem::path& bundle_path)
+{
+    DescribeResult result;
+
+    try
+    {
+        if (!std::filesystem::exists(bundle_path))
+        {
+            result.error = "Bundle path does not exist: " + bundle_path.string();
+            return result;
+        }
+
+        juce::VST3PluginFormat format;
+        juce::OwnedArray<juce::PluginDescription> descriptions;
+        const juce::String file_id(bundle_path.string());
+        format.findAllTypesForFile(descriptions, file_id);
+
+        if (descriptions.isEmpty())
+        {
+            result.error = "No VST3 plugins found in file: " + bundle_path.string();
+            return result;
+        }
+
+        // UID parity with the instance path: PluginDescription::createIdentifierString()
+        // hashes fileOrIdentifier, and createPluginInstance resolves it to the module
+        // file inside the bundle (getLibraryPaths -> recursive search). findAllTypesForFile'
+        // fast path (moduleinfo.json) leaves the bundle *directory* here instead, which
+        // would hash differently and break existing scan-cache/preset refs — normalize.
+        juce::File as_file(file_id);
+        if (!as_file.existsAsFile())
+        {
+            const auto modules = format.searchPathsForPlugins(juce::FileSearchPath(file_id), true, false);
+            if (modules.size() > 0)
+            {
+                descriptions[0]->fileOrIdentifier = modules[0];
+            }
+        }
+
+        const juce::PluginDescription* desc = descriptions[0];
+
+        // Name parity with the instance path: VST3ModuleHandle::getName() trims,
+        // and createIdentifierString() hashes the name — so an untrimmed fast-path
+        // name (moduleinfo.json) would produce a different UID and break existing
+        // scan-cache/preset refs. Trim before hashing; this also keeps the catalog
+        // display name identical to what the old instance-based scan produced.
+        const juce::String name = desc->name.trim();
+
+        Plugin descriptor;
+        juce::PluginDescription normalized = *desc;
+        normalized.name = name;
+        descriptor.uid = makeHexUidFromIdentifier(normalized.createIdentifierString());
+        descriptor.vendor = desc->manufacturerName.toStdString();
+        descriptor.name = name.toStdString();
+        descriptor.category = desc->category.toStdString();
+        descriptor.version = desc->version.toStdString();
+        descriptor.is_synth = desc->isInstrument;
+        descriptor.file_path = bundle_path;
+        result.descriptor = std::move(descriptor);
+    }
+    catch (const std::exception& e)
+    {
+        result.error = std::string("Exception during plugin describe: ") + e.what();
+    }
+    catch (...)
+    {
+        result.error = "Unknown exception during plugin describe";
+    }
+
+    return result;
+}
+
 VST3PluginLoader::LoadResult VST3PluginLoader::load(const std::filesystem::path& bundle_path)
 {
     LoadResult result;

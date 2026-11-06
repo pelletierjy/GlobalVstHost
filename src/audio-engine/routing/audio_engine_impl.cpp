@@ -29,9 +29,11 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <set>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -1035,10 +1037,54 @@ int AudioEngineImpl::inputDeviceSampleRate() const
 
 // --- Plugin catalog / chain / preset stubs ------------------------------
 
+void AudioEngineImpl::setScanPathConfig(const std::vector<std::string>& custom,
+                                        const std::vector<std::string>& disabled_defaults)
+{
+    std::lock_guard lk{control_mutex_};
+    custom_scan_paths_ = custom;
+    disabled_default_paths_ = disabled_defaults;
+}
+
 void AudioEngineImpl::rescanPlugins(IScanProgressListener* progress)
 {
     std::lock_guard lk{control_mutex_};
     auto paths = defaultVst3ScanPaths();
+
+    // Apply the roaming-settings overrides: drop disabled default roots, then
+    // append the user's custom roots. Comparison is on the generic, lowercased
+    // path string — settings.json may use any casing or separator style.
+    const auto norm = [](std::string s) {
+        std::replace(s.begin(), s.end(), '/', '\\');
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        while (!s.empty() && s.back() == '\\')
+            s.pop_back();
+        return s;
+    };
+
+    if (!disabled_default_paths_.empty())
+    {
+        std::set<std::string> disabled;
+        for (const auto& d : disabled_default_paths_)
+            disabled.insert(norm(d));
+
+        paths.erase(std::remove_if(paths.begin(), paths.end(), [&](const auto& p) {
+                        return disabled.count(norm(p.string())) != 0;
+                    }),
+                    paths.end());
+    }
+
+    std::set<std::string> seen;
+    for (const auto& p : paths)
+        seen.insert(norm(p.string()));
+    for (const auto& c : custom_scan_paths_)
+    {
+        if (c.empty())
+            continue;
+        if (seen.insert(norm(c)).second)
+            paths.emplace_back(c);
+    }
+
     if (!scanner_->start(paths, progress, scan_cache_.get()) && progress != nullptr)
     {
         // start() refuses to run two scans at once: if the previous scan is

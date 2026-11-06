@@ -85,10 +85,13 @@ private:
     std::atomic<IScanProgressListener*> progress_listener_{nullptr};
     std::vector<std::filesystem::path> current_paths_;
 
-    // Keep scanned plugin instances alive for the app lifetime.
-    // Prevents VST3 modules from being unloaded, which avoids crashes
-    // in plugins that leak callbacks / window hooks (e.g. IK Multimedia ARC 4).
-    std::vector<std::unique_ptr<PluginInstance>> scanned_instances_;
+    // NOTE: scanned plugin instances are deliberately NOT retained here. The scan
+    // is metadata-only (VST3PluginLoader::describe), so no AudioPluginInstance is
+    // ever created — retaining them drove the app to 1.4GB+ with a handful of
+    // plugins. Plugins for the chain are loaded on demand instead. The old
+    // keep-alive workaround (VST3 module unload crashing e.g. IK ARC 4 with
+    // 0xc000041d) applied to *instantiated* plugins whose teardown leaked
+    // callbacks; describe() never instantiates, so there is nothing to leak.
 };
 
 }  // namespace jyglobalvst::engine

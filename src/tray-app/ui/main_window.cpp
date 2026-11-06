@@ -10,6 +10,7 @@
 #include "builtin-effects/builtin_theme.h"
 #include "engine_settings_guard.h"
 #include "i18n/translation.h"
+#include "settings_dialog_scan_paths.h"
 #include "updates/update_check.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -20,6 +21,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <vector>
 
@@ -1482,7 +1484,38 @@ MainWindow::MainWindow(std::unique_ptr<IAudioEngine> engine)
     engine_->setEnergySaverEnabled(rs.energy_saver_enabled);
     updateEnergySaverVisual();
 
-    // Start a background plugin scan
+    // Scan-path overrides from the roaming settings must reach the engine before
+    // the first scan so custom roots are scanned and disabled defaults skipped.
+    engine_->setScanPathConfig(rs.custom_scan_paths, rs.disabled_default_paths);
+
+    // Start a background plugin scan — optional (Settings -> "Scan at startup").
+    // When off, the cached catalog (scan-cache.json) keeps serving the plugin
+    // list and the user rescans on demand from the Settings tab.
+    if (rs.scan_on_startup)
+    {
+        startPluginScan();
+    }
+    else
+    {
+        plugin_scan_complete_ = true;
+        busy_spinner_.setActive(false);
+        startup_busy_ = false;
+        if (auto* top = getTopLevelComponent())
+            top->setMouseCursor(juce::MouseCursor::NormalCursor);
+        status_label_->setText(i18n::tr("Ready"), juce::dontSendNotification);
+        StartupLog("startup scan skipped (scan_on_startup=false)");
+    }
+}
+
+void MainWindow::startPluginScan()
+{
+    // Stop any in-flight scan first: the scan thread holds a raw pointer to the
+    // listener dialog, which we are about to destroy and recreate. cancelScan()
+    // severs the listener (detach path) when a plugin load hangs.
+    engine_->cancelScan();
+
+    plugin_scan_complete_ = false;
+    busy_spinner_.setActive(true);
     status_label_->setText(i18n::tr("Scanning plugins..."), juce::dontSendNotification);
     scan_dialog_ = std::make_unique<ScanDialog>(engine_.get());
     StartupLog("scan_dialog created");
@@ -2103,6 +2136,20 @@ void MainWindow::buildUI()
     tooltips_button_->setToggleState(rs.tooltips_enabled, juce::dontSendNotification);
     tooltips_button_->addListener(this);
 
+    // --- Plugin scan controls (About -> Settings tab) -----------------------
+    // Built here but not parented, exactly like the toggles above: the Settings
+    // tab reparents them while the dialog is open.
+    scan_on_startup_label_ = std::make_unique<juce::Label>(juce::String(), i18n::tr("Scan at startup:"));
+    scan_on_startup_button_ = std::make_unique<juce::ToggleButton>(i18n::tr("enabled"));
+    scan_on_startup_button_->setToggleState(rs.scan_on_startup, juce::dontSendNotification);
+    scan_on_startup_button_->addListener(this);
+
+    rescan_plugins_button_ = std::make_unique<juce::TextButton>(i18n::tr("Rescan plugins"));
+    rescan_plugins_button_->addListener(this);
+
+    scan_paths_button_ = std::make_unique<juce::TextButton>(i18n::tr("Scan paths..."));
+    scan_paths_button_->addListener(this);
+
     // --- Language selector (About → Settings tab) ---------------------------
     // Built here but not parented, exactly like the theme/start-minimized
     // controls: the Settings tab reparents it while the dialog is open.
@@ -2410,6 +2457,138 @@ void MainWindow::buttonClicked(juce::Button* button)
         roaming_settings_store_.save(rs);
         applyTooltips();
     }
+    else if (button == scan_on_startup_button_.get())
+    {
+        auto rs = roaming_settings_store_.load();
+        rs.scan_on_startup = scan_on_startup_button_->getToggleState();
+        roaming_settings_store_.save(rs);
+    }
+    else if (button == rescan_plugins_button_.get())
+    {
+        // The button is reparented into the About dialog's Settings tab while
+        // that dialog is open — close it first so the scan dialog is visible.
+        if (auto* dw = button->findParentComponentOfClass<juce::DialogWindow>())
+            dw->exitModalState(1);
+        startPluginScan();
+    }
+    else if (button == scan_paths_button_.get())
+    {
+        openScanPathsDialog();
+    }
+}
+
+namespace {
+
+// Hosts SettingsDialogScanPaths (add/remove list) with an OK/Cancel bar so the
+// edited custom-scan-path list can be persisted on OK only.
+class ScanPathsDialog final : public juce::DialogWindow
+                            , public juce::Button::Listener
+{
+public:
+    using SaveFn = std::function<void(const std::vector<ScanPathItem>&)>;
+
+    ScanPathsDialog(const std::vector<std::string>& initial, SaveFn save)
+        : juce::DialogWindow(i18n::tr("Scan paths"), kBgDeep, true, true), save_(std::move(save))
+    {
+        auto* content = new ScanPathsContent(this);
+        editor_ = content->editor();
+        for (const auto& p : initial)
+            editor_->addPath(p);
+        setContentOwned(content, true);
+        centreWithSize(520, 380);
+        setVisible(true);
+    }
+
+    void buttonClicked(juce::Button* button) override
+    {
+        if (button == ok_button_)
+        {
+            if (save_)
+                save_(editor_->items());
+            setVisible(false);
+            delete this;
+        }
+        else if (button == cancel_button_)
+        {
+            setVisible(false);
+            delete this;
+        }
+    }
+
+    void closeButtonPressed() override
+    {
+        setVisible(false);
+        delete this;
+    }
+
+    // Content owns the OK/Cancel buttons; it registers them with us here.
+    void registerButtons(juce::TextButton* ok, juce::TextButton* cancel)
+    {
+        ok_button_ = ok;
+        cancel_button_ = cancel;
+        ok_button_->addListener(this);
+        cancel_button_->addListener(this);
+    }
+
+    SettingsDialogScanPaths* editor() const { return editor_; }
+
+private:
+    // Content component: list editor on top, OK/Cancel below.
+    class ScanPathsContent final : public juce::Component
+    {
+    public:
+        explicit ScanPathsContent(ScanPathsDialog* owner)
+        {
+            editor_ = std::make_unique<SettingsDialogScanPaths>();
+            addAndMakeVisible(editor_.get());
+
+            ok_button_ = std::make_unique<juce::TextButton>(i18n::tr("OK"));
+            cancel_button_ = std::make_unique<juce::TextButton>(i18n::tr("Cancel"));
+            addAndMakeVisible(ok_button_.get());
+            addAndMakeVisible(cancel_button_.get());
+            owner->registerButtons(ok_button_.get(), cancel_button_.get());
+        }
+
+        SettingsDialogScanPaths* editor() const { return editor_.get(); }
+
+        void resized() override
+        {
+            auto bounds = getLocalBounds();
+            auto bar = bounds.removeFromBottom(36).reduced(4);
+            cancel_button_->setBounds(bar.removeFromRight(90));
+            bar.removeFromRight(8);
+            ok_button_->setBounds(bar.removeFromRight(90));
+            editor_->setBounds(bounds);
+        }
+
+    private:
+        std::unique_ptr<SettingsDialogScanPaths> editor_;
+        std::unique_ptr<juce::TextButton> ok_button_;
+        std::unique_ptr<juce::TextButton> cancel_button_;
+    };
+
+    SaveFn save_;
+    SettingsDialogScanPaths* editor_ {nullptr};
+    juce::TextButton* ok_button_ {nullptr};
+    juce::TextButton* cancel_button_ {nullptr};
+};
+
+}  // namespace
+
+void MainWindow::openScanPathsDialog()
+{
+    const auto rs = roaming_settings_store_.load();
+    auto save = [this](const std::vector<ScanPathItem>& items) {
+        auto cur = roaming_settings_store_.load();
+        cur.custom_scan_paths.clear();
+        for (const auto& item : items)
+            cur.custom_scan_paths.push_back(item.path.toStdString());
+        roaming_settings_store_.save(cur);
+        // Push to the engine now so the next rescan picks the roots up without
+        // requiring a restart.
+        engine_->setScanPathConfig(cur.custom_scan_paths, cur.disabled_default_paths);
+    };
+    new ScanPathsDialog(rs.custom_scan_paths, std::move(save));  // self-deleting on close
 }
 
 void MainWindow::sliderValueChanged(juce::Slider* slider)
@@ -2839,6 +3018,18 @@ void MainWindow::applyTooltips()
                   "Show helpful popup descriptions when hovering over controls. Turn this off for a cleaner interface.")
             : empty);
     about_button_->setTooltip(enabled ? i18n::tr("About, diagnostics, and settings") : empty);
+    if (scan_on_startup_button_ != nullptr)
+    {
+        const auto scan_tip = i18n::tr(
+            "Scan VST3 plugins at startup to refresh the plugin catalog. Turn this off to only "
+            "rescan on demand from the Rescan button; the saved catalog keeps working either way.");
+        scan_on_startup_button_->setTooltip(enabled ? scan_tip : empty);
+        scan_on_startup_label_->setTooltip(enabled ? scan_tip : empty);
+        rescan_plugins_button_->setTooltip(
+            enabled ? i18n::tr("Rescan all VST3 plugin folders now and refresh the catalog") : empty);
+        scan_paths_button_->setTooltip(
+            enabled ? i18n::tr("Add or remove extra folders to scan for VST3 plugins") : empty);
+    }
     energy_saver_button_->setTooltip(
         enabled ? i18n::tr("Toggle energy saver: auto-suspend the VST chain when input is silent to save CPU.")
                 : empty);
@@ -3045,7 +3236,7 @@ void MainWindow::handleAbout()
 
     // The running app is the authority; the literal only covers a host with no
     // JUCEApplication instance (unit-test harnesses).
-    juce::String version = "1.3.6.0";
+    juce::String version = "1.3.7.0";
     if (auto* app = juce::JUCEApplication::getInstance())
         version = app->getApplicationVersion();
 
@@ -3058,6 +3249,10 @@ void MainWindow::handleAbout()
     settings.start_minimized_button = start_minimized_button_.get();
     settings.tooltips_label = tooltips_label_.get();
     settings.tooltips_button = tooltips_button_.get();
+    settings.scan_on_startup_label = scan_on_startup_label_.get();
+    settings.scan_on_startup_button = scan_on_startup_button_.get();
+    settings.rescan_plugins_button = rescan_plugins_button_.get();
+    settings.scan_paths_button = scan_paths_button_.get();
 
     AboutDiagnostics::show(this, EngineHostMode::InProcess, version, snap, settings, &custom_laf_);
 }

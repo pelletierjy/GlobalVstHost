@@ -179,6 +179,14 @@ public:
     virtual void rescanPlugins(IScanProgressListener* progress) = 0;
     virtual void cancelScan() = 0;
     virtual std::vector<PluginCatalogEntry> catalog() const = 0;
+    // Scan-path overrides from the roaming settings (custom_scan_paths /
+    // disabled_default_paths). The next rescanPlugins() composes its root list
+    // from the defaults minus `disabled`, plus `custom`.
+    // Non-pure so IPC / test implementations need not provide one.
+    virtual void setScanPathConfig(const std::vector<std::string>& /*custom*/,
+                                   const std::vector<std::string>& /*disabled_defaults*/)
+    {
+    }
 
     // --- Chain ------------------------------------------------------------
     virtual ChainSnapshot snapshotChain() const = 0;
