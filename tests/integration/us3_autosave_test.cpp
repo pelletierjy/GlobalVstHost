@@ -38,6 +38,12 @@ TEST_F(US3AutoSaveTest, SuppressFlagPreventsWrite)
     StartEngine();
 
     jyglobalvst::tray::AutoSaveStore store;
+    // Env/isolation guard (task #4 triage): a leftover file from an interrupted
+    // prior run must not make this test fail.
+    {
+        std::error_code ec_leftover;
+        std::filesystem::remove(store.autosavePath(), ec_leftover);
+    }
     store.write(engine(), true);  // suppress due to preset override
 
     EXPECT_FALSE(std::filesystem::exists(store.autosavePath()));

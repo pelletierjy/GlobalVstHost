@@ -43,6 +43,7 @@ import {
   type AgentEventStream,
   type Conversation,
   type ConversationId,
+  type Cursor,
 } from "@earendil-works/pi-durable";
 import {
   DurableObjectSqliteDatabase,
@@ -64,7 +65,7 @@ export type Env = {
   PEERS?: string;
 };
 
-type TaskStatus = "pending" | "in_progress" | "done" | "failed";
+type TaskStatus = "pending" | "in_progress" | "paused" | "done" | "failed";
 
 type TaskRow = {
   id: number;
@@ -80,7 +81,7 @@ type NoteRow = { id: number; body: string; created_at: number };
 
 type AgentState = { status: string; currentTask: string; currentTaskId?: number };
 
-const TASK_STATUSES: TaskStatus[] = ["pending", "in_progress", "done", "failed"];
+const TASK_STATUSES: TaskStatus[] = ["pending", "in_progress", "paused", "done", "failed"];
 
 /** Default model for new root conversations. Change per conversation via POST /conversations/:id/configure. */
 const DEFAULT_MODEL = { provider: "openrouter", modelId: "nvidia/nemotron-3.5-lightning:free" } as const;
@@ -372,14 +373,20 @@ async function federationTasks(env: Env): Promise<Response> {
  * Scenario C: the weekly sweep. Digest every peer's queue into a hub note and,
  * when SWEEP_TASK is set, dispatch that audit task to each peer that does not
  * already have it pending (dedupe so reruns/cron overlaps are idempotent).
+ * It ALSO relays a nudge to each peer's own conversation: nothing in the fleet
+ * auto-claims tasks, so the peer's session is instructed to claim its pending
+ * queue (idempotent per run via requestId).
  * Called by the cron trigger and by POST /federation/sweep for manual runs.
  */
 async function runSweep(env: Env): Promise<Response> {
   const peers = parsePeers(env);
   const headers = peerHeaders(env);
   const sweepTask = (env as unknown as { SWEEP_TASK?: string }).SWEEP_TASK?.trim();
+  const runAt = new Date().toISOString();
   const parts: string[] = [];
   const dispatched: Record<string, unknown>[] = [];
+  // Pending queue per peer — used both for sweep dedupe and for the relay nudge.
+  const pendingByPeer = new Map<string, { id: number; title: string }[]>();
 
   for (const peer of peers) {
     try {
@@ -393,10 +400,13 @@ async function runSweep(env: Env): Promise<Response> {
         `${peer.name}: pending=${counts.pending ?? '?'} in_progress=${counts.in_progress ?? '?'} done=${counts.done ?? '?'} notes=${status?.notes ?? '?'}`,
       );
 
+      // Pending queue is always needed now (dedupe + relay).
+      const pendingRes = await fetch(`${peer.url}/tasks?status=pending&limit=50`, { headers });
+      const pending = (pendingRes.ok ? await pendingRes.json() : []) as { id: number; title: string }[];
+      if (Array.isArray(pending)) pendingByPeer.set(peer.name, pending);
+
       if (sweepTask) {
         // Dedupe: skip when a pending task with the same title already exists.
-        const pendingRes = await fetch(`${peer.url}/tasks?status=pending&limit=50`, { headers });
-        const pending = pendingRes.ok ? await pendingRes.json() : [];
         const duplicate = Array.isArray(pending) && pending.some((t: { title?: string }) => t.title === sweepTask);
         if (duplicate) {
           dispatched.push({ peer: peer.name, skipped: "already pending" });
@@ -417,10 +427,96 @@ async function runSweep(env: Env): Promise<Response> {
   const self = await selfStatus(env);
   const selfCounts: Record<string, unknown> =
     (self as { counts?: Record<string, unknown> })?.counts ?? {};
+
+  // Relay: nudge each peer's OWN agent session so it claims its pending tasks —
+  // nothing in the fleet auto-claims. The peer commits the message BEFORE running
+  // it (pi-durable golden rule), so the nudge lands even if we stop waiting.
+  // requestId makes the nudge exactly-once per sweep run; all peers in parallel.
+  const relay = await Promise.all([
+    peers.map(async (peer) => {
+      const pending = pendingByPeer.get(peer.name) ?? [];
+      if (!pending.length) return { peer: peer.name, skipped: "no pending" };
+      const list = pending.slice(0, 10).map((t) => `- #${t.id} ${t.title}`);
+      const content = [
+        `HUB SWEEP RELAY (automated from pi-global-agent, run ${runAt}).`,
+        `Your queue has ${pending.length} pending task(s):`,
+        ...list,
+        ...(pending.length > 10 ? [`(+${pending.length - 10} more: GET /tasks?status=pending)`] : []),
+        "",
+        "Claim them oldest-first with the claim_task tool (atomic; omit taskId = oldest pending), do the",
+        "work, then close each with complete_task(taskId, status='done'|'failed', result='<what happened>').",
+        "Blocked (e.g. no local runner for run_command)? Do the part you can: close failed with the",
+        "precise blocker, or leave it pending and add_note why.",
+        "When finished, add_note a one-line summary of what you claimed and the outcome.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      return await Promise.race([
+        fetch(`${peer.url}/conversations/root/messages`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ content, requestId: `sweep-relay-${runAt}-${peer.name}` }),
+        })
+          .then((r) => ({ peer: peer.name, sent: r.ok, status: r.status }))
+          .catch((e) => ({ peer: peer.name, error: String(e) })),
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ peer: peer.name, sent: true, unconfirmed: true }), 25_000),
+        ),
+      ]);
+    }),
+    // Hub self-nudge: the hub's own queue is NOT in PEERS, so give it the same
+    // relay via an internal DO call (auth already handled at the worker edge).
+    (async () => {
+      const name = `${env.AGENT_NAME} (hub self)`;
+      try {
+        const stub = env.PiAgent.get(env.PiAgent.idFromName(DEFAULT_INSTANCE));
+        const res = await stub.fetch(new Request("https://pi-agent/tasks?status=pending&limit=50"));
+        const pending = (res.ok ? await res.json() : []) as { id: number; title: string }[];
+        if (!pending.length) return { peer: name, skipped: "no pending" };
+        const list = pending.slice(0, 10).map((t) => `- #${t.id} ${t.title}`);
+        const content = [
+          `HUB SWEEP RELAY (automated from pi-global-agent, run ${runAt}).`,
+          `Your queue has ${pending.length} pending task(s):`,
+          ...list,
+          ...(pending.length > 10 ? [`(+${pending.length - 10} more: GET /tasks?status=pending)`] : []),
+          "",
+          "Claim them oldest-first with the claim_task tool (atomic; omit taskId = oldest pending), do the",
+          "work, then close each with complete_task(taskId, status='done'|'failed', result='<what happened>').",
+          "Blocked (e.g. no local runner for run_command)? Do the part you can: close failed with the",
+          "precise blocker, or leave it pending and add_note why.",
+          "When finished, add_note a one-line summary of what you claimed and the outcome.",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        return await Promise.race([
+          stub
+            .fetch(
+              new Request("https://pi-agent/conversations/root/messages", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  content,
+                  requestId: `sweep-relay-${runAt}-self`,
+                }),
+              }),
+            )
+            .then((r) => ({ peer: name, sent: r.ok, status: r.status }))
+            .catch((e) => ({ peer: name, error: String(e) })),
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ peer: name, sent: true, unconfirmed: true }), 25_000),
+          ),
+        ]);
+      } catch (e) {
+        return { peer: name, error: String(e) };
+      }
+    })(),
+  ]);
+
   const digest =
-    `Sweep ${new Date().toISOString()} | self: pending=${selfCounts.pending ?? '?'} done=${selfCounts.done ?? '?'} | ` +
+    `Sweep ${runAt} | self: pending=${selfCounts.pending ?? '?'} done=${selfCounts.done ?? '?'} | ` +
     parts.join(" | ") +
-    (sweepTask ? ` | dispatched: ${JSON.stringify(dispatched)}` : "");
+    (sweepTask ? ` | dispatched: ${JSON.stringify(dispatched)}` : "") +
+    ` | relay: ${JSON.stringify(relay)}`;
 
   // Store the digest as a hub note (internal DO call — auth already handled at the worker edge).
   try {
@@ -435,7 +531,7 @@ async function runSweep(env: Env): Promise<Response> {
   } catch (e) {
     return json({ error: "digest_store_failed", message: String(e), digest }, 500);
   }
-  return json({ ok: true, digest, dispatched });
+  return json({ ok: true, digest, dispatched, relay });
 }
 
 /* --------------------------------------------------------------- the DO -- */
@@ -510,8 +606,9 @@ export class PiAgent {
       model: { ...DEFAULT_MODEL },
       instructions:
         `You are the ${this.env.AGENT_NAME} PI agent. ` +
-        "You have a durable mission-control queue (list_tasks) and session memory (add_note): " +
-        "record decisions with add_note so future sessions of this agent keep the context.",
+        "You have a durable mission-control queue (list_tasks, add_task, claim_task, complete_task) and session " + +
+        "memory (add_note): claim a task before working it, always close it with done/failed + a " +
+        "meaningful result, and record decisions with add_note so future sessions keep the context.",
     };
   }
 
@@ -530,7 +627,7 @@ export class PiAgent {
         defineTool({
           name: "list_tasks",
           description:
-            "List this agent's durable task queue (optionally filtered by status: pending, in_progress, done, failed).",
+            "List this agent's durable task queue (optionally filtered by status: pending, in_progress, paused, done, failed).",
           parameters: Type.Object({ status: Type.Optional(Type.String()) }),
           replay: "safe",
           execute: async (args: { status?: string }) => {
@@ -548,6 +645,96 @@ export class PiAgent {
           execute: async (args: { body: string }) => {
             await db.run(`INSERT INTO notes (body, created_at) VALUES (?, ?)`, args.body, Date.now());
             return { output: [{ type: "text" as const, text: "note saved" }] };
+          },
+        }),
+        defineTool({
+          name: "add_task",
+          description:
+            "Create a new task in this agent's durable queue (status pending). Use this whenever " +
+            "the user asks to create/add a task — never use add_note for tasks.",
+          parameters: Type.Object({ title: Type.String(), body: Type.Optional(Type.String()) }),
+          execute: async (args: { title: string; body?: string }) => {
+            const now = Date.now();
+            const row = await db.get(
+              `INSERT INTO tasks (title, body, status, created_at, updated_at)
+               VALUES (?, ?, 'pending', ?, ?) RETURNING *`,
+              args.title,
+              args.body ?? null,
+              now,
+              now,
+            );
+            return {
+              output: [{ type: "text" as const, text: `task created: ${JSON.stringify(row, null, 2)}` }],
+            };
+          },
+        }),
+        defineTool({
+          name: "claim_task",
+          description:
+            "Claim a task from this agent's queue (pending -> in_progress), before working it. " +
+            "Omit taskId to claim the oldest pending task. Atomic — returns the claimed task, or " +
+            "'nothing to claim'.",
+          parameters: Type.Object({ taskId: Type.Optional(Type.Number()) }),
+          execute: async (args: { taskId?: number }) => {
+            const now = Date.now();
+            const row =
+              typeof args.taskId === "number"
+                ? await db.get(
+                    `UPDATE tasks SET status = 'in_progress', updated_at = ?
+                     WHERE id = ? AND status = 'pending' RETURNING *`,
+                    now,
+                    args.taskId,
+                  )
+                : await db.get(
+                    `UPDATE tasks SET status = 'in_progress', updated_at = ?
+                     WHERE id = (SELECT id FROM tasks WHERE status = 'pending' ORDER BY id ASC LIMIT 1)
+                     RETURNING *`,
+                    now,
+                  );
+            return {
+              output: [
+                {
+                  type: "text" as const,
+                  text: row
+                    ? `claimed: ${JSON.stringify(row, null, 2)}`
+                    : "nothing to claim (no matching pending task)",
+                },
+              ],
+            };
+          },
+        }),
+        defineTool({
+          name: "complete_task",
+          description:
+            "Close a task you claimed (or any pending task) after doing the work: status must be " +
+            "'done' or 'failed', and result must say precisely what happened.",
+          parameters: Type.Object({
+            taskId: Type.Number(),
+            status: Type.String(),
+            result: Type.String(),
+          }),
+          execute: async (args: { taskId: number; status: string; result: string }) => {
+            if (args.status !== "done" && args.status !== "failed") {
+              return { output: [{ type: "text" as const, text: "status must be 'done' or 'failed'" }] };
+            }
+            const row = await db.get(
+              `UPDATE tasks SET status = ?, result = ?, updated_at = ?
+               WHERE id = ? AND status IN ('pending', 'in_progress') RETURNING *`,
+              args.status,
+              args.result,
+              Date.now(),
+              args.taskId,
+            );
+            return {
+              output: [
+                {
+                  type: "text" as const,
+                  text: row
+                    ? `closed: ${JSON.stringify(row, null, 2)}`
+                    : "task not found or already closed",
+                },
+              ],
+            };
           },
         }),
       ],
@@ -789,7 +976,7 @@ export class PiAgent {
       /* ---------------- status / ping / usage ---------------- */
       if (seg.length === 0 || seg[0] === "status") {
         if (method !== "GET") return json({ error: "method_not_allowed" }, 405);
-        const counts: Record<TaskStatus, number> = { pending: 0, in_progress: 0, done: 0, failed: 0 };
+        const counts: Record<TaskStatus, number> = { pending: 0, in_progress: 0, paused: 0, done: 0, failed: 0 };
         for (const row of await db.all<{ status: TaskStatus; n: number }>(
           `SELECT status, COUNT(*) AS n FROM tasks GROUP BY status`,
         )) {
@@ -1017,7 +1204,22 @@ export class PiAgent {
           }
           if (seg.length === 3 && seg[2] === "entries" && method === "GET") {
             const limit = clampLimit(url.searchParams.get("limit"));
-            const page = await conv.entries({ order: "ascending" }, limit, undefined, BACKGROUND_CONTEXT);
+            const order = url.searchParams.get("order") === "descending" ? "descending" : "ascending";
+            const rawCursor = url.searchParams.get("cursor");
+            let cursor: Cursor | undefined;
+            if (rawCursor) {
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(rawCursor);
+              } catch {
+                return json({ error: "invalid_cursor" }, 400);
+              }
+              if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                return json({ error: "invalid_cursor" }, 400);
+              }
+              cursor = parsed as Cursor;
+            }
+            const page = await conv.entries({ order }, limit, cursor, BACKGROUND_CONTEXT);
             const { items, ...rest } = page as { items: unknown[] } & Record<string, unknown>;
             return json({ entries: items, page: rest });
           }
