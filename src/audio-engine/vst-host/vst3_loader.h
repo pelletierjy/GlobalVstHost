@@ -42,6 +42,25 @@ public:
 
     LoadResult load(const std::filesystem::path& bundle_path);
 
+    // Read a plugin's metadata WITHOUT instantiating it (T-scan memory fix).
+    // Uses VST3PluginFormat::findAllTypesForFile — the same call JUCE's own
+    // plugin scanner uses — so no AudioPluginInstance is ever created: no DSP
+    // buffers, no editor, nothing to retain after the scan.
+    //
+    // The returned descriptor.uid is derived exactly like the instance path does
+    // (hash of PluginDescription::createIdentifierString()) so catalog entries,
+    // presets and scan-cache refs keep matching; fileOrIdentifier is normalized
+    // to the module file inside the bundle, mirroring createPluginInstance.
+    struct DescribeResult
+    {
+        Plugin descriptor;
+        std::string error;
+
+        explicit operator bool() const noexcept { return error.empty(); }
+    };
+
+    DescribeResult describe(const std::filesystem::path& bundle_path);
+
 private:
 };
 

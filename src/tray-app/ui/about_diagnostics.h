@@ -46,6 +46,10 @@ struct SettingsControls
     juce::ToggleButton* start_minimized_button {nullptr};
     juce::Label* tooltips_label {nullptr};
     juce::ToggleButton* tooltips_button {nullptr};
+    juce::Label* scan_on_startup_label {nullptr};
+    juce::ToggleButton* scan_on_startup_button {nullptr};
+    juce::TextButton* rescan_plugins_button {nullptr};
+    juce::TextButton* scan_paths_button {nullptr};
 };
 
 class AboutDiagnostics

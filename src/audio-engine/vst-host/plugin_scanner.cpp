@@ -15,12 +15,14 @@
 #include "seh_wrapper.h"
 #include "vst3_loader.h"
 
-#include <windows.h>
-
 #include <juce_core/juce_core.h>
 
 #include <algorithm>
 #include <chrono>
+#include <cwctype>
+#include <set>
+
+#include <windows.h>
 
 namespace jyglobalvst::engine {
 
@@ -73,8 +75,15 @@ void collectVst3FilesImpl(const std::filesystem::path& root, std::vector<std::fi
         do
         {
             const std::wstring name = sub_data.cFileName;
-            const bool is_bundle =
-                name.size() > 5 && _wcsicmp(name.c_str() + name.size() - 5, L".vst3") == 0;
+            // FindFirstFileW("dir\\*") yields the "." and ".." entries first; they are
+            // directories and do not end in .vst3, so without this filter they were
+            // treated as vendor folders and <base>\\.\\*.vst3 re-enumerated every
+            // top-level plugin a second time (each scanned and retained twice).
+            if (name == L"." || name == L"..")
+            {
+                continue;
+            }
+            const bool is_bundle = name.size() > 5 && _wcsicmp(name.c_str() + name.size() - 5, L".vst3") == 0;
             if (is_bundle || (sub_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
             {
                 continue;
@@ -102,7 +111,25 @@ std::vector<std::filesystem::path> collectVst3Candidates(const std::filesystem::
 {
     std::vector<std::filesystem::path> out;
     collectVst3FilesImpl(root, out);
-    return out;
+
+    // Safety net for the same class of bug the "."/".." filter above fixes: two
+    // roots (or a root listed twice) can yield the same bundle; scanning it twice
+    // would instantiate and retain it twice. Dedupe case-insensitively on the
+    // normalized path — Windows paths are case-insensitive.
+    std::vector<std::filesystem::path> unique;
+    std::set<std::wstring> seen;
+    unique.reserve(out.size());
+    for (auto& p : out)
+    {
+        std::wstring key = p.lexically_normal().wstring();
+        std::transform(key.begin(), key.end(), key.begin(),
+                       [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
+        if (seen.insert(key).second)
+        {
+            unique.push_back(std::move(p));
+        }
+    }
+    return unique;
 }
 
 PluginScanner::PluginScanner() = default;
@@ -110,26 +137,48 @@ PluginScanner::PluginScanner() = default;
 PluginScanner::~PluginScanner()
 {
     cancel();
-    waitUntilFinished();
+    // Bounded: the owning engine (~AudioEngineImpl) guarantees no scan thread
+    // is still running here — it detaches and leaks the scanner instead.
+    waitForScanExit(kScanJoinTimeout);
 }
 
-void PluginScanner::start(const std::vector<std::filesystem::path>& paths,
+bool PluginScanner::start(const std::vector<std::filesystem::path>& paths,
                           IScanProgressListener* listener,
                           ScanCache* cache)
 {
-    std::lock_guard<std::mutex> lk(thread_mutex_);
+    std::unique_lock<std::mutex> lk(thread_mutex_);
 
-    if (thread_.joinable())
+    if (running_.load(std::memory_order_acquire) || thread_.joinable())
     {
+        // A previous scan may be hung inside a misbehaving VST3 load; never
+        // block the caller (a UI thread) forever, and never run two scans at
+        // once — both would write scanned_instances_ concurrently.
         cancel_flag_.store(true);
-        thread_.join();
+        if (!scan_exited_cv_.wait_for(
+                lk, kScanJoinTimeout, [this] { return !running_.load(std::memory_order_acquire); }))
+        {
+            return false;
+        }
+        if (thread_.joinable())
+            thread_.join();
     }
 
     cancel_flag_.store(false);
-    running_.store(true);
+    progress_listener_.store(listener, std::memory_order_release);
+    running_.store(true, std::memory_order_release);
     current_paths_ = paths;
 
-    thread_ = std::thread(&PluginScanner::runScan, this, current_paths_, listener, cache);
+    try
+    {
+        thread_ = std::thread(&PluginScanner::runScan, this, current_paths_, cache);
+    }
+    catch (...)
+    {
+        running_.store(false, std::memory_order_release);
+        progress_listener_.store(nullptr, std::memory_order_release);
+        return false;
+    }
+    return true;
 }
 
 void PluginScanner::cancel()
@@ -137,12 +186,29 @@ void PluginScanner::cancel()
     cancel_flag_.store(true);
 }
 
-void PluginScanner::waitUntilFinished()
+bool PluginScanner::waitForScanExit(std::chrono::milliseconds timeout)
 {
-    std::lock_guard<std::mutex> lk(thread_mutex_);
+    std::unique_lock<std::mutex> lk(thread_mutex_);
+    if (!scan_exited_cv_.wait_for(lk, timeout, [this] { return !running_.load(std::memory_order_acquire); }))
+    {
+        return false;
+    }
     if (thread_.joinable())
     {
         thread_.join();
+    }
+    return true;
+}
+
+void PluginScanner::detachRunningScan()
+{
+    std::lock_guard<std::mutex> lk(thread_mutex_);
+    // Future callback sites load progress_listener_ afresh, so clearing it here
+    // stops an already-running (detached) scan from touching a destroyed listener.
+    progress_listener_.store(nullptr, std::memory_order_release);
+    if (thread_.joinable())
+    {
+        thread_.detach();
     }
 }
 
@@ -151,11 +217,9 @@ bool PluginScanner::isRunning() const noexcept
     return running_.load();
 }
 
-void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
-                            IScanProgressListener* listener,
-                            ScanCache* cache)
+void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths, ScanCache* cache)
 {
-    if (listener)
+    if (auto* listener = progress_listener_.load(std::memory_order_acquire))
     {
         listener->onScanStarted(static_cast<int>(paths.size()));
     }
@@ -186,57 +250,60 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
 
             try
             {
-                // Load each plugin under an SEH guard: a faulty VST3 can raise a
-                // structured exception (access violation) during instantiation
-                // that a C++ catch(...) cannot stop, which would otherwise crash
-                // the whole app mid-scan. On such a failure we skip the plugin and
-                // keep scanning. (Matches the SEH isolation used for processBlock.)
-                struct LoadCtx
+                // Metadata-only scan: describe() reads the plugin's factory info
+                // WITHOUT creating an AudioPluginInstance (no DSP buffers, no
+                // editor, nothing that has to be retained after the scan — the
+                // old full-instantiation path kept every scanned plugin alive for
+                // the app lifetime, which is what drove RAM to 1.4GB+ per handful
+                // of plugins and 5GB+ on large collections).
+                //
+                // Still guarded by SEH: a faulty VST3 can raise a structured
+                // exception (access violation) while its factory initialises, which
+                // a C++ catch(...) cannot stop. On such a failure we skip the
+                // plugin and keep scanning.
+                struct DescribeCtx
                 {
                     VST3PluginLoader* loader;
                     const std::filesystem::path* file;
-                    VST3PluginLoader::LoadResult result;
-                } ctx {loader.get(), &file, {}};
+                    VST3PluginLoader::DescribeResult result;
+                } ctx{loader.get(), &file, {}};
 
-                const bool loaded_cleanly = SEHPluginWrapper::invokeGuarded(
+                const bool described_cleanly = SEHPluginWrapper::invokeGuarded(
                     [](void* p) {
-                        auto* c = static_cast<LoadCtx*>(p);
-                        c->result = c->loader->load(*c->file);
+                        auto* c = static_cast<DescribeCtx*>(p);
+                        c->result = c->loader->describe(*c->file);
                     },
                     &ctx);
 
-                if (!loaded_cleanly)
+                if (!described_cleanly)
                 {
-                    // Plugin crashed while loading; leave it out of the catalog.
+                    // Plugin crashed while reading its factory; leave it out of
+                    // the catalog.
                     continue;
                 }
 
                 auto& result = ctx.result;
-                if (result && result.instance)
+                if (result)
                 {
                     PluginCatalogEntry entry;
-                    entry.ref.plugin_uid = HexStringToPluginUid(result.instance->descriptor().uid);
-                    entry.ref.vendor = result.instance->descriptor().vendor;
-                    entry.ref.name = result.instance->descriptor().name;
-                    entry.version = result.instance->descriptor().version;
+                    entry.ref.plugin_uid = HexStringToPluginUid(result.descriptor.uid);
+                    entry.ref.vendor = result.descriptor.vendor;
+                    entry.ref.name = result.descriptor.name;
+                    entry.version = result.descriptor.version;
                     entry.file_path = file;
-                    entry.category = result.instance->descriptor().category;
+                    entry.category = result.descriptor.category;
                     entry.has_editor = true;  // Simplified; real check needs editor creation.
                     entry.scan_timestamp = std::chrono::system_clock::now();
 
                     discovered.push_back(std::move(entry));
 
-                    if (listener)
+                    if (auto* listener = progress_listener_.load(std::memory_order_acquire))
                     {
                         listener->onPluginDiscovered(discovered.back());
                     }
-
-                    // Keep the instance alive for the app lifetime.
-                    // Some plugins (e.g. IK Multimedia ARC 4) register callbacks
-                    // that are not cleaned up before the VST3 module is unloaded.
-                    // When Windows later calls the dangling callback the app crashes
-                    // with 0xc000041d. Keeping the module loaded prevents this.
-                    scanned_instances_.push_back(std::move(result.instance));
+                    // No instance is retained: the catalog entry is pure metadata,
+                    // and plugins for the chain are loaded on demand by addPlugin /
+                    // loadChainFromJson when the user actually needs them.
                 }
             }
             catch (const std::exception&)
@@ -254,7 +321,7 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
 
     if (cancel_flag_.load())
     {
-        if (listener)
+        if (auto* listener = progress_listener_.load(std::memory_order_acquire))
         {
             listener->onScanCancelled();
         }
@@ -267,12 +334,19 @@ void PluginScanner::runScan(const std::vector<std::filesystem::path>& paths,
             cache->save();
         }
 
-        if (listener)
+        if (auto* listener = progress_listener_.load(std::memory_order_acquire))
         {
             listener->onScanFinished(static_cast<int>(discovered.size()));
         }
     }
-    running_.store(false);
+
+    // Publish the exit while holding thread_mutex_ so a wait_for() predicate
+    // check can never miss it, then wake any bounded waiter.
+    {
+        std::lock_guard<std::mutex> lk(thread_mutex_);
+        running_.store(false, std::memory_order_release);
+    }
+    scan_exited_cv_.notify_all();
 }
 
 }  // namespace jyglobalvst::engine

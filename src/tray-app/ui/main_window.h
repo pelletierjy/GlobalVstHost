@@ -156,6 +156,12 @@ private:
     void showRepointPlaceholderDialog(int position);
     void handleAbout();
     void handleHelp();
+    // Starts (or restarts) the background VST3 catalog scan with a fresh dialog.
+    // Cancels any in-flight scan first so the previous listener dialog can be
+    // destroyed safely.
+    void startPluginScan();
+    // Opens the scan-paths editor dialog (Settings tab -> "Scan paths...").
+    void openScanPathsDialog();
     void handleAssistant();
     void toggleEnergySaver();
     void updateEnergySaverVisual();
@@ -210,6 +216,10 @@ private:
     std::unique_ptr<juce::ComboBox> language_selector_;
     std::unique_ptr<juce::ToggleButton> start_minimized_button_;
     std::unique_ptr<juce::ToggleButton> tooltips_button_;
+    std::unique_ptr<juce::ToggleButton> scan_on_startup_button_;
+    std::unique_ptr<juce::Label> scan_on_startup_label_;
+    std::unique_ptr<juce::TextButton> rescan_plugins_button_;
+    std::unique_ptr<juce::TextButton> scan_paths_button_;
     std::unique_ptr<juce::TooltipWindow> tooltip_window_;
 
     // Parallel storage for endpoint IDs (JUCE ComboBox has no setItemData).

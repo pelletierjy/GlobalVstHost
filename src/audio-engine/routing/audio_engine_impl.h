@@ -131,6 +131,8 @@ public:
 
     void rescanPlugins(IScanProgressListener* progress) override;
     void cancelScan() override;
+    void setScanPathConfig(const std::vector<std::string>& custom,
+                           const std::vector<std::string>& disabled_defaults) override;
     std::vector<PluginCatalogEntry> catalog() const override;
 
     ChainSnapshot snapshotChain() const override;
@@ -421,6 +423,10 @@ private:
 
     std::unique_ptr<PluginChain> plugin_chain_;
     std::unique_ptr<ScanCache> scan_cache_;
+
+    // User-configured scan roots (roaming settings), applied by rescanPlugins().
+    std::vector<std::string> custom_scan_paths_;
+    std::vector<std::string> disabled_default_paths_;
     std::unique_ptr<VST3PluginLoader> plugin_loader_;
     std::unique_ptr<BuiltinEffectRegistry> builtin_registry_;
     std::unique_ptr<PluginScanner> scanner_;

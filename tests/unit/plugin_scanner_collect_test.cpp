@@ -92,4 +92,23 @@ TEST_F(CollectVst3CandidatesTest, MissingRootYieldsEmpty)
     EXPECT_TRUE(candidates.empty());
 }
 
+TEST_F(CollectVst3CandidatesTest, NoDuplicateCandidates)
+{
+    // Regression: FindFirstFileW("dir\\*") returns "." and ".." as the first two
+    // entries; they are directories and do not end in .vst3, so the vendor-subdir
+    // loop used to treat them as vendor folders and re-enumerate every top-level
+    // .vst3 through <base>\\.\\ — each plugin scanned (and retained) twice.
+    // The candidate list must contain each bundle exactly once.
+    const auto candidates = engine::collectVst3Candidates(root_);
+
+    ASSERT_EQ(candidates.size(), 2u) << "expected exactly TopLevel.vst3 + Nested.vst3";
+
+    std::set<std::string> seen;
+    for (const auto& p : candidates)
+    {
+        const auto key = p.lexically_normal().string();
+        EXPECT_TRUE(seen.insert(key).second) << "duplicate candidate: " << key;
+    }
+}
+
 }  // namespace jyglobalvst::testing
