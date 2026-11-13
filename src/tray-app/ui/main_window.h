@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "assistant_dialog.h"
+#include "assistant_panel.h"
 #include "catalog_dialog.h"
 #include "chain_editor.h"
 #include "busy_spinner.h"
@@ -293,7 +293,7 @@ private:
     std::unique_ptr<SpectrumAnalyzer> spectrum_analyzer_;
     std::unique_ptr<ScanDialog> scan_dialog_;
     std::unique_ptr<CatalogDialog> catalog_dialog_;
-    std::unique_ptr<AssistantDialog> assistant_dialog_;
+    std::unique_ptr<AssistantPanel> assistant_panel_;
     CustomLookAndFeel custom_laf_;
 
     // Icon image loaded from binary data.
