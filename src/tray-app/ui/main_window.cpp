@@ -1108,18 +1108,33 @@ public:
     MainContentComponent(juce::Component* header,
                          juce::Component* body,
                          juce::Component* plugin_panel,
-                         juce::Component* status_bar)
-        : header_(header), body_(body), plugin_panel_(plugin_panel), status_bar_(status_bar)
+                         juce::Component* status_bar,
+                         juce::Component* assistant)
+        : header_(header), body_(body), plugin_panel_(plugin_panel), status_bar_(status_bar),
+          assistant_(assistant)
     {
         addAndMakeVisible(header_);
         addAndMakeVisible(body_);
         addAndMakeVisible(plugin_panel_);
         addAndMakeVisible(status_bar_);
+        addAndMakeVisible(assistant_);
+        // Docked column, hidden until the header "AI" toggle shows it.
+        assistant_->setVisible(false);
     }
 
     void resized() override
     {
         auto b = getLocalBounds().reduced(12);
+
+        // Docked AI assistant column on the right, spanning the full height of
+        // the main view (header row through status bar). When hidden the rest
+        // of the layout claims the whole width, as before.
+        if (assistant_->isVisible())
+        {
+            const int assistant_w = juce::jlimit(kAssistantMinW, kAssistantMaxW, b.getWidth() / 3);
+            assistant_->setBounds(b.removeFromRight(assistant_w));
+            b.removeFromRight(kGap);
+        }
 
         juce::FlexBox fb;
         fb.flexDirection = juce::FlexBox::Direction::column;
@@ -1140,10 +1155,16 @@ public:
     }
 
 private:
+    // Gap between the docked assistant column and the main column.
+    static constexpr int kGap = 8;
+    static constexpr int kAssistantMinW = 320;
+    static constexpr int kAssistantMaxW = 460;
+
     juce::Component* header_;
     juce::Component* body_;
     juce::Component* plugin_panel_;
     juce::Component* status_bar_;
+    juce::Component* assistant_;
 };
 
 // ============================================================================
@@ -2180,7 +2201,9 @@ void MainWindow::buildUI()
     help_button_->addListener(this);
 
     // --- AI Assistant button ----------------------------------------------
+    // Toggle button: shows/hides the docked assistant column on the right.
     assistant_button_ = std::make_unique<juce::TextButton>("AI");
+    assistant_button_->setClickingTogglesState(true);
     assistant_button_->addListener(this);
 
     // --- Header logo -------------------------------------------------------
@@ -2249,7 +2272,21 @@ void MainWindow::buildUI()
     auto* status_bar = new StatusBarComponent(
         status_label_.get(), latency_label_.get(), cpu_label_.get(), cpu_bar_.get(), &busy_spinner_);
 
-    auto* content = new MainContentComponent(header, body, plugin_panel, status_bar);
+    // --- AI Assistant panel (docked right column, hidden by default) ------
+    const bool light_theme = custom_laf_.currentTheme() == CustomLookAndFeel::ThemeId::Light;
+    assistant_panel_ = std::make_unique<AssistantPanel>();
+    assistant_panel_->prepareToShow(light_theme);  // builds the web view once; hidden until toggled
+    assistant_panel_->onCloseRequested = [this]() {
+        assistant_button_->setToggleState(false, juce::dontSendNotification);
+        if (content_root_ != nullptr)
+        {
+            assistant_panel_->setVisible(false);
+            content_root_->resized();
+        }
+    };
+
+    auto* content =
+        new MainContentComponent(header, body, plugin_panel, status_bar, assistant_panel_.get());
     content_root_ = content;
 
     // Apply global LookAndFeel to the content tree.
@@ -2969,6 +3006,10 @@ void MainWindow::applyThemeChange(CustomLookAndFeel::ThemeId id)
         content_root_->sendLookAndFeelChange();
         content_root_->repaint();
     }
+    // Keep the docked assistant's widget palette in step with the new theme
+    // (the old dialog achieved this by recreating itself on each open).
+    if (assistant_panel_ != nullptr && assistant_panel_->isVisible())
+        assistant_panel_->prepareToShow(custom_laf_.currentTheme() == CustomLookAndFeel::ThemeId::Light);
     repaint();
 }
 
@@ -3034,7 +3075,7 @@ void MainWindow::applyTooltips()
         enabled ? i18n::tr("Toggle energy saver: auto-suspend the VST chain when input is silent to save CPU.")
                 : empty);
     help_button_->setTooltip(enabled ? i18n::tr("Open help documentation") : empty);
-    assistant_button_->setTooltip(enabled ? i18n::tr("Open the AI assistant") : empty);
+    assistant_button_->setTooltip(enabled ? i18n::tr("Show or hide the AI assistant") : empty);
 
     // Refresh existing button tooltips that were set in their constructors.
     if (enabled)
@@ -3264,10 +3305,20 @@ void MainWindow::handleHelp()
 
 void MainWindow::handleAssistant()
 {
-    // Recreated on each open (same pattern as the catalog dialog) so the dialog
-    // always reflects the currently selected theme.
-    const bool light_theme = custom_laf_.currentTheme() == CustomLookAndFeel::ThemeId::Light;
-    assistant_dialog_ = std::make_unique<AssistantDialog>(light_theme);
+    // The assistant is a docked column on the right of the main view; the
+    // header "AI" button (a toggle) shows and hides it.
+    if (content_root_ == nullptr || assistant_panel_ == nullptr)
+        return;
+
+    const bool show = assistant_button_->getToggleState();
+    if (show)
+    {
+        // Re-navigates only if the theme changed since the page was loaded.
+        const bool light_theme = custom_laf_.currentTheme() == CustomLookAndFeel::ThemeId::Light;
+        assistant_panel_->prepareToShow(light_theme);
+    }
+    assistant_panel_->setVisible(show);
+    content_root_->resized();
 }
 
 void MainWindow::handleCheckForUpdates()

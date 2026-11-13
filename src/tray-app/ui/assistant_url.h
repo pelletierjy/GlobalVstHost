@@ -8,7 +8,7 @@
 
 namespace jyglobalvst::tray {
 
-// Returns the deployed ConversiaCore tutor page URL used by AssistantDialog.
+// Returns the deployed ConversiaCore tutor page URL used by AssistantPanel.
 // light_theme maps the app's CustomAndFeel theme onto the widget palette.
 juce::String assistantUrl(bool light_theme);
 
